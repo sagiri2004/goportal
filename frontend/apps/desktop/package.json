@@ -1,0 +1,20 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix ../web run dev\" \"electron . --no-sandbox\"",
+    "build": "npm --prefix ../web run build && echo \"Desktop shell build-ready (renderer from apps/web/dist)\""
+  },
+  "dependencies": {
+    "electron": "^30.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "typescript": "^5.6.0"
+  }
+}
+

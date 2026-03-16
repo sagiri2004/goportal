@@ -1,0 +1,25 @@
+server:
+  port: 8080
+  mode: "debug"
+  jwt_secret: "goportal-secret-key-change-me"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+logger:
+  log_level: "info"
+  slack_hook_url: ""
+
+database:
+  engine: "sqlite3"
+  dsn: "app.db"
+  migration_dir: "migrations"
+
+cron:
+  enabled: true
+  spec: "0 1 * * *"
+
+slack:
+  webhook_url: ""

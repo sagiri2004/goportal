@@ -1,0 +1,7 @@
+*.db
+.vscode
+logs
+storage
+monitor_test
+.env
+config.yaml

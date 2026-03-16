@@ -1,0 +1,53 @@
+import type { Channel, Message, Server, User } from "@types/models";
+
+export const mockCurrentUser: User = {
+  id: "u1",
+  username: "zutomayo",
+  avatarColor: "#6366f1",
+  status: "online",
+};
+
+export const mockServers: Server[] = [
+  { id: "s1", name: "Discord Clone Devs", initials: "DC" },
+  { id: "s2", name: "LiveKit Lab", initials: "LK" },
+  { id: "s3", name: "Friends", initials: "FR" },
+];
+
+export const mockChannels: Channel[] = [
+  { id: "c1", serverId: "s1", name: "general", type: "text" },
+  { id: "c2", serverId: "s1", name: "random", type: "text" },
+  { id: "c3", serverId: "s1", name: "voice-channel", type: "voice" },
+  { id: "c4", serverId: "s2", name: "sdk-help", type: "text" },
+];
+
+export const mockUsers: User[] = [
+  mockCurrentUser,
+  { id: "u2", username: "alice", avatarColor: "#f97316", status: "online" },
+  { id: "u3", username: "bob", avatarColor: "#22c55e", status: "idle" },
+  { id: "u4", username: "charlie", avatarColor: "#e11d48", status: "offline" },
+];
+
+export const mockMessages: Message[] = [
+  {
+    id: "m1",
+    channelId: "c1",
+    authorId: "u2",
+    content: "Welcome to the Discord clone!",
+    timestamp: "10:01",
+  },
+  {
+    id: "m2",
+    channelId: "c1",
+    authorId: "u1",
+    content: "We are wiring LiveKit next.",
+    timestamp: "10:02",
+  },
+  {
+    id: "m3",
+    channelId: "c1",
+    authorId: "u3",
+    content: "Tailwind dark mode looks great.",
+    timestamp: "10:05",
+  },
+];
+
