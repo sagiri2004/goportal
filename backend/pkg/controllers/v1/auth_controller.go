@@ -3,10 +3,10 @@ package v1
 import (
 	"net/http"
 
-	"goportal/pkg/apperr"
-	"goportal/pkg/containers"
-	"goportal/pkg/serializers"
-	"goportal/pkg/utils"
+	"github.com/sagiri2004/goportal/pkg/apperr"
+	"github.com/sagiri2004/goportal/pkg/containers"
+	"github.com/sagiri2004/goportal/pkg/serializers"
+	"github.com/sagiri2004/goportal/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,6 +1,6 @@
 package initialize
 
-import "goportal/global"
+import "github.com/sagiri2004/goportal/global"
 
 func Run(configPath string, runMigrate bool, runSeed bool) error {
 	global.ConfigPath = configPath
@@ -20,4 +20,3 @@ func Run(configPath string, runMigrate bool, runSeed bool) error {
 
 	return nil
 }
-

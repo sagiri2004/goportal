@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"goportal/global"
-	"goportal/pkg/initialize"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/initialize"
 	"go.uber.org/zap"
 )
 

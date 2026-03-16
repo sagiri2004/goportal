@@ -3,7 +3,7 @@ package initialize
 import (
 	"context"
 
-	"goportal/global"
+	"github.com/sagiri2004/goportal/global"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -20,4 +20,3 @@ func InitCache() {
 	})
 	_ = global.RedisClient.Ping(context.Background()).Err()
 }
-

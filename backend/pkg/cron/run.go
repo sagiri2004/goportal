@@ -1,8 +1,8 @@
 package cron
 
 import (
-	"goportal/global"
-	"goportal/pkg/cron/tasks"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/cron/tasks"
 	"go.uber.org/zap"
 )
 

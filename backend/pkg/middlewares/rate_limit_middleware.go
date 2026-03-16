@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"goportal/global"
+	"github.com/sagiri2004/goportal/global"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

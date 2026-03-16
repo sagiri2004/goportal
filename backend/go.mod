@@ -1,4 +1,4 @@
-module goportal
+module github.com/sagiri2004/goportal
 
 go 1.25.3
 

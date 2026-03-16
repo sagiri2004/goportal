@@ -3,9 +3,9 @@ package containers
 import (
 	"sync"
 
-	"goportal/global"
-	"goportal/pkg/repositories"
-	repoimpl "goportal/pkg/repositories/impl"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/repositories"
+	repoimpl "github.com/sagiri2004/goportal/pkg/repositories/impl"
 )
 
 var (
@@ -20,4 +20,3 @@ func UserRepository() repositories.UserRepository {
 	})
 	return userRepo
 }
-

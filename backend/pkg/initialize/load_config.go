@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"goportal/global"
-	setting "goportal/pkg/settings"
+	"github.com/sagiri2004/goportal/global"
+	setting "github.com/sagiri2004/goportal/pkg/settings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -84,4 +84,3 @@ func LoadConfig(configPath string) error {
 	global.Config = cfg
 	return nil
 }
-

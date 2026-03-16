@@ -3,8 +3,8 @@ package initialize
 import (
 	"fmt"
 
-	"goportal/global"
-	"goportal/pkg/scripts"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/scripts"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -41,4 +41,3 @@ func InitDatabase(runMigrate bool, runSeed bool) error {
 
 	return nil
 }
-

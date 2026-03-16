@@ -3,7 +3,7 @@ package repositories
 import (
 	"context"
 
-	"goportal/pkg/models"
+	"github.com/sagiri2004/goportal/pkg/models"
 )
 
 // UserRepository defines persistence operations for users.
@@ -12,4 +12,3 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (*models.User, error)
 	Create(ctx context.Context, u *models.User) error
 }
-

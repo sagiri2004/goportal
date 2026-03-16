@@ -1,8 +1,8 @@
 package initialize
 
 import (
-	"goportal/global"
-	"goportal/pkg/cron"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/cron"
 )
 
 func InitCron() {
@@ -11,4 +11,3 @@ func InitCron() {
 	}
 	cron.StartCron()
 }
-

@@ -3,10 +3,10 @@ package seeders
 import (
 	"os"
 
-	"goportal/pkg/models"
+	"github.com/sagiri2004/goportal/pkg/models"
 
-	"golang.org/x/crypto/bcrypt"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -42,4 +42,3 @@ func SeedAdmin(db *gorm.DB, logger *zap.Logger) {
 		}
 	}
 }
-

@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"time"
 
-	"goportal/global"
-	customlogger "goportal/pkg/logger"
-	"goportal/pkg/models"
+	"github.com/sagiri2004/goportal/global"
+	customlogger "github.com/sagiri2004/goportal/pkg/logger"
+	"github.com/sagiri2004/goportal/pkg/models"
 )
 
 type DailySlackReportTask struct {
@@ -49,4 +49,3 @@ func (t *DailySlackReportTask) Run(ctx context.Context) error {
 	}
 	return customlogger.SendSlack(webhook, message)
 }
-

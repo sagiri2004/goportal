@@ -2,8 +2,9 @@ package utils
 
 import (
 	"errors"
-	"goportal/global"
 	"time"
+
+	"github.com/sagiri2004/goportal/global"
 
 	"github.com/golang-jwt/jwt/v5"
 )

@@ -1,6 +1,6 @@
 package serializers
 
-import "goportal/pkg/models"
+import "github.com/sagiri2004/goportal/pkg/models"
 
 // RegisterRequest represents the payload for registering a new user.
 type RegisterRequest struct {
@@ -28,4 +28,3 @@ func NewUserResponse(u *models.User) UserResponse {
 		IsAdmin:  u.IsAdmin,
 	}
 }
-

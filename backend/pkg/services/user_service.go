@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"goportal/pkg/models"
+	"github.com/sagiri2004/goportal/pkg/models"
 )
 
 // UserService defines business logic for users.
@@ -12,4 +12,3 @@ type UserService interface {
 	Authenticate(ctx context.Context, username, password string) (*models.User, error)
 	GetByID(ctx context.Context, id uint) (*models.User, error)
 }
-

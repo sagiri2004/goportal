@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"goportal/pkg/apperr"
-	"goportal/pkg/models"
-	"goportal/pkg/repositories"
-	"goportal/pkg/services"
+	"github.com/sagiri2004/goportal/pkg/apperr"
+	"github.com/sagiri2004/goportal/pkg/models"
+	"github.com/sagiri2004/goportal/pkg/repositories"
+	"github.com/sagiri2004/goportal/pkg/services"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -72,4 +72,3 @@ func (s *userService) GetByID(ctx context.Context, id uint) (*models.User, error
 	}
 	return s.repo.FindByID(ctx, id)
 }
-

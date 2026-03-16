@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"goportal/pkg/apperr"
-	"goportal/pkg/models"
-	"goportal/pkg/repositories"
+	"github.com/sagiri2004/goportal/pkg/apperr"
+	"github.com/sagiri2004/goportal/pkg/models"
+	"github.com/sagiri2004/goportal/pkg/repositories"
 
 	"gorm.io/gorm"
 )
@@ -48,4 +48,3 @@ func (r *userRepository) Create(ctx context.Context, u *models.User) error {
 	}
 	return nil
 }
-

@@ -1,9 +1,9 @@
 package v1
 
 import (
-	"goportal/pkg/controllers/v1"
-	"goportal/pkg/middlewares"
 	"github.com/gin-gonic/gin"
+	v1 "github.com/sagiri2004/goportal/pkg/controllers/v1"
+	"github.com/sagiri2004/goportal/pkg/middlewares"
 )
 
 func RegisterRoutes(api *gin.RouterGroup) {

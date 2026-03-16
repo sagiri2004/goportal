@@ -3,8 +3,8 @@ package containers
 import (
 	"sync"
 
-	"goportal/pkg/services"
-	svcimpl "goportal/pkg/services/impl"
+	"github.com/sagiri2004/goportal/pkg/services"
+	svcimpl "github.com/sagiri2004/goportal/pkg/services/impl"
 )
 
 var (
@@ -19,4 +19,3 @@ func UserService() services.UserService {
 	})
 	return userSvc
 }
-

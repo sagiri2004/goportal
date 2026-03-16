@@ -3,7 +3,7 @@ package logger
 import (
 	"os"
 
-	setting "goportal/pkg/settings"
+	setting "github.com/sagiri2004/goportal/pkg/settings"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -55,4 +55,3 @@ func getEncoderLog() zapcore.Encoder {
 	encodeConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	return zapcore.NewJSONEncoder(encodeConfig)
 }
-

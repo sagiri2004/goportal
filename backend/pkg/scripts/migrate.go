@@ -3,7 +3,7 @@ package scripts
 import (
 	"fmt"
 
-	"goportal/global"
+	"github.com/sagiri2004/goportal/global"
 
 	"github.com/pressly/goose/v3"
 	"gorm.io/gorm"
@@ -36,4 +36,3 @@ func RunAppMigrate(db *gorm.DB, migrationDir string) error {
 	}
 	return nil
 }
-

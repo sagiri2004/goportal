@@ -1,8 +1,8 @@
 package routers
 
 import (
-	"goportal/pkg/middlewares"
-	v1Router "goportal/pkg/routers/v1"
+	"github.com/sagiri2004/goportal/pkg/middlewares"
+	v1Router "github.com/sagiri2004/goportal/pkg/routers/v1"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

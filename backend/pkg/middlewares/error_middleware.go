@@ -3,7 +3,7 @@ package middlewares
 import (
 	"net/http"
 
-	"goportal/pkg/apperr"
+	"github.com/sagiri2004/goportal/pkg/apperr"
 
 	"github.com/gin-gonic/gin"
 )

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"goportal/global"
+	"github.com/sagiri2004/goportal/global"
 )
 
 type cachedResponse struct {

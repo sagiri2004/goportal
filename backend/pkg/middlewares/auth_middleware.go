@@ -1,9 +1,10 @@
 package middlewares
 
 import (
-	"goportal/pkg/utils"
 	"net/http"
 	"strings"
+
+	"github.com/sagiri2004/goportal/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,8 +1,8 @@
 package scripts
 
 import (
-	"goportal/global"
-	"goportal/pkg/seeders"
+	"github.com/sagiri2004/goportal/global"
+	"github.com/sagiri2004/goportal/pkg/seeders"
 
 	"gorm.io/gorm"
 )
@@ -12,4 +12,3 @@ func RunSeeders(db *gorm.DB) error {
 	seeders.SeedAdmin(db, global.Logger)
 	return nil
 }
-
