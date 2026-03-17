@@ -73,7 +73,8 @@ func run() error {
 	defer publisher.Close()
 
 	dlqPublisher := watermilladapter.NewDeadLetterPublisher(publisher, cfg.TopicDLQ)
-	dispatcher := usecase.NewDispatchNotification(cfg.ServerID, presenceRepo, wsManager, distBus, dlqPublisher)
+	receiptPublisher := watermilladapter.NewDeliveryReceiptPublisher(publisher, cfg.TopicDeliveryReceipt)
+	dispatcher := usecase.NewDispatchNotification(cfg.ServerID, presenceRepo, wsManager, distBus, dlqPublisher, receiptPublisher)
 
 	router, err := watermilladapter.NewRouter(subscriber, dispatcher, cfg.TopicNotifications)
 	if err != nil {
@@ -102,12 +103,29 @@ func run() error {
 
 	group.Go(func() error {
 		return distBus.SubscribeServer(groupCtx, cfg.ServerID, func(msg domain.OutboundNotification) error {
-			return wsManager.SendToUser(msg.UserID, msg)
+			err := wsManager.SendToUser(msg.UserID, msg)
+			receiptType := domain.DeliveryTypeToClient
+			errorMessage := ""
+			if err != nil {
+				receiptType = domain.DeliveryTypeFailed
+				errorMessage = err.Error()
+			}
+			if msg.EventID != "" {
+				_ = receiptPublisher.Publish(groupCtx, domain.DeliveryReceiptEvent{
+					EventID:      msg.EventID,
+					UserID:       msg.UserID,
+					ServerID:     cfg.ServerID,
+					DeliveryType: receiptType,
+					DeliveredAt:  time.Now().Unix(),
+					ErrorMessage: errorMessage,
+				})
+			}
+			return err
 		})
 	})
 
 	group.Go(func() error {
-		logger.Printf("watermill consumer listening topic=%s", cfg.TopicNotifications)
+		logger.Printf("watermill consumer listening topic=%s delivery_receipt_topic=%s", cfg.TopicNotifications, cfg.TopicDeliveryReceipt)
 		return router.Run(groupCtx)
 	})
 

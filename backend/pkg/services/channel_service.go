@@ -8,6 +8,7 @@ import (
 
 type ChannelService interface {
 	CreateChannel(ctx context.Context, actorID, serverID, name, channelType string, parentID *string, position *int) (*models.Channel, error)
+	ListByServer(ctx context.Context, actorID, serverID string) ([]models.Channel, error)
 	GetChannel(ctx context.Context, actorID, channelID string) (*models.Channel, error)
 	UpdatePosition(ctx context.Context, actorID, channelID string, position int) (*models.Channel, error)
 	SetPrivacy(ctx context.Context, actorID, channelID string, isPrivate bool) (*models.Channel, error)

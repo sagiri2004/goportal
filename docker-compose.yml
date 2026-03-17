@@ -1,0 +1,101 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: goportal-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["-config", "configs/config.yaml", "-migrate"]
+    ports:
+      - "8080:8080"
+    networks:
+      - goportal-net
+
+  notification-server:
+    build:
+      context: ./notification
+      dockerfile: Dockerfile
+    container_name: goportal-notification
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    environment:
+      PORT: "8085"
+      SERVER_ID: "notif-node-a"
+      WS_PATH: "/ws"
+      WS_PING_INTERVAL: "25s"
+      WS_PONG_TIMEOUT: "10s"
+      WS_WRITE_TIMEOUT: "5s"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      BROKER_DRIVER: "rabbitmq"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      TOPIC_NOTIFICATIONS: "notification.dispatch.request"
+      TOPIC_DELIVERY_RECEIPT: "notification.dispatch.receipt"
+      TOPIC_DLQ: "notification.dispatch.dlq"
+    networks:
+      - goportal-net
+
+  mysql:
+    image: mysql:8.4
+    container_name: goportal-mysql
+    restart: unless-stopped
+    command: ["--default-authentication-plugin=mysql_native_password"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: goportal-db
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - goportal-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: goportal-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - goportal-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: goportal-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - goportal-net
+
+networks:
+  goportal-net:
+    driver: bridge

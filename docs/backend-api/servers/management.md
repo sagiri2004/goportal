@@ -210,3 +210,76 @@
 - Permission bitset is summed and checked with bitwise-AND.
 - `ADMINISTRATOR` bypasses normal permission checks.
 - Channel-level visibility/send permissions are resolved by server roles + channel overwrites.
+
+---
+
+### SERVERS: List My Servers
+
+- Method: `GET`
+- Path: `/api/v1/servers`
+- Auth: `Bearer token`
+- Description: List all active servers that current user joined/owns.
+
+#### Request
+
+- Headers:
+  - `Authorization: Bearer {{token}}`
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Servers fetched",
+  "data": [
+    {
+      "id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
+      "name": "Backend Team",
+      "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
+      "is_public": true,
+      "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+    }
+  ]
+}
+```
+
+---
+
+### SERVERS: List Server Channels
+
+- Method: `GET`
+- Path: `/api/v1/servers/:id/channels`
+- Auth: `Bearer token`
+- Description: List channels visible to current user in server. Private channels are returned only when user is explicit channel member (or admin).
+
+#### Request
+
+- Headers:
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - Server UUID.
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Channels fetched",
+  "data": [
+    {
+      "id": "a9f4c1ba-6e28-4cb9-a51f-53fcd7f0f3bb",
+      "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
+      "type": "TEXT",
+      "name": "general",
+      "position": 0,
+      "is_private": false
+    }
+  ]
+}
+```

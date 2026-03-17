@@ -51,6 +51,14 @@ func (s *serverService) CreateServer(ctx context.Context, ownerID, name string, 
 	return server, nil
 }
 
+func (s *serverService) ListUserServers(ctx context.Context, userID string) ([]models.Server, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	return s.serverRepo.ListByUserID(ctx, userID)
+}
+
 func (s *serverService) ListMembers(ctx context.Context, actorID, serverID string) ([]models.User, error) {
 	actorID = strings.TrimSpace(actorID)
 	serverID = strings.TrimSpace(serverID)

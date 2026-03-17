@@ -28,6 +28,7 @@ type ReviewJoinRequestInput struct {
 
 type ServerService interface {
 	CreateServer(ctx context.Context, ownerID, name string, isPublic bool) (*models.Server, error)
+	ListUserServers(ctx context.Context, userID string) ([]models.Server, error)
 	ListMembers(ctx context.Context, actorID, serverID string) ([]models.User, error)
 	ListMembersWithRoles(ctx context.Context, actorID, serverID string) ([]ServerMemberWithRoles, error)
 	DeleteServer(ctx context.Context, actorID, serverID string) error

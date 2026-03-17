@@ -47,6 +47,15 @@ func (m *mockDLQ) Publish(context.Context, domain.InboundNotification) error {
 	return nil
 }
 
+type mockReceipt struct {
+	sent bool
+}
+
+func (m *mockReceipt) Publish(context.Context, domain.DeliveryReceiptEvent) error {
+	m.sent = true
+	return nil
+}
+
 func TestDispatchNotification_HandleInbound(t *testing.T) {
 	payload := json.RawMessage(`{"title":"hello"}`)
 	in := domain.InboundNotification{
@@ -60,8 +69,9 @@ func TestDispatchNotification_HandleInbound(t *testing.T) {
 		s := &mockSocket{}
 		r := &mockRemote{}
 		d := &mockDLQ{}
+		rc := &mockReceipt{}
 
-		u := NewDispatchNotification("s1", p, s, r, d)
+		u := NewDispatchNotification("s1", p, s, r, d, rc)
 		if err := u.HandleInbound(context.Background(), in); err != nil {
 			t.Fatalf("expected nil err, got %v", err)
 		}
@@ -75,8 +85,9 @@ func TestDispatchNotification_HandleInbound(t *testing.T) {
 		s := &mockSocket{}
 		r := &mockRemote{}
 		d := &mockDLQ{}
+		rc := &mockReceipt{}
 
-		u := NewDispatchNotification("s1", p, s, r, d)
+		u := NewDispatchNotification("s1", p, s, r, d, rc)
 		if err := u.HandleInbound(context.Background(), in); err != nil {
 			t.Fatalf("expected nil err, got %v", err)
 		}
@@ -90,8 +101,9 @@ func TestDispatchNotification_HandleInbound(t *testing.T) {
 		s := &mockSocket{}
 		r := &mockRemote{}
 		d := &mockDLQ{}
+		rc := &mockReceipt{}
 
-		u := NewDispatchNotification("s1", p, s, r, d)
+		u := NewDispatchNotification("s1", p, s, r, d, rc)
 		if err := u.HandleInbound(context.Background(), in); err != nil {
 			t.Fatalf("expected nil err, got %v", err)
 		}

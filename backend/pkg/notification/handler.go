@@ -3,6 +3,7 @@ package notification
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -114,5 +115,6 @@ func (h *Handler) HandleDeliveryReceipt(msg *message.Message) error {
 	if err := json.Unmarshal(msg.Payload, &event); err != nil {
 		return fmt.Errorf("unmarshal delivery event: %w", err)
 	}
+	log.Printf("[backend-notification] consume receipt event_id=%s user_id=%s type=%s", event.EventID, event.UserID, event.DeliveryType)
 	return h.notificationSvc.HandleDeliveryEvent(msg.Context(), event)
 }

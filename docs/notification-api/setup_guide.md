@@ -22,7 +22,7 @@ Optional but useful:
 
 ```text
 doc/notification-api/
-docker-compose.notification.yml
+docker-compose.yml
 notification-server/
   cmd/
   internal/
@@ -62,13 +62,13 @@ BROKER_DRIVER=kafka
 
 # Kafka
 KAFKA_BROKERS=kafka:9092
-KAFKA_TOPIC_NOTIFICATIONS=notifications.events
+KAFKA_TOPIC_NOTIFICATIONS=notification.dispatch.request.events
 KAFKA_CONSUMER_GROUP=notification-server-group
 
 # RabbitMQ (used when BROKER_DRIVER=rabbitmq)
 RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-RABBITMQ_QUEUE_NOTIFICATIONS=notifications.events
-RABBITMQ_EXCHANGE=notifications
+RABBITMQ_QUEUE_NOTIFICATIONS=notification.dispatch.request.events
+RABBITMQ_EXCHANGE=notification.dispatch.request
 
 # Security
 JWT_SECRET=replace-with-secure-secret
@@ -102,26 +102,20 @@ Use a compose file that includes:
 ### 1) Start Infrastructure
 
 ```bash
-docker compose -f docker-compose.notification.yml up -d redis kafka zookeeper
-```
-
-If using RabbitMQ instead of Kafka:
-
-```bash
-docker compose -f docker-compose.notification.yml up -d redis rabbitmq
+docker compose -f docker-compose.yml up -d redis rabbitmq
 ```
 
 ### 2) Start Notification Server
 
 ```bash
-docker compose -f docker-compose.notification.yml up -d notification-server
+docker compose -f docker-compose.yml up -d notification-server
 ```
 
 ### 3) Verify Service Health
 
 ```bash
-docker compose -f docker-compose.notification.yml ps
-docker compose -f docker-compose.notification.yml logs -f notification-server
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs -f notification-server
 ```
 
 ### 4) Test WebSocket Connection
@@ -142,7 +136,7 @@ You can run Redis and broker in Docker, but run app binary locally:
 
 ```bash
 # Start infra
-docker compose -f docker-compose.notification.yml up -d redis kafka zookeeper
+docker compose -f docker-compose.yml up -d redis rabbitmq
 
 # Run app
 go run ./cmd/notification-server
@@ -190,7 +184,7 @@ Expected log flow:
 
 1. app starts and Watermill router runs
 2. smoke event is published to `new_message_topic`
-3. `NotificationHandler` consumes event and publishes `notification_topic`
+3. `NotificationHandler` consumes event and publishes `notification.dispatch.request`
 
 Required backend config:
 

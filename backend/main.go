@@ -12,8 +12,6 @@ import (
 
 	"github.com/sagiri2004/goportal/global"
 	"github.com/sagiri2004/goportal/pkg/initialize"
-	"github.com/sagiri2004/goportal/pkg/notification"
-	"github.com/sagiri2004/goportal/pkg/scripts"
 	"go.uber.org/zap"
 )
 
@@ -28,32 +26,14 @@ func main() {
 		panic(err)
 	}
 
-	if err := initialize.InitWatermill(); err != nil {
+	if err := initialize.InitAndRegisterWatermill(); err != nil {
 		panic(err)
-	}
-	if global.WMRouter != nil && global.Subscriber != nil {
-		if err := notification.RegisterHandlers(global.WMRouter, global.Subscriber); err != nil {
-			panic(err)
-		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		if global.WMRouter == nil {
-			return
-		}
-		if err := global.WMRouter.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			global.Logger.Error("watermill router stopped with error", zap.Error(err))
-		}
-	}()
-
-	if *runWatermillTest {
-		if err := scripts.PublishWatermillSmokeEvent(ctx); err != nil {
-			global.Logger.Error("watermill smoke test publish failed", zap.Error(err))
-		}
-	}
+	initialize.StartBackgroundWorkers(ctx, *runWatermillTest)
 
 	addr := fmt.Sprintf(":%d", global.Config.Server.Port)
 	httpServer := &http.Server{
@@ -62,21 +42,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if global.WMRouter != nil {
-			_ = global.WMRouter.Close()
-		}
-		if global.Publisher != nil {
-			_ = global.Publisher.Close()
-		}
-		if global.Subscriber != nil {
-			_ = global.Subscriber.Close()
-		}
-		_ = httpServer.Shutdown(shutdownCtx)
-	}()
+	initialize.RegisterGracefulShutdown(ctx, httpServer)
 
 	global.Logger.Info("server starting", zap.String("addr", addr))
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

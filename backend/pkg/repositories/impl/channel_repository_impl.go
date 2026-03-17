@@ -38,6 +38,17 @@ func (r *channelRepository) FindByID(ctx context.Context, id string) (*models.Ch
 	return &channel, nil
 }
 
+func (r *channelRepository) ListByServerID(ctx context.Context, serverID string) ([]models.Channel, error) {
+	var channels []models.Channel
+	if err := r.db.WithContext(ctx).
+		Where("server_id = ? AND deleted_at = 0", serverID).
+		Order("position ASC, created_at ASC").
+		Find(&channels).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return channels, nil
+}
+
 func (r *channelRepository) GetMaxPositionByParent(ctx context.Context, serverID string, parentID *string) (int, error) {
 	var maxPos int
 	query := r.db.WithContext(ctx).Model(&models.Channel{}).Where("server_id = ? AND deleted_at = 0", serverID)

@@ -181,7 +181,7 @@ Backend should consume delivery receipt events to persist delivery status transi
 
 ### Topic
 
-- `notification_delivery_topic`
+- `notification.dispatch.receipt`
 
 ### JSON Structure
 
@@ -233,7 +233,7 @@ Backend should consume delivery receipt events to persist delivery status transi
 ### Backend Persistence Mapping
 
 - `PENDING` -> initial DB state when notification record is created.
-- `PUBLISHED` -> event successfully published to `notification_topic`.
+- `PUBLISHED` -> event successfully published to `notification.dispatch.request`.
 - `DELIVERED_TO_SERVER` -> receipt from Notification Server acknowledged.
 - `DELIVERED_TO_CLIENT` -> client socket delivery acknowledged.
 - `FAILED` -> delivery pipeline failure.

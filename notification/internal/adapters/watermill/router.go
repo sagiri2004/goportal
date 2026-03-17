@@ -106,11 +106,12 @@ func NewRouter(
 				}
 			}
 			debugLogNotifRouter("H2", "notification/internal/adapters/watermill/router.go:73", "after_unmarshal_inbound", map[string]any{
-				"user_id":      in.UserID,
-				"priority":     in.Priority,
-				"event_id":     in.EventID,
+				"user_id":       in.UserID,
+				"priority":      in.Priority,
+				"event_id":      in.EventID,
 				"payload_bytes": len(in.MessagePayload),
 			})
+			log.Printf("[notification] consume topic=%s event_id=%s user_id=%s payload_bytes=%d", topicNotifications, in.EventID, in.UserID, len(in.MessagePayload))
 			return dispatcher.HandleInbound(context.Background(), in)
 		},
 	)

@@ -25,3 +25,7 @@ type DeadLetterPublisher interface {
 type DistributedPublisher interface {
 	PublishToServer(ctx context.Context, serverID string, msg domain.OutboundNotification) error
 }
+
+type DeliveryReceiptPublisher interface {
+	Publish(ctx context.Context, receipt domain.DeliveryReceiptEvent) error
+}
