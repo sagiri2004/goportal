@@ -15,14 +15,23 @@ var registry = map[string]errDef{
 	// Generic
 	"INVALID_JSON":   {http.StatusBadRequest, "Invalid JSON payload"},
 	"MISSING_FIELDS": {http.StatusBadRequest, "Missing required fields"},
+	"INVALID_ACTION": {http.StatusBadRequest, "Invalid action"},
 	"INTERNAL_ERROR": {http.StatusInternalServerError, "Internal server error"},
 	"DB_ERROR":       {http.StatusInternalServerError, "Database error"},
+	"UNAUTHORIZED":   {http.StatusUnauthorized, "Unauthorized"},
 
 	// Auth / User
-	"USER_NOT_FOUND":  {http.StatusUnauthorized, "User not found"},
-	"BAD_CREDENTIALS": {http.StatusUnauthorized, "Invalid username or password"},
-	"TOKEN_FAILED":    {http.StatusInternalServerError, "Failed to generate token"},
-	"USERNAME_EXISTS": {http.StatusConflict, "Username already exists"},
+	"USER_NOT_FOUND":           {http.StatusUnauthorized, "User not found"},
+	"BAD_CREDENTIALS":          {http.StatusUnauthorized, "Invalid username or password"},
+	"TOKEN_FAILED":             {http.StatusInternalServerError, "Failed to generate token"},
+	"USERNAME_EXISTS":          {http.StatusConflict, "Username already exists"},
+	"CANNOT_FRIEND_SELF":       {http.StatusBadRequest, "You cannot send a friend request to yourself"},
+	"CANNOT_BLOCK_SELF":        {http.StatusBadRequest, "You cannot block yourself"},
+	"FRIEND_REQUEST_EXISTS":    {http.StatusConflict, "Friend request already exists"},
+	"FRIEND_REQUEST_NOT_FOUND": {http.StatusNotFound, "Friend request not found"},
+	"ALREADY_FRIENDS":          {http.StatusConflict, "Users are already friends"},
+	"RELATIONSHIP_BLOCKED":     {http.StatusForbidden, "Relationship is blocked"},
+	"USER_ALREADY_BLOCKED":     {http.StatusConflict, "User is already blocked"},
 }
 
 type AppError struct {

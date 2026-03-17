@@ -27,9 +27,14 @@ func (s *userService) Register(ctx context.Context, username, password string, i
 		return nil, apperr.E("MISSING_FIELDS", nil)
 	}
 
-	// check if exists
-	if existing, err := s.repo.FindByUsername(ctx, username); err == nil && existing != nil {
+	existing, err := s.repo.FindByUsername(ctx, username)
+	if err == nil && existing != nil {
 		return nil, apperr.E("USERNAME_EXISTS", nil)
+	}
+	if err != nil {
+		if ae, ok := apperr.From(err); !ok || ae.Code != "USER_NOT_FOUND" {
+			return nil, err
+		}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -66,9 +71,38 @@ func (s *userService) Authenticate(ctx context.Context, username, password strin
 	return u, nil
 }
 
-func (s *userService) GetByID(ctx context.Context, id uint) (*models.User, error) {
-	if id == 0 {
+func (s *userService) GetByID(ctx context.Context, id string) (*models.User, error) {
+	if id == "" {
 		return nil, apperr.E("MISSING_FIELDS", nil)
 	}
 	return s.repo.FindByID(ctx, id)
+}
+
+func (s *userService) UpdateProfile(ctx context.Context, id, username string) (*models.User, error) {
+	id = strings.TrimSpace(id)
+	username = strings.TrimSpace(username)
+	if id == "" || username == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+
+	existing, err := s.repo.FindByUsername(ctx, username)
+	if err == nil && existing != nil && existing.ID != id {
+		return nil, apperr.E("USERNAME_EXISTS", nil)
+	}
+	if err != nil {
+		if ae, ok := apperr.From(err); !ok || ae.Code != "USER_NOT_FOUND" {
+			return nil, err
+		}
+	}
+
+	user, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	user.Username = username
+
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }

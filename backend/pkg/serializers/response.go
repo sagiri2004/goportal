@@ -23,4 +23,3 @@ func Error(code, message string) APIResponse {
 		Message: message,
 	}
 }
-

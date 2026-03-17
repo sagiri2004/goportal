@@ -13,9 +13,19 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		auth.POST("/login", v1.Auth.Login)
 	}
 
-	me := api.Group("/me")
-	me.Use(middlewares.AuthMiddleware())
+	users := api.Group("/users")
+	users.Use(middlewares.AuthMiddleware())
 	{
-		me.GET("", v1.User.Me)
+		users.GET("/me", v1.User.Me)
+		users.PATCH("/me", v1.User.UpdateMe)
+	}
+
+	friends := api.Group("/friends")
+	friends.Use(middlewares.AuthMiddleware())
+	{
+		friends.GET("", v1.Social.ListFriends)
+		friends.POST("/request", v1.Social.SendFriendRequest)
+		friends.PATCH("/response", v1.Social.RespondFriendRequest)
+		friends.PATCH("/block", v1.Social.BlockUser)
 	}
 }

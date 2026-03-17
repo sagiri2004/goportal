@@ -8,8 +8,10 @@ import (
 )
 
 var (
-	userSvcOnce sync.Once
-	userSvc     services.UserService
+	userSvcOnce   sync.Once
+	userSvc       services.UserService
+	socialSvcOnce sync.Once
+	socialSvc     services.SocialService
 )
 
 // UserService returns the singleton UserService instance.
@@ -18,4 +20,11 @@ func UserService() services.UserService {
 		userSvc = svcimpl.NewUserService(UserRepository())
 	})
 	return userSvc
+}
+
+func SocialService() services.SocialService {
+	socialSvcOnce.Do(func() {
+		socialSvc = svcimpl.NewSocialService(UserRepository(), RelationshipRepository())
+	})
+	return socialSvc
 }

@@ -18,14 +18,14 @@ func getJwtSecret() []byte {
 }
 
 type Claims struct {
-	UserID   uint   `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	DeviceID string `json:"device_id,omitempty"`
 	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uint, username, deviceID, role string) (string, error) {
+func GenerateToken(userID string, username, deviceID, role string) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,

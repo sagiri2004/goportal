@@ -9,8 +9,10 @@ import (
 )
 
 var (
-	userRepoOnce sync.Once
-	userRepo     repositories.UserRepository
+	userRepoOnce         sync.Once
+	userRepo             repositories.UserRepository
+	relationshipRepoOnce sync.Once
+	relationshipRepo     repositories.RelationshipRepository
 )
 
 // UserRepository returns the singleton UserRepository instance.
@@ -19,4 +21,11 @@ func UserRepository() repositories.UserRepository {
 		userRepo = repoimpl.NewUserRepository(global.DB)
 	})
 	return userRepo
+}
+
+func RelationshipRepository() repositories.RelationshipRepository {
+	relationshipRepoOnce.Do(func() {
+		relationshipRepo = repoimpl.NewRelationshipRepository(global.DB)
+	})
+	return relationshipRepo
 }
