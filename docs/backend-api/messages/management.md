@@ -3,7 +3,7 @@
 - Method: `GET`
 - Path: `/api/v1/channels/:id/messages`
 - Auth: `Bearer token`
-- Description: Fetch channel messages with pagination (`limit`, `offset`). Caller must be a server member.
+- Description: Fetch channel messages with pagination (`limit`, `offset`). Caller must pass effective `READ_MESSAGES` on channel.
 
 #### Request
 
@@ -57,13 +57,13 @@
 #### Error Responses
 
 - Status: `403`
-- Meaning: Caller is not server member.
+- Meaning: Caller lacks channel visibility/read permission.
 
 ```json
 {
   "success": false,
-  "code": "NOT_SERVER_MEMBER",
-  "message": "You are not a member of this server"
+  "code": "INSUFFICIENT_PERMISSION",
+  "message": "Insufficient server permissions"
 }
 ```
 
@@ -79,7 +79,7 @@
 - Method: `POST`
 - Path: `/api/v1/messages`
 - Auth: `Bearer token`
-- Description: Create a new message and publish `chat.message.created` event via Watermill.
+- Description: Create a new message and publish `chat.message.created` event via Watermill. Caller must pass effective `SEND_MESSAGES`.
 
 #### Request
 
@@ -132,13 +132,13 @@
 #### Error Responses
 
 - Status: `403`
-- Meaning: Caller is not server member.
+- Meaning: Caller lacks send permission on channel.
 
 ```json
 {
   "success": false,
-  "code": "NOT_SERVER_MEMBER",
-  "message": "You are not a member of this server"
+  "code": "INSUFFICIENT_PERMISSION",
+  "message": "Insufficient server permissions"
 }
 ```
 
@@ -267,7 +267,7 @@
 - Method: `POST`
 - Path: `/api/v1/messages/:id/reactions`
 - Auth: `Bearer token`
-- Description: Toggle emoji reaction on a message. Adds if missing, removes if existed.
+- Description: Toggle emoji reaction on a message. Requires effective `ADD_REACTIONS` on message's channel.
 
 #### Request
 

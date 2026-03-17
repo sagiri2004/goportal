@@ -10,5 +10,6 @@ import (
 // RunSeeders runs base seeders after migrations.
 func RunSeeders(db *gorm.DB) error {
 	seeders.SeedAdmin(db, global.Logger)
+	seeders.SeedPermissions(db, global.Logger)
 	return nil
 }

@@ -3,24 +3,20 @@
 - Method: `POST`
 - Path: `/api/v1/servers/:id/channels`
 - Auth: `Bearer token`
-- Description: Create a channel in a server. Caller must be a server member.
+- Description: Create a channel. Caller must have `MANAGE_CHANNELS` (or `ADMINISTRATOR`).
 
 #### Request
 
 - Headers:
   - `Content-Type: application/json`
   - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Server UUID.
-- Query params:
-  - None
 - Body JSON:
 
 ```json
 {
   "name": "general",
   "type": "TEXT",
-  "parent_id": "f0344e7b-6f84-45c4-b5b8-58a06f34ee87",
+  "parent_id": null,
   "position": 0
 }
 ```
@@ -37,43 +33,13 @@
   "data": {
     "id": "a9f4c1ba-6e28-4cb9-a51f-53fcd7f0f3bb",
     "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
-    "parent_id": "f0344e7b-6f84-45c4-b5b8-58a06f34ee87",
     "type": "TEXT",
     "name": "general",
-    "position": 0
+    "position": 0,
+    "is_private": false
   }
 }
 ```
-
-#### Error Responses
-
-- Status: `400`
-- Meaning: Invalid channel type, invalid parent category, or invalid position.
-
-```json
-{
-  "success": false,
-  "code": "CHANNEL_TYPE_INVALID",
-  "message": "Invalid channel type"
-}
-```
-
-- Status: `403`
-- Meaning: Caller is not a member of the server.
-
-```json
-{
-  "success": false,
-  "code": "NOT_SERVER_MEMBER",
-  "message": "You are not a member of this server"
-}
-```
-
-#### Frontend Notes
-
-- Supported `type`: `TEXT`, `VOICE`, `CATEGORY`.
-- For `CATEGORY` type, `parent_id` is ignored and set to `null`.
-- If `position` is omitted, backend appends channel to end of sibling list.
 
 ---
 
@@ -82,70 +48,7 @@
 - Method: `GET`
 - Path: `/api/v1/channels/:id`
 - Auth: `Bearer token`
-- Description: Fetch a channel by ID. Caller must be a member of the channel's server.
-
-#### Request
-
-- Headers:
-  - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Channel UUID.
-- Query params:
-  - None
-- Body JSON:
-
-```json
-{}
-```
-
-#### Success Response
-
-- Status: `200`
-
-```json
-{
-  "success": true,
-  "code": "OK",
-  "message": "Channel fetched",
-  "data": {
-    "id": "a9f4c1ba-6e28-4cb9-a51f-53fcd7f0f3bb",
-    "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
-    "parent_id": "f0344e7b-6f84-45c4-b5b8-58a06f34ee87",
-    "type": "TEXT",
-    "name": "general",
-    "position": 0
-  }
-}
-```
-
-#### Error Responses
-
-- Status: `403`
-- Meaning: Caller is not a member of the server.
-
-```json
-{
-  "success": false,
-  "code": "NOT_SERVER_MEMBER",
-  "message": "You are not a member of this server"
-}
-```
-
-- Status: `404`
-- Meaning: Channel does not exist.
-
-```json
-{
-  "success": false,
-  "code": "CHANNEL_NOT_FOUND",
-  "message": "Channel not found"
-}
-```
-
-#### Frontend Notes
-
-- `parent_id` is nullable.
-- Useful for resolving channel metadata before rendering nested trees.
+- Description: Fetch channel by ID. Access is resolved from server roles + channel overwrites and private-member gate.
 
 ---
 
@@ -154,59 +57,114 @@
 - Method: `PATCH`
 - Path: `/api/v1/channels/:id/position`
 - Auth: `Bearer token`
-- Description: Update channel `position` value for sorting among sibling channels.
+- Description: Update sort position of channel among siblings.
+
+---
+
+### CHANNELS: Update Privacy
+
+- Method: `PATCH`
+- Path: `/api/v1/channels/:id/privacy`
+- Auth: `Bearer token`
+- Description: Set `is_private` for channel.
 
 #### Request
 
 - Headers:
   - `Content-Type: application/json`
   - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Channel UUID.
-- Query params:
-  - None
 - Body JSON:
 
 ```json
 {
-  "position": 2
+  "is_private": true
 }
 ```
 
-#### Success Response
+---
 
-- Status: `200`
+### CHANNELS: Add Member
+
+- Method: `POST`
+- Path: `/api/v1/channels/:id/members`
+- Auth: `Bearer token`
+- Description: Add server member to channel (`MANAGE_CHANNELS` required).
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Body JSON:
 
 ```json
 {
-  "success": true,
-  "code": "OK",
-  "message": "Channel position updated",
-  "data": {
-    "id": "a9f4c1ba-6e28-4cb9-a51f-53fcd7f0f3bb",
-    "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
-    "parent_id": "f0344e7b-6f84-45c4-b5b8-58a06f34ee87",
-    "type": "TEXT",
-    "name": "general",
-    "position": 2
-  }
+  "user_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1"
 }
 ```
 
-#### Error Responses
+---
 
-- Status: `400`
-- Meaning: Position is negative.
+### CHANNELS: List Members
+
+- Method: `GET`
+- Path: `/api/v1/channels/:id/members`
+- Auth: `Bearer token`
+- Description: List explicit members for channel access.
+
+---
+
+### CHANNELS: Remove Member
+
+- Method: `DELETE`
+- Path: `/api/v1/channels/:id/members/:userId`
+- Auth: `Bearer token`
+- Description: Remove channel member.
+
+---
+
+### CHANNELS: Upsert Overwrite
+
+- Method: `PUT`
+- Path: `/api/v1/channels/:id/overwrites`
+- Auth: `Bearer token`
+- Description: Upsert allow/deny bit overwrite by `subject_type` (`ROLE|USER`) and `subject_id`.
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Body JSON:
 
 ```json
 {
-  "success": false,
-  "code": "INVALID_POSITION",
-  "message": "Invalid channel position"
+  "subject_type": "ROLE",
+  "subject_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+  "allow_bits": 1,
+  "deny_bits": 2
 }
 ```
+
+---
+
+### CHANNELS: List Overwrites
+
+- Method: `GET`
+- Path: `/api/v1/channels/:id/overwrites`
+- Auth: `Bearer token`
+- Description: List all overwrite rows for channel.
+
+---
+
+### CHANNELS: Delete Overwrite
+
+- Method: `DELETE`
+- Path: `/api/v1/channels/:id/overwrites/:subjectType/:subjectId`
+- Auth: `Bearer token`
+- Description: Delete overwrite row for target subject.
 
 #### Frontend Notes
 
-- Position is an integer and can be used for manual drag-and-drop ordering.
-- Backend currently updates only this channel value; client can send batched updates endpoint-by-endpoint.
+- Channel effective permission order: base server role perms -> `@everyone` overwrite -> role overwrites -> user overwrite.
+- Private channel requires membership unless caller has `ADMINISTRATOR`.

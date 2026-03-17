@@ -10,4 +10,11 @@ type ChannelService interface {
 	CreateChannel(ctx context.Context, actorID, serverID, name, channelType string, parentID *string, position *int) (*models.Channel, error)
 	GetChannel(ctx context.Context, actorID, channelID string) (*models.Channel, error)
 	UpdatePosition(ctx context.Context, actorID, channelID string, position int) (*models.Channel, error)
+	SetPrivacy(ctx context.Context, actorID, channelID string, isPrivate bool) (*models.Channel, error)
+	AddMember(ctx context.Context, actorID, channelID, targetUserID string) error
+	RemoveMember(ctx context.Context, actorID, channelID, targetUserID string) error
+	ListMembers(ctx context.Context, actorID, channelID string) ([]models.ChannelMember, error)
+	UpsertOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string, allowBits, denyBits int64) error
+	DeleteOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string) error
+	ListOverwrites(ctx context.Context, actorID, channelID string) ([]models.ChannelPermissionOverwrite, error)
 }
