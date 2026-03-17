@@ -5,7 +5,10 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"npm --prefix ../web run dev\" \"electron . --no-sandbox\"",
-    "build": "npm --prefix ../web run build && echo \"Desktop shell build-ready (renderer from apps/web/dist)\""
+    "build": "npm --prefix ../web run build && echo \"Desktop shell build-ready (renderer from apps/web/dist)\"",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win msi",
+    "dist:linux": "npm run build && electron-builder --linux deb"
   },
   "dependencies": {
     "electron": "^30.0.0",
@@ -14,7 +17,46 @@
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.goprotal.desktop",
+    "productName": "GoPortal Desktop",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "../web/dist/**",
+      "package.json"
+    ],
+    "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "msi"
+      ],
+      "extraResources": [
+        {
+          "from": "sidecars/win/tool.exe",
+          "to": "sidecars/tool.exe"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "category": "Utility",
+      "extraResources": [
+        {
+          "from": "sidecars/linux/tool",
+          "to": "sidecars/tool"
+        }
+      ]
+    }
   }
 }
 
