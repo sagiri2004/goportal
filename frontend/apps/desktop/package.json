@@ -1,6 +1,12 @@
 {
   "name": "desktop",
   "version": "0.1.0",
+  "description": "GoPortal desktop app shell built with Electron.",
+  "homepage": "https://github.com/sagiri2004/goportal",
+  "author": {
+    "name": "GoPortal",
+    "email": "maintainers@goportal.local"
+  },
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
@@ -11,13 +17,13 @@
     "dist:linux": "npm run build && electron-builder --linux deb"
   },
   "dependencies": {
-    "electron": "^30.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
     "typescript": "^5.6.0",
+    "electron": "30.0.0",
     "electron-builder": "^24.13.3"
   },
   "build": {
@@ -49,6 +55,7 @@
       "target": [
         "deb"
       ],
+      "maintainer": "GoPortal <maintainers@goportal.local>",
       "category": "Utility",
       "extraResources": [
         {
