@@ -41,6 +41,7 @@
     "asar": true,
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "msi"
       ],
