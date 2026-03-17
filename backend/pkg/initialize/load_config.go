@@ -26,6 +26,9 @@ func LoadConfig(configPath string) error {
 		Logger: setting.LoggerSetting{
 			LogLevel: "info",
 		},
+		RabbitMQ: setting.RabbitMQConfig{
+			URL: "amqp://guest:guest@localhost:5672/",
+		},
 		Cron: setting.CronSetting{
 			Enabled: true,
 			Spec:    "0 1 * * *",
@@ -79,6 +82,9 @@ func LoadConfig(configPath string) error {
 	}
 	if v := os.Getenv("CRON_SPEC"); v != "" {
 		cfg.Cron.Spec = v
+	}
+	if v := os.Getenv("RABBITMQ_URL"); v != "" {
+		cfg.RabbitMQ.URL = v
 	}
 
 	global.Config = cfg

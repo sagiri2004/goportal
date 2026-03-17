@@ -32,6 +32,28 @@ var registry = map[string]errDef{
 	"ALREADY_FRIENDS":          {http.StatusConflict, "Users are already friends"},
 	"RELATIONSHIP_BLOCKED":     {http.StatusForbidden, "Relationship is blocked"},
 	"USER_ALREADY_BLOCKED":     {http.StatusConflict, "User is already blocked"},
+	"SERVER_NOT_FOUND":         {http.StatusNotFound, "Server not found"},
+	"SERVER_MEMBER_NOT_FOUND":  {http.StatusNotFound, "Server member not found"},
+	"NOT_SERVER_MEMBER":        {http.StatusForbidden, "You are not a member of this server"},
+	"SERVER_OWNER_REQUIRED":    {http.StatusForbidden, "Only server owner can perform this action"},
+	"CANNOT_KICK_OWNER":        {http.StatusBadRequest, "You cannot kick the server owner"},
+	"CANNOT_LEAVE_OWNED_SERVER": {
+		http.StatusBadRequest,
+		"Server owner cannot leave the server",
+	},
+	"CHANNEL_NOT_FOUND":    {http.StatusNotFound, "Channel not found"},
+	"CHANNEL_TYPE_INVALID": {http.StatusBadRequest, "Invalid channel type"},
+	"CHANNEL_PARENT_INVALID": {
+		http.StatusBadRequest,
+		"Invalid channel parent, parent must be a category in the same server",
+	},
+	"INVALID_POSITION":      {http.StatusBadRequest, "Invalid channel position"},
+	"MESSAGE_NOT_FOUND":     {http.StatusNotFound, "Message not found"},
+	"REACTION_NOT_FOUND":    {http.StatusNotFound, "Reaction not found"},
+	"MESSAGE_FORBIDDEN":     {http.StatusForbidden, "You are not allowed to modify this message"},
+	"FILE_TOO_LARGE":        {http.StatusBadRequest, "File is too large"},
+	"FILE_TYPE_NOT_ALLOWED": {http.StatusBadRequest, "File type is not allowed"},
+	"UPLOAD_FAILED":         {http.StatusInternalServerError, "Failed to upload file"},
 }
 
 type AppError struct {

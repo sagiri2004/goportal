@@ -11,3 +11,7 @@ Each router has:
 - [Auth](./auth/README.md)
 - [Users](./users/README.md)
 - [Social](./social/README.md)
+- [Servers](./servers/README.md)
+- [Channels](./channels/README.md)
+- [Messages](./messages/README.md)
+- [Uploads](./uploads/README.md)

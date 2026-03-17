@@ -13,6 +13,14 @@ var (
 	userRepo             repositories.UserRepository
 	relationshipRepoOnce sync.Once
 	relationshipRepo     repositories.RelationshipRepository
+	serverRepoOnce       sync.Once
+	serverRepo           repositories.ServerRepository
+	channelRepoOnce      sync.Once
+	channelRepo          repositories.ChannelRepository
+	messageRepoOnce      sync.Once
+	messageRepo          repositories.MessageRepository
+	notificationRepoOnce sync.Once
+	notificationRepo     repositories.NotificationRepository
 )
 
 // UserRepository returns the singleton UserRepository instance.
@@ -28,4 +36,32 @@ func RelationshipRepository() repositories.RelationshipRepository {
 		relationshipRepo = repoimpl.NewRelationshipRepository(global.DB)
 	})
 	return relationshipRepo
+}
+
+func ServerRepository() repositories.ServerRepository {
+	serverRepoOnce.Do(func() {
+		serverRepo = repoimpl.NewServerRepository(global.DB)
+	})
+	return serverRepo
+}
+
+func ChannelRepository() repositories.ChannelRepository {
+	channelRepoOnce.Do(func() {
+		channelRepo = repoimpl.NewChannelRepository(global.DB)
+	})
+	return channelRepo
+}
+
+func MessageRepository() repositories.MessageRepository {
+	messageRepoOnce.Do(func() {
+		messageRepo = repoimpl.NewMessageRepository(global.DB)
+	})
+	return messageRepo
+}
+
+func NotificationRepository() repositories.NotificationRepository {
+	notificationRepoOnce.Do(func() {
+		notificationRepo = repoimpl.NewNotificationRepository(global.DB)
+	})
+	return notificationRepo
 }
