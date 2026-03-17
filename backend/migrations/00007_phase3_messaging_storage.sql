@@ -1,5 +1,10 @@
 -- +goose Up
 ALTER TABLE messages
+  DROP FOREIGN KEY fk_messages_sender,
+  DROP FOREIGN KEY fk_messages_recipient,
+  DROP FOREIGN KEY fk_messages_channel;
+
+ALTER TABLE messages
   CHANGE COLUMN sender_id author_id CHAR(36) NOT NULL,
   MODIFY COLUMN recipient_id CHAR(36) NULL,
   MODIFY COLUMN channel_id CHAR(36) NOT NULL,
@@ -8,7 +13,9 @@ ALTER TABLE messages
   ADD COLUMN is_pinned TINYINT(1) NOT NULL DEFAULT 0 AFTER is_edited;
 
 ALTER TABLE messages
-  DROP FOREIGN KEY fk_messages_recipient;
+  ADD CONSTRAINT fk_messages_author FOREIGN KEY (author_id) REFERENCES users(id),
+  ADD CONSTRAINT fk_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_messages_channel FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE;
 
 CREATE TABLE IF NOT EXISTS message_reactions (
   id CHAR(36) NOT NULL,
@@ -48,9 +55,17 @@ DROP TABLE IF EXISTS message_attachments;
 DROP TABLE IF EXISTS message_reactions;
 
 ALTER TABLE messages
+  DROP FOREIGN KEY fk_messages_author,
+  DROP FOREIGN KEY fk_messages_recipient,
+  DROP FOREIGN KEY fk_messages_channel,
   CHANGE COLUMN author_id sender_id CHAR(36) NOT NULL,
   DROP COLUMN is_edited,
   DROP COLUMN is_pinned,
   MODIFY COLUMN recipient_id CHAR(36) NOT NULL,
   MODIFY COLUMN channel_id CHAR(36) NULL,
   MODIFY COLUMN content TEXT NOT NULL;
+
+ALTER TABLE messages
+  ADD CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id),
+  ADD CONSTRAINT fk_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users(id),
+  ADD CONSTRAINT fk_messages_channel FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL;

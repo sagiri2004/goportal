@@ -215,13 +215,10 @@ Run from `backend/` unless the task explicitly says otherwise:
 go fmt ./...
 go build ./...
 go test ./...
-```
-
-If migrations are involved, also run (when safe in the environment):
-
-```bash
 go run . -config configs/config.yaml -migrate
 ```
+
+Migration execution is part of default backend validation. Always attempt migration run and report result.
 
 If seed behavior changed:
 
