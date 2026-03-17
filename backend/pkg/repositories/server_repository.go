@@ -19,6 +19,7 @@ type ServerMemberWithRoles struct {
 type ServerRepository interface {
 	CreateWithOwnerMember(ctx context.Context, server *models.Server, ownerMember *models.ServerMember) error
 	FindByID(ctx context.Context, id string) (*models.Server, error)
+	ListByUserID(ctx context.Context, userID string) ([]models.Server, error)
 	DeleteByID(ctx context.Context, id string) error
 	FindMember(ctx context.Context, serverID, userID string) (*models.ServerMember, error)
 	RemoveMember(ctx context.Context, serverID, userID string) error

@@ -15,6 +15,29 @@ type serverController struct{}
 
 var Server = new(serverController)
 
+func (ctrl *serverController) ListMine(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	servers, err := containers.ServerService().ListUserServers(c.Request.Context(), userID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	resp := make([]serializers.ServerResponse, 0, len(servers))
+	for i := range servers {
+		resp = append(resp, serializers.NewServerResponse(&servers[i]))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Servers fetched", resp))
+}
+
 func (ctrl *serverController) Create(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {

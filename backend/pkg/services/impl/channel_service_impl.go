@@ -94,6 +94,46 @@ func (s *channelService) CreateChannel(ctx context.Context, actorID, serverID, n
 	return channel, nil
 }
 
+func (s *channelService) ListByServer(ctx context.Context, actorID, serverID string) ([]models.Channel, error) {
+	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
+	if actorID == "" || serverID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+
+	if _, err := s.serverRepo.FindMember(ctx, serverID, actorID); err != nil {
+		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+	canView, err := s.serverRepo.HasPermission(ctx, serverID, actorID, models.PermissionViewChannel)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+
+	rows, err := s.channelRepo.ListByServerID(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make([]models.Channel, 0, len(rows))
+	for _, ch := range rows {
+		if !ch.IsPrivate {
+			filtered = append(filtered, ch)
+			continue
+		}
+		isMember, err := s.channelRepo.IsMember(ctx, ch.ID, actorID)
+		if err != nil {
+			return nil, err
+		}
+		if isMember {
+			filtered = append(filtered, ch)
+		}
+	}
+	return filtered, nil
+}
+
 func (s *channelService) GetChannel(ctx context.Context, actorID, channelID string) (*models.Channel, error) {
 	actorID = strings.TrimSpace(actorID)
 	channelID = strings.TrimSpace(channelID)

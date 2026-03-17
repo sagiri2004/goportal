@@ -18,6 +18,23 @@ type OutboundNotification struct {
 	EventID   string          `json:"event_id,omitempty"`
 }
 
+type DeliveryType string
+
+const (
+	DeliveryTypeToServer DeliveryType = "DELIVERED_TO_SERVER"
+	DeliveryTypeToClient DeliveryType = "DELIVERED_TO_CLIENT"
+	DeliveryTypeFailed   DeliveryType = "FAILED"
+)
+
+type DeliveryReceiptEvent struct {
+	EventID      string       `json:"event_id"`
+	UserID       string       `json:"user_id"`
+	ServerID     string       `json:"server_id,omitempty"`
+	DeliveryType DeliveryType `json:"delivery_type"`
+	DeliveredAt  int64        `json:"delivered_at"`
+	ErrorMessage string       `json:"error_message,omitempty"`
+}
+
 type ServerEnvelope struct {
 	UserID       string          `json:"user_id"`
 	Notification json.RawMessage `json:"notification"`

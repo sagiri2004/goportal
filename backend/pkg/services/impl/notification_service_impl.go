@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ import (
 	"github.com/sagiri2004/goportal/pkg/services"
 )
 
-const notificationTopic = "notification_topic"
+const notificationTopic = "notification.dispatch.request"
 
 type notificationService struct {
 	repo      repositories.NotificationRepository
@@ -128,6 +129,7 @@ func (s *notificationService) Dispatch(
 	msg := message.NewMessage(eventID, raw)
 	msg.SetContext(ctx)
 	if err := s.publisher.Publish(notificationTopic, msg); err != nil {
+		log.Printf("[backend-notification] publish failed event_id=%s topic=%s user_id=%s err=%v", eventID, notificationTopic, userID, err)
 		_ = s.repo.UpdateDeliveryStatusByEventID(
 			ctx,
 			eventID,
@@ -137,6 +139,7 @@ func (s *notificationService) Dispatch(
 		)
 		return nil, apperr.E("INTERNAL_ERROR", err)
 	}
+	log.Printf("[backend-notification] published event_id=%s topic=%s user_id=%s", eventID, notificationTopic, userID)
 
 	if err := s.repo.UpdateDeliveryStatusByEventID(
 		ctx,
@@ -167,10 +170,16 @@ func (s *notificationService) HandleDeliveryEvent(ctx context.Context, event mod
 	default:
 		return apperr.E("INVALID_ACTION", nil)
 	}
+	log.Printf("[backend-notification] delivery receipt event_id=%s user_id=%s type=%s at=%d err=%s", event.EventID, event.UserID, event.DeliveryType, event.DeliveredAt, event.ErrorMessage)
 
 	var deliveredAt *int64
 	if event.DeliveredAt > 0 {
 		deliveredAt = &event.DeliveredAt
 	}
-	return s.repo.UpdateDeliveryStatusByEventID(ctx, event.EventID, status, deliveredAt, event.ErrorMessage)
+	if err := s.repo.UpdateDeliveryStatusByEventID(ctx, event.EventID, status, deliveredAt, event.ErrorMessage); err != nil {
+		log.Printf("[backend-notification] delivery status update failed event_id=%s type=%s err=%v", event.EventID, event.DeliveryType, err)
+		return err
+	}
+	log.Printf("[backend-notification] delivery status updated event_id=%s status=%s", event.EventID, status)
+	return nil
 }

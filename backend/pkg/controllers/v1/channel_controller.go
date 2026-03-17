@@ -13,6 +13,30 @@ type channelController struct{}
 
 var Channel = new(channelController)
 
+func (ctrl *channelController) ListByServer(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	serverID := c.Param("id")
+	channels, err := containers.ChannelService().ListByServer(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	resp := make([]serializers.ChannelResponse, 0, len(channels))
+	for i := range channels {
+		resp = append(resp, serializers.NewChannelResponse(&channels[i]))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Channels fetched", resp))
+}
+
 func (ctrl *channelController) Create(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {

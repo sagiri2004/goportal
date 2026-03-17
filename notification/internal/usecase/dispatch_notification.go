@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -18,6 +19,7 @@ type DispatchNotification struct {
 	sockets    ports.SocketManager
 	remotePub  ports.DistributedPublisher
 	dlqPub     ports.DeadLetterPublisher
+	receiptPub ports.DeliveryReceiptPublisher
 }
 
 func debugLogDispatch(hypothesisID, location, message string, data map[string]any) {
@@ -46,27 +48,56 @@ func NewDispatchNotification(
 	sockets ports.SocketManager,
 	remotePub ports.DistributedPublisher,
 	dlqPub ports.DeadLetterPublisher,
+	receiptPub ports.DeliveryReceiptPublisher,
 ) *DispatchNotification {
 	return &DispatchNotification{
-		serverID:  serverID,
-		presence:  presence,
-		sockets:   sockets,
-		remotePub: remotePub,
-		dlqPub:    dlqPub,
+		serverID:   serverID,
+		presence:   presence,
+		sockets:    sockets,
+		remotePub:  remotePub,
+		dlqPub:     dlqPub,
+		receiptPub: receiptPub,
 	}
+}
+
+func (u *DispatchNotification) publishReceipt(
+	ctx context.Context,
+	userID, eventID string,
+	deliveryType domain.DeliveryType,
+	err error,
+) {
+	if u.receiptPub == nil || eventID == "" {
+		return
+	}
+	receipt := domain.DeliveryReceiptEvent{
+		EventID:      eventID,
+		UserID:       userID,
+		ServerID:     u.serverID,
+		DeliveryType: deliveryType,
+		DeliveredAt:  time.Now().Unix(),
+	}
+	if err != nil {
+		receipt.ErrorMessage = err.Error()
+	}
+	if pubErr := u.receiptPub.Publish(ctx, receipt); pubErr != nil {
+		log.Printf("[notification] publish receipt failed event_id=%s user_id=%s type=%s err=%v", eventID, userID, deliveryType, pubErr)
+		return
+	}
+	log.Printf("[notification] published receipt event_id=%s user_id=%s type=%s", eventID, userID, deliveryType)
 }
 
 func (u *DispatchNotification) HandleInbound(ctx context.Context, in domain.InboundNotification) error {
 	debugLogDispatch("H3", "notification/internal/usecase/dispatch_notification.go:63", "handle_inbound_entry", map[string]any{
-		"user_id":      in.UserID,
-		"event_id":     in.EventID,
-		"priority":     in.Priority,
+		"user_id":       in.UserID,
+		"event_id":      in.EventID,
+		"priority":      in.Priority,
 		"payload_bytes": len(in.MessagePayload),
 	})
 
 	if in.UserID == "" {
 		return errors.New("inbound notification missing user_id")
 	}
+	log.Printf("[notification] inbound received event_id=%s user_id=%s payload_bytes=%d", in.EventID, in.UserID, len(in.MessagePayload))
 	if len(in.MessagePayload) == 0 {
 		return errors.New("inbound notification missing message_payload")
 	}
@@ -84,12 +115,15 @@ func (u *DispatchNotification) HandleInbound(ctx context.Context, in domain.Inbo
 	if err != nil {
 		return fmt.Errorf("lookup presence: %w", err)
 	}
+	log.Printf("[notification] presence resolved event_id=%s user_id=%s target_server=%s node=%s", in.EventID, in.UserID, serverID, u.serverID)
 	debugLogDispatch("H4", "notification/internal/usecase/dispatch_notification.go:87", "presence_lookup_result", map[string]any{
-		"user_id":               in.UserID,
-		"resolved_server_id":    serverID,
+		"user_id":                   in.UserID,
+		"resolved_server_id":        serverID,
 		"current_notification_node": u.serverID,
 	})
 	if serverID == "" {
+		offlineErr := errors.New("user offline, routed to dlq")
+		u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeFailed, offlineErr)
 		if u.dlqPub == nil {
 			return nil
 		}
@@ -97,7 +131,22 @@ func (u *DispatchNotification) HandleInbound(ctx context.Context, in domain.Inbo
 	}
 
 	if serverID == u.serverID {
-		return u.sockets.SendToUser(in.UserID, out)
+		if err := u.sockets.SendToUser(in.UserID, out); err != nil {
+			log.Printf("[notification] local send failed event_id=%s user_id=%s err=%v", in.EventID, in.UserID, err)
+			u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeFailed, err)
+			return err
+		}
+		log.Printf("[notification] local send success event_id=%s user_id=%s", in.EventID, in.UserID)
+		u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeToServer, nil)
+		u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeToClient, nil)
+		return nil
 	}
-	return u.remotePub.PublishToServer(ctx, serverID, out)
+	if err := u.remotePub.PublishToServer(ctx, serverID, out); err != nil {
+		log.Printf("[notification] remote publish failed event_id=%s user_id=%s target_server=%s err=%v", in.EventID, in.UserID, serverID, err)
+		u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeFailed, err)
+		return err
+	}
+	log.Printf("[notification] remote publish success event_id=%s user_id=%s target_server=%s", in.EventID, in.UserID, serverID)
+	u.publishReceipt(ctx, in.UserID, in.EventID, domain.DeliveryTypeToServer, nil)
+	return nil
 }

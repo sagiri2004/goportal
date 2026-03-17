@@ -8,21 +8,22 @@ import (
 )
 
 type Config struct {
-	AppPort          string
-	ServerID         string
-	WSPath           string
-	WSPingInterval   time.Duration
-	WSPongTimeout    time.Duration
-	WSWriteTimeout   time.Duration
-	RedisAddr        string
-	RedisPassword    string
-	RedisDB          int
-	BrokerDriver     string
-	RabbitMQURL      string
-	QueueName        string
-	ExchangeName     string
-	TopicNotifications string
-	TopicDLQ         string
+	AppPort              string
+	ServerID             string
+	WSPath               string
+	WSPingInterval       time.Duration
+	WSPongTimeout        time.Duration
+	WSWriteTimeout       time.Duration
+	RedisAddr            string
+	RedisPassword        string
+	RedisDB              int
+	BrokerDriver         string
+	RabbitMQURL          string
+	QueueName            string
+	ExchangeName         string
+	TopicNotifications   string
+	TopicDeliveryReceipt string
+	TopicDLQ             string
 }
 
 func Load() (Config, error) {
@@ -32,18 +33,19 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		AppPort:            strFromEnv("PORT", "8085"),
-		ServerID:           strFromEnv("SERVER_ID", "notif-node-a"),
-		WSPath:             strFromEnv("WS_PATH", "/ws"),
-		RedisAddr:          strFromEnv("REDIS_ADDR", "redis:6379"),
-		RedisPassword:      strFromEnv("REDIS_PASSWORD", ""),
-		RedisDB:            db,
-		BrokerDriver:       strFromEnv("BROKER_DRIVER", "rabbitmq"),
-		RabbitMQURL:        strFromEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
-		QueueName:          strFromEnv("RABBITMQ_QUEUE_NOTIFICATIONS", "notifications.events"),
-		ExchangeName:       strFromEnv("RABBITMQ_EXCHANGE", "notifications"),
-		TopicNotifications: strFromEnv("TOPIC_NOTIFICATIONS", "notifications"),
-		TopicDLQ:           strFromEnv("TOPIC_DLQ", "notifications.dlq"),
+		AppPort:              strFromEnv("PORT", "8085"),
+		ServerID:             strFromEnv("SERVER_ID", "notif-node-a"),
+		WSPath:               strFromEnv("WS_PATH", "/ws"),
+		RedisAddr:            strFromEnv("REDIS_ADDR", "redis:6379"),
+		RedisPassword:        strFromEnv("REDIS_PASSWORD", ""),
+		RedisDB:              db,
+		BrokerDriver:         strFromEnv("BROKER_DRIVER", "rabbitmq"),
+		RabbitMQURL:          strFromEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
+		QueueName:            strFromEnv("RABBITMQ_QUEUE_NOTIFICATIONS", "notification.dispatch.request.events"),
+		ExchangeName:         strFromEnv("RABBITMQ_EXCHANGE", "notification.dispatch.request"),
+		TopicNotifications:   strFromEnv("TOPIC_NOTIFICATIONS", "notification.dispatch.request"),
+		TopicDeliveryReceipt: strFromEnv("TOPIC_DELIVERY_RECEIPT", "notification.dispatch.receipt"),
+		TopicDLQ:             strFromEnv("TOPIC_DLQ", "notification.dispatch.dlq"),
 	}
 
 	cfg.WSPingInterval, err = durationFromEnv("WS_PING_INTERVAL", 25*time.Second)

@@ -665,6 +665,56 @@
               "raw": "{\n  \"user_id\": \"{{target_user_id}}\"\n}"
             }
           }
+        },
+        {
+          "name": "List My Servers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/servers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servers"
+              ]
+            },
+            "description": "List active servers current user joined/owns."
+          }
+        },
+        {
+          "name": "List Server Channels",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/servers/{{server_id}}/channels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servers",
+                "{{server_id}}",
+                "channels"
+              ]
+            },
+            "description": "List channels visible to current user in the server."
+          }
         }
       ]
     },

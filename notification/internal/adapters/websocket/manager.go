@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -18,14 +19,14 @@ var (
 )
 
 type Manager struct {
-	serverID      string
-	pingInterval  time.Duration
-	pongTimeout   time.Duration
-	writeTimeout  time.Duration
-	upgrader      websocket.Upgrader
-	presence      ports.PresenceRepository
-	mu            sync.RWMutex
-	connections   map[string]*websocket.Conn
+	serverID     string
+	pingInterval time.Duration
+	pongTimeout  time.Duration
+	writeTimeout time.Duration
+	upgrader     websocket.Upgrader
+	presence     ports.PresenceRepository
+	mu           sync.RWMutex
+	connections  map[string]*websocket.Conn
 }
 
 func NewManager(
@@ -57,12 +58,14 @@ func (m *Manager) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := m.upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Printf("[notification] websocket upgrade failed user_id=%s err=%v", userID, err)
 		http.Error(w, "upgrade failed", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
 	if err = m.RegisterUser(ctx, userID); err != nil {
+		log.Printf("[notification] register presence failed user_id=%s err=%v", userID, err)
 		_ = conn.Close()
 		http.Error(w, "unable to register user", http.StatusInternalServerError)
 		return
@@ -71,6 +74,7 @@ func (m *Manager) HandleWS(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	m.connections[userID] = conn
 	m.mu.Unlock()
+	log.Printf("[notification] websocket connected user_id=%s server_id=%s", userID, m.serverID)
 
 	_ = m.SendToUser(userID, domain.OutboundNotification{
 		Type:      "CONNECTED",
@@ -95,6 +99,7 @@ func (m *Manager) readLoop(userID string, conn *websocket.Conn) {
 
 	for {
 		if _, _, err := conn.ReadMessage(); err != nil {
+			log.Printf("[notification] websocket read loop closed user_id=%s err=%v", userID, err)
 			return
 		}
 	}
@@ -105,9 +110,11 @@ func (m *Manager) pingLoop(userID string, conn *websocket.Conn) {
 	defer ticker.Stop()
 	for range ticker.C {
 		if err := conn.SetWriteDeadline(time.Now().Add(m.writeTimeout)); err != nil {
+			log.Printf("[notification] ping set deadline failed user_id=%s err=%v", userID, err)
 			return
 		}
 		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			log.Printf("[notification] ping failed user_id=%s err=%v", userID, err)
 			_ = m.disconnectUser(context.Background(), userID, conn)
 			return
 		}
@@ -119,13 +126,20 @@ func (m *Manager) SendToUser(userID string, msg domain.OutboundNotification) err
 	conn, ok := m.connections[userID]
 	m.mu.RUnlock()
 	if !ok {
+		log.Printf("[notification] send skipped no connection user_id=%s event_id=%s", userID, msg.EventID)
 		return ErrConnectionNotFound
 	}
 
 	if err := conn.SetWriteDeadline(time.Now().Add(m.writeTimeout)); err != nil {
+		log.Printf("[notification] send set deadline failed user_id=%s event_id=%s err=%v", userID, msg.EventID, err)
 		return err
 	}
-	return conn.WriteJSON(msg)
+	if err := conn.WriteJSON(msg); err != nil {
+		log.Printf("[notification] send failed user_id=%s event_id=%s err=%v", userID, msg.EventID, err)
+		return err
+	}
+	log.Printf("[notification] send success user_id=%s event_id=%s type=%s", userID, msg.EventID, msg.Type)
+	return nil
 }
 
 func (m *Manager) RegisterUser(ctx context.Context, userID string) error {
@@ -145,6 +159,7 @@ func (m *Manager) disconnectUser(ctx context.Context, userID string, conn *webso
 	m.mu.Unlock()
 
 	_ = conn.Close()
+	log.Printf("[notification] websocket disconnected user_id=%s server_id=%s", userID, m.serverID)
 	return m.UnregisterUser(ctx, userID)
 }
 

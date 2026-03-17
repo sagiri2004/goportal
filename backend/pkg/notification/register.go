@@ -8,7 +8,7 @@ import (
 )
 
 const NewMessageTopic = "chat.message.created"
-const DeliveryReceiptTopic = "notification_delivery_topic"
+const DeliveryReceiptTopic = "notification.dispatch.receipt"
 
 func RegisterHandlers(router *message.Router, subscriber message.Subscriber) error {
 	if router == nil {
@@ -24,13 +24,13 @@ func RegisterHandlers(router *message.Router, subscriber message.Subscriber) err
 		containers.ServerRepository(),
 	)
 
-	router.AddNoPublisherHandler(
+	router.AddConsumerHandler(
 		"notification_new_message_consumer",
 		NewMessageTopic,
 		subscriber,
 		handler.HandleNewMessage,
 	)
-	router.AddNoPublisherHandler(
+	router.AddConsumerHandler(
 		"notification_delivery_receipt_consumer",
 		DeliveryReceiptTopic,
 		subscriber,

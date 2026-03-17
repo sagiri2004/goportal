@@ -135,6 +135,21 @@ func (r *serverRepository) FindByID(ctx context.Context, id string) (*models.Ser
 	return &server, nil
 }
 
+func (r *serverRepository) ListByUserID(ctx context.Context, userID string) ([]models.Server, error) {
+	var servers []models.Server
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT s.id, s.created_at, s.updated_at, s.deleted_at, s.name, s.owner_id, s.is_public, s.default_role_id
+		FROM servers s
+		INNER JOIN server_members sm ON sm.server_id = s.id
+		WHERE sm.user_id = ? AND sm.deleted_at = 0 AND sm.status = 'active' AND s.deleted_at = 0
+		ORDER BY s.updated_at DESC
+	`, userID).Scan(&servers).Error
+	if err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return servers, nil
+}
+
 func (r *serverRepository) DeleteByID(ctx context.Context, id string) error {
 	if err := r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.Server{}).Error; err != nil {
 		return apperr.E("DB_ERROR", err)
