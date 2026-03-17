@@ -12,6 +12,8 @@ Each router has:
 - [Users](./users/README.md)
 - [Social](./social/README.md)
 - [Servers](./servers/README.md)
+- [Roles](./roles/README.md)
+- [Invites](./invites/README.md)
 - [Channels](./channels/README.md)
 - [Messages](./messages/README.md)
 - [Uploads](./uploads/README.md)

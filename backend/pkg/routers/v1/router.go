@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	v1 "github.com/sagiri2004/goportal/pkg/controllers/v1"
 	"github.com/sagiri2004/goportal/pkg/middlewares"
+	"github.com/sagiri2004/goportal/pkg/models"
 )
 
 func RegisterRoutes(api *gin.RouterGroup) {
@@ -33,24 +34,51 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	servers.Use(middlewares.AuthMiddleware())
 	{
 		servers.POST("", v1.Server.Create)
+		servers.POST("/:id/join", v1.Server.JoinPublic)
+		servers.POST("/:id/join-requests", v1.Server.CreateJoinRequest)
+		servers.GET("/:id/join-requests", middlewares.RequireServerPermission(models.PermissionApproveMembers, "id"), v1.Server.ListJoinRequests)
+		servers.PATCH("/:id/join-requests/:requestId", middlewares.RequireServerPermission(models.PermissionApproveMembers, "id"), v1.Server.ReviewJoinRequest)
 		servers.GET("/:id/members", v1.Server.ListMembers)
+		servers.POST("/:id/members", middlewares.RequireServerPermission(models.PermissionManageServer, "id"), v1.Server.AddMember)
+		servers.PATCH("/:id/members/:userId/roles", middlewares.RequireServerPermission(models.PermissionManageRoles, "id"), v1.Server.UpdateMemberRoles)
+		servers.POST("/:id/roles", middlewares.RequireServerPermission(models.PermissionManageRoles, "id"), v1.Server.CreateRole)
+		servers.POST("/:id/invites", middlewares.RequireServerPermission(models.PermissionCreateInvite, "id"), v1.Server.CreateInvite)
 		servers.DELETE("/:id", v1.Server.Delete)
 		servers.DELETE("/:id/members/:userId", v1.Server.KickMember)
-		servers.POST("/:id/channels", v1.Channel.Create)
+		servers.POST("/:id/channels", middlewares.RequireServerPermission(models.PermissionManageChannels, "id"), v1.Channel.Create)
+	}
+
+	roles := api.Group("/roles")
+	roles.Use(middlewares.AuthMiddleware())
+	{
+		roles.PATCH("/:id", v1.Server.UpdateRole)
+	}
+
+	invites := api.Group("/invites")
+	{
+		invites.GET("/:code", v1.Server.GetInvite)
+		invites.POST("/:code/join", middlewares.AuthMiddleware(), v1.Server.JoinByInvite)
 	}
 
 	channels := api.Group("/channels")
 	channels.Use(middlewares.AuthMiddleware())
 	{
 		channels.GET("/:id", v1.Channel.GetByID)
-		channels.GET("/:id/messages", v1.Message.ListByChannel)
+		channels.GET("/:id/messages", middlewares.RequireChannelPermission(models.PermissionReadMessages, "id"), v1.Message.ListByChannel)
 		channels.PATCH("/:id/position", v1.Channel.UpdatePosition)
+		channels.PATCH("/:id/privacy", v1.Channel.UpdatePrivacy)
+		channels.GET("/:id/members", v1.Channel.ListMembers)
+		channels.POST("/:id/members", v1.Channel.AddMember)
+		channels.DELETE("/:id/members/:userId", v1.Channel.RemoveMember)
+		channels.GET("/:id/overwrites", v1.Channel.ListOverwrites)
+		channels.PUT("/:id/overwrites", v1.Channel.UpsertOverwrite)
+		channels.DELETE("/:id/overwrites/:subjectType/:subjectId", v1.Channel.DeleteOverwrite)
 	}
 
 	messages := api.Group("/messages")
 	messages.Use(middlewares.AuthMiddleware())
 	{
-		messages.POST("", v1.Message.Create)
+		messages.POST("", middlewares.RequireChannelPermissionFromBody(models.PermissionSendMessages, "channel_id"), v1.Message.Create)
 		messages.PATCH("/:id", v1.Message.Update)
 		messages.DELETE("/:id", v1.Message.Delete)
 		messages.POST("/:id/reactions", v1.Message.ToggleReaction)

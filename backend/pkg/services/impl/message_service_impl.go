@@ -56,6 +56,22 @@ func (s *messageService) CreateMessage(ctx context.Context, input services.Creat
 	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, input.AuthorID); err != nil {
 		return nil, apperr.E("NOT_SERVER_MEMBER", err)
 	}
+	canSend, err := s.serverRepo.HasPermission(ctx, channel.ServerID, input.AuthorID, models.PermissionSendMessages)
+	if err != nil {
+		return nil, err
+	}
+	if !canSend {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if channel.IsPrivate {
+		isMember, err := s.channelRepo.IsMember(ctx, channel.ID, input.AuthorID)
+		if err != nil {
+			return nil, err
+		}
+		if !isMember {
+			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
+	}
 
 	contentEnvelope := models.MessageContentEnvelope{
 		Type:     input.ContentType,
@@ -154,6 +170,22 @@ func (s *messageService) ListByChannel(
 	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
 		return nil, apperr.E("NOT_SERVER_MEMBER", err)
 	}
+	canRead, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionReadMessages)
+	if err != nil {
+		return nil, err
+	}
+	if !canRead {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if channel.IsPrivate {
+		isMember, err := s.channelRepo.IsMember(ctx, channel.ID, actorID)
+		if err != nil {
+			return nil, err
+		}
+		if !isMember {
+			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
+	}
 
 	messages, err := s.repo.ListByChannel(ctx, channelID, limit, offset)
 	if err != nil {
@@ -248,6 +280,22 @@ func (s *messageService) ToggleReaction(ctx context.Context, actorID, messageID,
 	}
 	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
 		return false, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+	canReact, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionAddReactions)
+	if err != nil {
+		return false, err
+	}
+	if !canReact {
+		return false, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if channel.IsPrivate {
+		isMember, err := s.channelRepo.IsMember(ctx, channel.ID, actorID)
+		if err != nil {
+			return false, err
+		}
+		if !isMember {
+			return false, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
 	}
 
 	existing, err := s.repo.FindReaction(ctx, messageID, actorID, emoji)

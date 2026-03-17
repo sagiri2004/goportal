@@ -18,7 +18,11 @@ func RegisterHandlers(router *message.Router, subscriber message.Subscriber) err
 		return errors.New("watermill subscriber is nil")
 	}
 
-	handler := NewHandler(containers.NotificationService())
+	handler := NewHandler(
+		containers.NotificationService(),
+		containers.ChannelRepository(),
+		containers.ServerRepository(),
+	)
 
 	router.AddNoPublisherHandler(
 		"notification_new_message_consumer",

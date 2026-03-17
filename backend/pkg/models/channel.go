@@ -30,6 +30,7 @@ type Channel struct {
 	Type      string  `gorm:"type:varchar(32);not null;index" json:"type"`
 	Name      string  `gorm:"type:varchar(255);not null" json:"name"`
 	Position  int     `gorm:"not null;default:0" json:"position"`
+	IsPrivate bool    `gorm:"not null;default:false" json:"is_private"`
 }
 
 func (Channel) TableName() string {

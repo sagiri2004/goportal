@@ -3,6 +3,8 @@ package impl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -19,6 +21,26 @@ const notificationTopic = "notification_topic"
 type notificationService struct {
 	repo      repositories.NotificationRepository
 	publisher message.Publisher
+}
+
+func debugLogNotificationSvc(hypothesisID, location, message string, data map[string]any) {
+	// #region agent log
+	entry := map[string]any{
+		"sessionId":    "6670b5",
+		"runId":        "pre-fix",
+		"hypothesisId": hypothesisID,
+		"location":     location,
+		"message":      message,
+		"data":         data,
+		"timestamp":    time.Now().UnixMilli(),
+	}
+	if b, err := json.Marshal(entry); err == nil {
+		if f, err := os.OpenFile("/home/sagiri/Code/goportal/.cursor/debug-6670b5.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+			_, _ = f.Write(append(b, '\n'))
+			_ = f.Close()
+		}
+	}
+	// #endregion
 }
 
 func NewNotificationService(
@@ -67,6 +89,14 @@ func (s *notificationService) Dispatch(
 		Payload:       payload,
 		Metadata:      metadata,
 	}
+	debugLogNotificationSvc("H1", "backend/pkg/services/impl/notification_service_impl.go:93", "dispatch_out_event_shape", map[string]any{
+		"event_id":       outEvent.EventID,
+		"event_type":     outEvent.EventType,
+		"target_user_id": outEvent.TargetUserID,
+		"priority":       outEvent.Priority,
+		"payload_len":    len(outEvent.Payload),
+		"metadata_len":   len(outEvent.Metadata),
+	})
 
 	record := &models.Notification{
 		EventID:        eventID,
@@ -90,6 +120,10 @@ func (s *notificationService) Dispatch(
 	if err != nil {
 		return nil, apperr.E("INTERNAL_ERROR", err)
 	}
+	debugLogNotificationSvc("H1", "backend/pkg/services/impl/notification_service_impl.go:121", "dispatch_marshaled_event_preview", map[string]any{
+		"raw_len":  len(raw),
+		"raw_head": fmt.Sprintf("%.220s", string(raw)),
+	})
 
 	msg := message.NewMessage(eventID, raw)
 	msg.SetContext(ctx)

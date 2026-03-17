@@ -2,8 +2,8 @@
 
 Base path: `/api/v1/channels`
 
-This router handles channel retrieval and channel position updates.
+This router handles channel lifecycle, privacy, channel members, and permission overwrites.
 
 ## Features
 
-- [Channel Management](./management.md): create channel in server, get channel, update position
+- [Channel Management](./management.md): create/get/update channel, privacy toggle, channel members, overwrites

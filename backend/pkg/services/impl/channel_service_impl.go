@@ -37,8 +37,12 @@ func (s *channelService) CreateChannel(ctx context.Context, actorID, serverID, n
 	if _, err := s.serverRepo.FindByID(ctx, serverID); err != nil {
 		return nil, err
 	}
-	if _, err := s.serverRepo.FindMember(ctx, serverID, actorID); err != nil {
-		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	canManage, err := s.serverRepo.HasPermission(ctx, serverID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return nil, err
+	}
+	if !canManage {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
 	}
 
 	var normalizedParentID *string
@@ -101,8 +105,21 @@ func (s *channelService) GetChannel(ctx context.Context, actorID, channelID stri
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
-		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	canView, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionViewChannel)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if channel.IsPrivate {
+		isMember, err := s.channelRepo.IsMember(ctx, channel.ID, actorID)
+		if err != nil {
+			return nil, err
+		}
+		if !isMember {
+			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
 	}
 	return channel, nil
 }
@@ -121,8 +138,12 @@ func (s *channelService) UpdatePosition(ctx context.Context, actorID, channelID 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
-		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return nil, err
+	}
+	if !canManage {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
 	}
 
 	channel.Position = position
@@ -139,4 +160,164 @@ func isValidChannelType(channelType string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *channelService) SetPrivacy(ctx context.Context, actorID, channelID string, isPrivate bool) (*models.Channel, error) {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	if actorID == "" || channelID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return nil, err
+	}
+	if !canManage {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.SetPrivacy(ctx, channelID, isPrivate)
+}
+
+func (s *channelService) AddMember(ctx context.Context, actorID, channelID, targetUserID string) error {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	targetUserID = strings.TrimSpace(targetUserID)
+	if actorID == "" || channelID == "" || targetUserID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return err
+	}
+	if !canManage {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, targetUserID); err != nil {
+		return apperr.E("NOT_SERVER_MEMBER", err)
+	}
+	return s.channelRepo.AddMember(ctx, channelID, targetUserID)
+}
+
+func (s *channelService) RemoveMember(ctx context.Context, actorID, channelID, targetUserID string) error {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	targetUserID = strings.TrimSpace(targetUserID)
+	if actorID == "" || channelID == "" || targetUserID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return err
+	}
+	if !canManage {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.RemoveMember(ctx, channelID, targetUserID)
+}
+
+func (s *channelService) ListMembers(ctx context.Context, actorID, channelID string) ([]models.ChannelMember, error) {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	if actorID == "" || channelID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	canView, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionViewChannel)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.ListMembers(ctx, channelID)
+}
+
+func (s *channelService) UpsertOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string, allowBits, denyBits int64) error {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	subjectType = strings.TrimSpace(subjectType)
+	subjectID = strings.TrimSpace(subjectID)
+	if actorID == "" || channelID == "" || subjectType == "" || subjectID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+	subjectType = strings.ToUpper(subjectType)
+	if subjectType != models.ChannelOverwriteSubjectRole && subjectType != models.ChannelOverwriteSubjectUser {
+		return apperr.E("INVALID_ACTION", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return err
+	}
+	if !canManage {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.UpsertOverwrite(ctx, &models.ChannelPermissionOverwrite{
+		ChannelID:   channelID,
+		SubjectType: subjectType,
+		SubjectID:   subjectID,
+		AllowBits:   allowBits,
+		DenyBits:    denyBits,
+	})
+}
+
+func (s *channelService) DeleteOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string) error {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	subjectType = strings.TrimSpace(subjectType)
+	subjectID = strings.TrimSpace(subjectID)
+	if actorID == "" || channelID == "" || subjectType == "" || subjectID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+	subjectType = strings.ToUpper(subjectType)
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	canManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionManageChannels)
+	if err != nil {
+		return err
+	}
+	if !canManage {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.DeleteOverwrite(ctx, channelID, subjectType, subjectID)
+}
+
+func (s *channelService) ListOverwrites(ctx context.Context, actorID, channelID string) ([]models.ChannelPermissionOverwrite, error) {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	if actorID == "" || channelID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	canView, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionViewChannel)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	return s.channelRepo.ListOverwrites(ctx, channelID)
 }

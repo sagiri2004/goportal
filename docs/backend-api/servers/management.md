@@ -3,22 +3,19 @@
 - Method: `POST`
 - Path: `/api/v1/servers`
 - Auth: `Bearer token`
-- Description: Create a new server. The creator becomes server owner and first member.
+- Description: Create server and bootstrap default roles (`@everyone`, `moderator`, `admin`, `owner`).
 
 #### Request
 
 - Headers:
   - `Content-Type: application/json`
   - `Authorization: Bearer {{token}}`
-- Path params:
-  - None
-- Query params:
-  - None
 - Body JSON:
 
 ```json
 {
-  "name": "Backend Team"
+  "name": "Backend Team",
+  "is_public": true
 }
 ```
 
@@ -34,28 +31,130 @@
   "data": {
     "id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
     "name": "Backend Team",
-    "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53"
+    "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
+    "is_public": true,
+    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
   }
+}
+```
+
+---
+
+### SERVERS: Join Public Server
+
+- Method: `POST`
+- Path: `/api/v1/servers/:id/join`
+- Auth: `Bearer token`
+- Description: Join public server and auto-assign default role.
+
+---
+
+### SERVERS: Create Join Request
+
+- Method: `POST`
+- Path: `/api/v1/servers/:id/join-requests`
+- Auth: `Bearer token`
+- Description: Create join request for manual approval flow.
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - Server UUID.
+- Body JSON:
+
+```json
+{
+  "note": "I'd like to join the team channels."
+}
+```
+
+#### Success Response
+
+- Status: `201`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Join request created",
+  "data": {
+    "id": "ce0f53b9-8f96-4ac8-9f49-099fa51507ee",
+    "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
+    "user_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
+    "status": "pending"
+  }
+}
+```
+
+---
+
+### SERVERS: List Join Requests
+
+- Method: `GET`
+- Path: `/api/v1/servers/:id/join-requests`
+- Auth: `Bearer token`
+- Description: List join requests by status (`pending|active|rejected`).
+
+---
+
+### SERVERS: Review Join Request
+
+- Method: `PATCH`
+- Path: `/api/v1/servers/:id/join-requests/:requestId`
+- Auth: `Bearer token`
+- Description: Approve or reject join request (`APPROVE_MEMBERS` required).
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Body JSON:
+
+```json
+{
+  "approve": true,
+  "note": "Welcome aboard"
 }
 ```
 
 #### Error Responses
 
 - Status: `400`
-- Meaning: Request body is invalid or missing required fields.
+- Meaning: Request already reviewed.
 
 ```json
 {
   "success": false,
-  "code": "INVALID_JSON",
-  "message": "Invalid JSON payload"
+  "code": "JOIN_REQUEST_ALREADY_REVIEWED",
+  "message": "Join request already reviewed"
 }
 ```
 
-#### Frontend Notes
+---
 
-- `name` length must be between 2 and 255 characters.
-- All IDs are UUID strings.
+### SERVERS: Add Member
+
+- Method: `POST`
+- Path: `/api/v1/servers/:id/members`
+- Auth: `Bearer token`
+- Description: Add existing user to server with default role (`MANAGE_SERVER` required).
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Body JSON:
+
+```json
+{
+  "user_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1"
+}
+```
 
 ---
 
@@ -64,69 +163,29 @@
 - Method: `GET`
 - Path: `/api/v1/servers/:id/members`
 - Auth: `Bearer token`
-- Description: Return all members of a server. Caller must already be a server member.
+- Description: Return members with assigned roles (role includes `position` + `permissions` bitset).
 
-#### Request
+---
 
-- Headers:
-  - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Server UUID.
-- Query params:
-  - None
-- Body JSON:
+### SERVERS: Update Member Roles
 
-```json
-{}
-```
-
-#### Success Response
-
-- Status: `200`
-
-```json
-{
-  "success": true,
-  "code": "OK",
-  "message": "Server members fetched",
-  "data": [
-    {
-      "id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
-      "username": "alice",
-      "is_admin": false
-    }
-  ]
-}
-```
+- Method: `PATCH`
+- Path: `/api/v1/servers/:id/members/:userId/roles`
+- Auth: `Bearer token`
+- Description: Replace all roles of target member. Actor must have `MANAGE_ROLES` and higher top-role position than target and assigned roles.
 
 #### Error Responses
 
 - Status: `403`
-- Meaning: Authenticated user is not a member of the target server.
+- Meaning: Actor cannot assign same/higher role or permissions above actor scope.
 
 ```json
 {
   "success": false,
-  "code": "NOT_SERVER_MEMBER",
-  "message": "You are not a member of this server"
+  "code": "ROLE_ASSIGN_FORBIDDEN",
+  "message": "You are not allowed to update member roles"
 }
 ```
-
-- Status: `404`
-- Meaning: Server does not exist.
-
-```json
-{
-  "success": false,
-  "code": "SERVER_NOT_FOUND",
-  "message": "Server not found"
-}
-```
-
-#### Frontend Notes
-
-- Response is sorted by `username` ascending.
-- Returns an empty array when the server has no members.
 
 ---
 
@@ -135,50 +194,7 @@
 - Method: `DELETE`
 - Path: `/api/v1/servers/:id`
 - Auth: `Bearer token`
-- Description: Delete a server. Only the server owner can perform this action.
-
-#### Request
-
-- Headers:
-  - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Server UUID.
-- Query params:
-  - None
-- Body JSON:
-
-```json
-{}
-```
-
-#### Success Response
-
-- Status: `200`
-
-```json
-{
-  "success": true,
-  "code": "OK",
-  "message": "Server deleted"
-}
-```
-
-#### Error Responses
-
-- Status: `403`
-- Meaning: Authenticated user is not the owner.
-
-```json
-{
-  "success": false,
-  "code": "SERVER_OWNER_REQUIRED",
-  "message": "Only server owner can perform this action"
-}
-```
-
-#### Frontend Notes
-
-- Deleting a server also removes its channels and membership records.
+- Description: Delete server (owner-only safety still enforced).
 
 ---
 
@@ -187,71 +203,10 @@
 - Method: `DELETE`
 - Path: `/api/v1/servers/:id/members/:userId`
 - Auth: `Bearer token`
-- Description: Remove a member from a server. Only server owner can kick.
-
-#### Request
-
-- Headers:
-  - `Authorization: Bearer {{token}}`
-- Path params:
-  - `id`: `string` - Server UUID.
-  - `userId`: `string` - Target member user UUID.
-- Query params:
-  - None
-- Body JSON:
-
-```json
-{}
-```
-
-#### Success Response
-
-- Status: `200`
-
-```json
-{
-  "success": true,
-  "code": "OK",
-  "message": "Member kicked"
-}
-```
-
-#### Error Responses
-
-- Status: `400`
-- Meaning: Attempted to kick the owner.
-
-```json
-{
-  "success": false,
-  "code": "CANNOT_KICK_OWNER",
-  "message": "You cannot kick the server owner"
-}
-```
-
-- Status: `403`
-- Meaning: Authenticated user is not the owner.
-
-```json
-{
-  "success": false,
-  "code": "SERVER_OWNER_REQUIRED",
-  "message": "Only server owner can perform this action"
-}
-```
-
-- Status: `404`
-- Meaning: Target membership does not exist.
-
-```json
-{
-  "success": false,
-  "code": "SERVER_MEMBER_NOT_FOUND",
-  "message": "Server member not found"
-}
-```
+- Description: Remove member from server (owner-only).
 
 #### Frontend Notes
 
-- `userId` must be a member of the same server.
-- Server owner cannot be kicked.
+- Permission bitset is summed and checked with bitwise-AND.
+- `ADMINISTRATOR` bypasses normal permission checks.
+- Channel-level visibility/send permissions are resolved by server roles + channel overwrites.
