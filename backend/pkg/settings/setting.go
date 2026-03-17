@@ -12,6 +12,10 @@ type RedisConfig struct {
 	DB       int    `mapstructure:"db" yaml:"db"`
 }
 
+type RabbitMQConfig struct {
+	URL string `mapstructure:"url" yaml:"url"`
+}
+
 type LoggerSetting struct {
 	LogLevel     string `mapstructure:"log_level" yaml:"log_level"`
 	SlackHookURL string `mapstructure:"slack_hook_url" yaml:"slack_hook_url"`
@@ -35,6 +39,7 @@ type SlackSetting struct {
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server" yaml:"server"`
 	Redis    RedisConfig    `mapstructure:"redis" yaml:"redis"`
+	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq" yaml:"rabbitmq"`
 	Logger   LoggerSetting  `mapstructure:"logger" yaml:"logger"`
 	Database DatabaseConfig `mapstructure:"database" yaml:"database"`
 	Cron     CronSetting    `mapstructure:"cron" yaml:"cron"`

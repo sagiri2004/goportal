@@ -3,8 +3,8 @@ package cron
 import (
 	"context"
 
-	"go.uber.org/zap"
 	cronv3 "github.com/robfig/cron/v3"
+	"go.uber.org/zap"
 )
 
 // Task defines the behavior of a scheduled unit of work.
@@ -21,7 +21,7 @@ type Scheduler struct {
 
 func NewScheduler(logger *zap.Logger) *Scheduler {
 	return &Scheduler{
-		cron: cronv3.New(),
+		cron:   cronv3.New(),
 		logger: logger,
 	}
 }

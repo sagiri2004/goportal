@@ -20,6 +20,7 @@ func InitRouter() *gin.Engine {
 	}))
 
 	r.Use(middlewares.ErrorMiddleware())
+	r.Static("/uploads", "./uploads")
 
 	api := r.Group("/api/v1")
 	v1Router.RegisterRoutes(api)

@@ -57,4 +57,3 @@ func (h *SlackHook) GetHook() func(entry zapcore.Entry) error {
 		return SendSlack(h.webhookURL, msg)
 	}
 }
-

@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  notification-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notification-server
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    environment:
+      PORT: "8085"
+      SERVER_ID: "notif-node-a"
+      WS_PATH: "/ws"
+      WS_PING_INTERVAL: "25s"
+      WS_PONG_TIMEOUT: "10s"
+      WS_WRITE_TIMEOUT: "5s"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      BROKER_DRIVER: "rabbitmq"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      TOPIC_NOTIFICATIONS: "notifications"
+      TOPIC_DLQ: "notifications.dlq"
+    networks:
+      - notification-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: notification-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - notification-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: notification-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - notification-net
+
+networks:
+  notification-net:
+    driver: bridge

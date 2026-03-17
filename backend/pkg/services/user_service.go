@@ -10,5 +10,6 @@ import (
 type UserService interface {
 	Register(ctx context.Context, username, password string, isAdmin bool) (*models.User, error)
 	Authenticate(ctx context.Context, username, password string) (*models.User, error)
-	GetByID(ctx context.Context, id uint) (*models.User, error)
+	GetByID(ctx context.Context, id string) (*models.User, error)
+	UpdateProfile(ctx context.Context, id, username string) (*models.User, error)
 }
