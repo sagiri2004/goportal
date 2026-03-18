@@ -43,9 +43,24 @@ jobs:
         run: npm ci
         working-directory: frontend
 
-      - name: Install desktop dependencies
-        run: npm install
-        working-directory: frontend/apps/desktop
+      - name: Download 7zip binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p node_modules/7zip-bin/linux/x64
+          curl -fsSL "https://github.com/develar/7zip-bin/raw/master/linux/x64/7za" \
+            -o node_modules/7zip-bin/linux/x64/7za
+          chmod +x node_modules/7zip-bin/linux/x64/7za
+        working-directory: frontend
+
+      - name: Download 7zip binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "node_modules\7zip-bin\win\x64" | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe" `
+            -OutFile "node_modules\7zip-bin\win\x64\7za.exe"
+        working-directory: frontend
 
       - name: Prepare sidecar placeholder (Windows)
         if: runner.os == 'Windows'
