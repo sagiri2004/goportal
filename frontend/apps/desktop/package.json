@@ -1,20 +1,20 @@
 {
-  "name": "@sagiri/desktop",
+  "name": "@goportal/desktop",
   "private": true,
   "version": "0.0.1",
-  "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'}))\" && electron-builder",
-    "build:vite": "vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "vite build && electron-builder",
+    "dist:win": "vite build && electron-builder --win --x64",
+    "dist:linux": "vite build && electron-builder --linux --x64",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sagiri/app-core": "*",
-    "@sagiri/config": "*",
-    "@sagiri/types": "*",
-    "@sagiri/ui": "*",
+    "@goportal/app-core": "*",
+    "@goportal/config": "*",
+    "@goportal/types": "*",
+    "@goportal/ui": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

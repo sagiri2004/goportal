@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@sagiri/*": ["../../packages/*/src"]
+      "@goportal/*": ["../../packages/*/src"]
     }
   },
   "include": ["src", "electron"],

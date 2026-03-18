@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import '@sagiri/ui/styles'
+import '@goportal/ui/styles'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,5 +1,5 @@
 {
-  "name": "sagiri-frontend",
+  "name": "goportal-frontend",
   "private": true,
   "packageManager": "npm@10.2.0",
   "workspaces": [
@@ -8,11 +8,11 @@
     "packages/features/*"
   ],
   "scripts": {
-    "dev:web":       "turbo run dev --filter=@sagiri/web",
-    "dev:desktop":   "turbo run dev --filter=@sagiri/desktop",
+    "dev:web":       "turbo run dev --filter=@goportal/web",
+    "dev:desktop":   "turbo run dev --filter=@goportal/desktop",
     "build":         "turbo run build",
-    "build:web":     "turbo run build --filter=@sagiri/web",
-    "build:desktop": "turbo run build --filter=@sagiri/desktop",
+    "build:web":     "turbo run build --filter=@goportal/web",
+    "build:desktop": "turbo run build --filter=@goportal/desktop",
     "typecheck":     "turbo run typecheck"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import '@sagiri/ui/styles'
+import '@goportal/ui/styles'
 import App from './App'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

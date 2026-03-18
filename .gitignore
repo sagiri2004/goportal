@@ -168,3 +168,5 @@ dist
 release/
 
 .turbo/
+
+dist-electron/

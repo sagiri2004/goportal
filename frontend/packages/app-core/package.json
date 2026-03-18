@@ -1,14 +1,14 @@
 {
-  "name": "@sagiri/app-core",
+  "name": "@goportal/app-core",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@sagiri/ui":       "*",
-    "@sagiri/types":    "*",
-    "@sagiri/services": "*",
-    "@sagiri/config":   "*"
+    "@goportal/ui":       "*",
+    "@goportal/types":    "*",
+    "@goportal/services": "*",
+    "@goportal/config":   "*"
   }
 }

@@ -1,7 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
-
+import { fileURLToPath } from 'url'
 const isDev = !app.isPackaged
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = join(__filename, '..')
 
 function createWindow() {
   const win = new BrowserWindow({
