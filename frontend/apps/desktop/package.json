@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "description": "GoPortal desktop application",
   "author": "sagiri2004",
+  "homepage": "https://github.com/sagiri2004/goportal",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",

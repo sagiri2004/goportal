@@ -1,0 +1,94 @@
+name: Build Desktop (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Build target'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - windows-msi
+          - linux-deb
+          - both
+
+permissions:
+  contents: read
+
+jobs:
+  build_desktop:
+    name: Build ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target_name: windows-msi
+            dist_script: dist:win
+            extension: msi
+          - os: ubuntu-latest
+            target_name: linux-deb
+            dist_script: dist:linux
+            extension: deb
+        exclude:
+          - target_name: ${{ github.event.inputs.target != 'both' && github.event.inputs.target != matrix.target_name && matrix.target_name || 'excluded' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install Wine (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine wine32 wine64
+          wine --version
+
+      - name: Prepare sidecar placeholder (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "frontend/apps/desktop/sidecars/win" | Out-Null
+          if (-not (Test-Path "frontend/apps/desktop/sidecars/win/tool.exe")) {
+            Set-Content -Path "frontend/apps/desktop/sidecars/win/tool.exe" -Value ""
+          }
+
+      - name: Prepare sidecar placeholder (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p frontend/apps/desktop/sidecars/linux
+          if [ ! -f frontend/apps/desktop/sidecars/linux/tool ]; then
+            printf '#!/usr/bin/env sh\nexit 0\n' > frontend/apps/desktop/sidecars/linux/tool
+            chmod +x frontend/apps/desktop/sidecars/linux/tool
+          fi
+
+      - name: Build desktop (${{ matrix.target_name }})
+        run: npm run ${{ matrix.dist_script }}
+        working-directory: frontend/apps/desktop
+
+      - name: List release artifacts
+        run: ls -lah frontend/apps/desktop/release/
+        shell: bash
+
+      - name: Upload artifact - ${{ matrix.target_name }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target_name }}-build
+          path: |
+            frontend/apps/desktop/release/**/*.${{ matrix.extension }}
+            frontend/apps/desktop/release/@goportal/**/*.${{ matrix.extension }}
+          if-no-files-found: error
+          retention-days: 7

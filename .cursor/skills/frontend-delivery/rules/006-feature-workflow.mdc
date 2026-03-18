@@ -1,0 +1,600 @@
+---
+description: >
+  Feature workflow skill. When user requests building a new feature, read this skill
+  to follow correct order: doc → types → mock → components → real API.
+  Trigger when user says: "build feature X", "make screen X", "implement X".
+globs: frontend/**
+alwaysApply: false
+---
+
+# Feature Workflow Skill
+
+## Input sources — read before doing anything
+
+### 1. API Documentation
+Find docs at `docs/backend-api/` by feature name:
+
+```
+docs/backend-api/auth.md          → feature auth
+docs/backend-api/channels.md      → feature channels
+docs/backend-api/messages.md      → feature chat
+docs/backend-api/servers.md       → feature server-list
+docs/backend-api/users.md         → feature user-profile
+docs/backend-api/files.md         → feature file-upload
+docs/backend-api/voice.md         → feature voice
+```
+
+If no doc found → ask user before proceeding.
+
+### 2. UI Reference Image
+If user attaches screenshot (Discord or real app):
+- Use as layout and spacing reference
+- **Never** copy colors from image — always map to design tokens (`bg-surface`, `text-muted`...)
+- **Never** create new component if layout already exists in `004-layout-discord.mdc`
+- Priority: image → layout structure → component hierarchy → NO style copying
+
+### 3. Existing code — check before creating
+Before creating any file, check:
+
+```bash
+# Component already exists?
+find frontend/packages/features/<feature>/src/components -name "*.tsx" 2>/dev/null
+
+# Type in models.ts?
+grep -n "type\|interface" frontend/packages/types/models.ts
+
+# Repo function exists?
+find frontend/packages/services/src/repository -name "*.repo.ts" 2>/dev/null
+```
+
+---
+
+## Workflow — 5 steps in STRICT order
+
+```
+STEP 1: PARSE   → Read doc, extract types and endpoints
+STEP 2: TYPES   → Update packages/types/models.ts
+STEP 3: MOCK    → Create/update mock data
+STEP 4: UI      → Build components with mock data (must run)
+STEP 5: WIRE    → Replace mock with real API (repo → hook → component)
+```
+
+Cannot skip steps or do in parallel. Step 4 must work with mock before doing step 5.
+
+---
+
+## STEP 1 — PARSE API Doc
+
+Read doc file, extract:
+
+```
+ENDPOINTS:
+  - Method + Path + Auth requirement
+  - Request body shape
+  - Success response data shape
+  - Error codes + meanings
+
+BUSINESS RULES (from "Frontend Notes"):
+  - Validation rules (min length, format...)
+  - Token storage requirement
+  - Side effects (redirect, store update...)
+  - Edge cases to handle
+```
+
+**Output from this step** (no code, just plan):
+
+```
+Feature: AUTH
+Endpoints:
+  POST /api/v1/auth/register  → public  → returns User
+  POST /api/v1/auth/login     → public  → returns { user: User, token: string }
+
+Types to add/update in models.ts:
+  - AuthUser { id, username, is_admin }    ← from response data
+  - LoginResponse { user: AuthUser, token }
+
+Types already exist, reuse:
+  - User (exists, but missing is_admin — extend, don't modify)
+
+Mock data to create:
+  - mockAuthUser
+  - mockLoginResponse
+
+Components to create:
+  - RegisterForm
+  - LoginForm
+  - (AuthView exists, refactor to use new forms)
+
+Repo functions to create:
+  - authRepo.register(username, password)
+  - authRepo.login(username, password)
+
+Hooks to create:
+  - useRegister() — mutation
+  - useLogin()    — mutation
+
+Store updates:
+  - authStore: setUser(user), setToken(token), logout()
+```
+
+Show this plan to user for confirmation before proceeding.
+
+---
+
+## STEP 2 — TYPES
+
+### 2a. Extend domain types — do NOT modify `models.ts` directly if only extending
+
+```ts
+// packages/types/src/api.ts  ← response/request DTOs go here
+export type ApiResponse<T> = {
+  success: boolean
+  code: string
+  message: string
+  data: T
+}
+
+export type AuthUser = {
+  id: string
+  username: string
+  is_admin: boolean
+}
+
+export type LoginResponseData = {
+  user: AuthUser
+  token: string
+}
+
+// Request bodies
+export type RegisterRequest = {
+  username: string   // min 3 chars
+  password: string   // min 6 chars
+}
+
+export type LoginRequest = {
+  username: string
+  password: string
+}
+```
+
+### 2b. Sửa `models.ts` CHỈ KHI type mới là domain type cốt lõi
+
+```ts
+// Ví dụ: User cần thêm is_admin
+// ✅ Cách đúng: extend, không break existing code
+export type User = {
+  id: string
+  username: string
+  avatarColor: string
+  status: 'online' | 'offline' | 'idle' | 'dnd'
+  is_admin?: boolean    // optional để không break mock data cũ
+}
+```
+
+### 2c. Error codes — enum để dùng trong error handling
+
+```ts
+// packages/types/src/api.ts
+export const AUTH_ERROR_CODES = {
+  INVALID_JSON:    'INVALID_JSON',
+  USERNAME_EXISTS: 'USERNAME_EXISTS',
+  BAD_CREDENTIALS: 'BAD_CREDENTIALS',
+} as const
+```
+
+---
+
+## BƯỚC 3 — MOCK DATA
+
+Thêm vào `packages/features/dashboard/mockData.ts`:
+
+```ts
+import type { AuthUser, LoginResponseData } from '@goportal/types'
+
+// Auth mocks — thêm vào cuối file, không xoá mock cũ
+export const mockAuthUser: AuthUser = {
+  id: '8d3f6506-6569-4b31-a74a-d9d43c359ee5',
+  username: 'zutomayo',
+  is_admin: false,
+}
+
+export const mockLoginResponse: LoginResponseData = {
+  user: mockAuthUser,
+  token: 'mock-jwt-token-for-development',
+}
+
+// Simulate API delay — dùng trong mock repo
+export const simulateDelay = (ms = 400) =>
+  new Promise(resolve => setTimeout(resolve, ms))
+```
+
+---
+
+## BƯỚC 4 — UI với Mock Data
+
+### 4a. Repo function — mock implementation trước
+
+```ts
+// packages/services/src/repository/auth.repo.ts
+import type { RegisterRequest, LoginRequest, LoginResponseData, AuthUser } from '@goportal/types'
+import { mockAuthUser, mockLoginResponse, simulateDelay } from '@goportal/feature-dashboard/mockData'
+import { apiClient } from '../api/client'
+
+export const authRepo = {
+  register: async (body: RegisterRequest): Promise<AuthUser> => {
+    // TODO: uncomment khi backend ready
+    // const res = await apiClient.post<ApiResponse<AuthUser>>('/api/v1/auth/register', body)
+    // return res.data.data
+    await simulateDelay()
+    return { ...mockAuthUser, username: body.username }
+  },
+
+  login: async (body: LoginRequest): Promise<LoginResponseData> => {
+    // TODO: uncomment khi backend ready
+    // const res = await apiClient.post<ApiResponse<LoginResponseData>>('/api/v1/auth/login', body)
+    // return res.data.data
+    await simulateDelay()
+    return mockLoginResponse
+  },
+}
+```
+
+### 4b. TanStack Query hooks
+
+```ts
+// packages/features/auth/src/hooks/useLogin.ts
+import { useMutation } from '@tanstack/react-query'
+import { authRepo } from '@goportal/services'
+import { useAuthStore } from '@goportal/store'
+import type { LoginRequest } from '@goportal/types'
+import { AUTH_ERROR_CODES } from '@goportal/types'
+
+export const useLogin = () => {
+  const { setUser, setToken } = useAuthStore()
+
+  return useMutation({
+    mutationFn: (body: LoginRequest) => authRepo.login(body),
+    onSuccess: (data) => {
+      setUser(data.user)
+      setToken(data.token)
+    },
+  })
+}
+
+// packages/features/auth/src/hooks/useRegister.ts
+import { useMutation } from '@tanstack/react-query'
+import { authRepo } from '@goportal/services'
+import type { RegisterRequest } from '@goportal/types'
+
+export const useRegister = () =>
+  useMutation({
+    mutationFn: (body: RegisterRequest) => authRepo.register(body),
+  })
+```
+
+### 4c. Form validation — dùng business rules từ doc
+
+```ts
+// Từ Frontend Notes trong doc:
+// username min 3, password min 6, trim username
+
+type FormErrors = Partial<Record<'username' | 'password', string>>
+
+const validate = (username: string, password: string): FormErrors => {
+  const errors: FormErrors = {}
+  if (username.trim().length < 3) errors.username = 'Username must be at least 3 characters'
+  if (password.length < 6) errors.password = 'Password must be at least 6 characters'
+  return errors
+}
+```
+
+### 4d. Component — dùng design token, không hardcode màu
+
+```tsx
+// packages/features/auth/src/components/LoginForm.tsx
+import React, { useState } from 'react'
+import { cn } from '@goportal/ui'
+import { Button } from '@goportal/ui/components/button'
+import { Input } from '@goportal/ui/components/input'
+import { useLogin } from '../hooks/useLogin'
+import type { LoginRequest } from '@goportal/types'
+import { AUTH_ERROR_CODES } from '@goportal/types'
+
+type LoginFormProps = {
+  onSuccess: () => void
+  onSwitchToRegister: () => void
+}
+
+export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegister }) => {
+  const [form, setForm] = useState<LoginRequest>({ username: '', password: '' })
+  const [fieldErrors, setFieldErrors] = useState<Partial<LoginRequest>>({})
+  const login = useLogin()
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const errors: Partial<LoginRequest> = {}
+    if (form.username.trim().length < 3) errors.username = 'Min 3 characters'
+    if (form.password.length < 6) errors.password = 'Min 6 characters'
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return }
+
+    login.mutate(
+      { username: form.username.trim(), password: form.password },
+      {
+        onSuccess,
+        onError: (err: any) => {
+          const code = err?.response?.data?.code
+          if (code === AUTH_ERROR_CODES.BAD_CREDENTIALS) {
+            setFieldErrors({ password: 'Invalid username or password' })
+          }
+        },
+      }
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wide text-muted">Username</label>
+        <Input
+          value={form.username}
+          onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+          placeholder="Enter username"
+          autoComplete="username"
+          className={cn(fieldErrors.username && 'border-danger')}
+        />
+        {fieldErrors.username && (
+          <p className="text-xs text-danger">{fieldErrors.username}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wide text-muted">Password</label>
+        <Input
+          type="password"
+          value={form.password}
+          onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+          placeholder="Enter password"
+          autoComplete="current-password"
+          className={cn(fieldErrors.password && 'border-danger')}
+        />
+        {fieldErrors.password && (
+          <p className="text-xs text-danger">{fieldErrors.password}</p>
+        )}
+      </div>
+
+      <Button type="submit" className="w-full" disabled={login.isPending}>
+        {login.isPending ? 'Logging in...' : 'Log In'}
+      </Button>
+
+      <p className="text-xs text-muted text-center">
+        Need an account?{' '}
+        <button type="button" onClick={onSwitchToRegister} className="text-primary hover:underline">
+          Register
+        </button>
+      </p>
+    </form>
+  )
+}
+```
+
+### 4e. View/Page — compose components
+
+```tsx
+// packages/features/auth/src/components/AuthView.tsx
+import React, { useState } from 'react'
+import { LoginForm } from './LoginForm'
+import { RegisterForm } from './RegisterForm'
+
+type AuthViewProps = { onAuthenticated: () => void }
+type Mode = 'login' | 'register'
+
+export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated }) => {
+  const [mode, setMode] = useState<Mode>('login')
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md bg-surface rounded-lg shadow-2xl px-8 py-10 space-y-6">
+        <div className="text-center space-y-1">
+          <h1 className="text-2xl font-semibold text-foreground">
+            {mode === 'login' ? 'Welcome back!' : 'Create an account'}
+          </h1>
+          <p className="text-sm text-muted">
+            {mode === 'login' ? "We're so excited to see you again!" : 'Join with your friends.'}
+          </p>
+        </div>
+
+        {mode === 'login' ? (
+          <LoginForm onSuccess={onAuthenticated} onSwitchToRegister={() => setMode('register')} />
+        ) : (
+          <RegisterForm onSuccess={() => setMode('login')} onSwitchToLogin={() => setMode('login')} />
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+### 4f. Export — cập nhật index.ts của feature
+
+```ts
+// packages/features/auth/src/index.ts
+export { AuthView } from './components/AuthView'
+export { LoginForm } from './components/LoginForm'
+export { RegisterForm } from './components/RegisterForm'
+export { useLogin } from './hooks/useLogin'
+export { useRegister } from './hooks/useRegister'
+```
+
+**Checkpoint bước 4:** Component phải render được với mock data, không có TypeScript error.
+
+---
+
+## BƯỚC 5 — WIRE Real API
+
+Chỉ thực hiện bước này khi:
+- [ ] Bước 4 chạy xong, UI hiển thị đúng với mock
+- [ ] User xác nhận backend đang chạy và accessible
+
+### 5a. Axios client — cấu hình base URL từ env
+
+```ts
+// packages/services/src/api/client.ts
+import axios from 'axios'
+import { useAuthStore } from '@goportal/store'
+
+export const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080',
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// Request interceptor — đính token
+apiClient.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Response interceptor — handle 401
+apiClient.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      useAuthStore.getState().logout()
+    }
+    return Promise.reject(err)
+  }
+)
+```
+
+### 5b. Uncomment real API call trong repo
+
+```ts
+// packages/services/src/repository/auth.repo.ts
+// Xoá mock implementation, uncomment real API
+
+export const authRepo = {
+  register: async (body: RegisterRequest): Promise<AuthUser> => {
+    const res = await apiClient.post<ApiResponse<AuthUser>>('/api/v1/auth/register', body)
+    return res.data.data
+  },
+
+  login: async (body: LoginRequest): Promise<LoginResponseData> => {
+    const res = await apiClient.post<ApiResponse<LoginResponseData>>('/api/v1/auth/login', body)
+    return res.data.data
+  },
+}
+```
+
+### 5c. Token persistence
+
+```ts
+// packages/store/src/auth.store.ts
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { AuthUser } from '@goportal/types'
+
+type AuthState = {
+  user: AuthUser | null
+  token: string | null
+  isAuthenticated: boolean
+  setUser: (user: AuthUser) => void
+  setToken: (token: string) => void
+  logout: () => void
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      setUser: (user) => set({ user, isAuthenticated: true }),
+      setToken: (token) => set({ token }),
+      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+    }),
+    {
+      name: 'goportal-auth',
+      partialize: (state) => ({ token: state.token, user: state.user }),
+    }
+  )
+)
+```
+
+### 5d. .env.example — thêm biến mới
+
+```bash
+# Thêm vào frontend/.env.example
+VITE_API_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
+```
+
+---
+
+## Checklist hoàn thành 1 feature
+
+```
+BƯỚC 1 — PARSE
+  [ ] Đọc docs/api/<feature>.md
+  [ ] List ra endpoints, types cần tạo, components cần tạo
+  [ ] User confirm plan
+
+BƯỚC 2 — TYPES
+  [ ] DTOs trong packages/types/src/api.ts
+  [ ] Error codes enum
+  [ ] models.ts cập nhật nếu cần (optional fields)
+
+BƯỚC 3 — MOCK
+  [ ] Mock data thêm vào mockData.ts
+  [ ] simulateDelay() cho async mock
+
+BƯỚC 4 — UI
+  [ ] Repo với mock implementation
+  [ ] TanStack Query hooks (useMutation / useQuery)
+  [ ] Form validation theo Frontend Notes trong doc
+  [ ] Components dùng design token (không hardcode màu)
+  [ ] Error states (field error, API error)
+  [ ] Loading states (isPending, skeleton)
+  [ ] Empty states
+  [ ] index.ts export
+
+BƯỚC 5 — WIRE
+  [ ] Axios client configured
+  [ ] Uncomment real API trong repo
+  [ ] Auth store với persist
+  [ ] .env.example updated
+  [ ] Test với real backend
+```
+
+---
+
+## Cấu trúc file output cho 1 feature (ví dụ: auth)
+
+```
+packages/
+├── types/
+│   ├── models.ts              (cập nhật nếu cần)
+│   └── src/
+│       └── api.ts             (DTOs, error codes — TẠO MỚI hoặc APPEND)
+├── services/
+│   └── src/
+│       ├── api/
+│       │   └── client.ts      (TẠO MỚI nếu chưa có)
+│       └── repository/
+│           └── auth.repo.ts   (TẠO MỚI)
+├── store/
+│   └── src/
+│       └── auth.store.ts      (TẠO MỚI)
+└── features/
+    ├── dashboard/
+    │   └── mockData.ts        (APPEND mock mới)
+    └── auth/
+        └── src/
+            ├── components/
+            │   ├── AuthView.tsx      (REWRITE — dùng form mới)
+            │   ├── LoginForm.tsx     (TẠO MỚI)
+            │   └── RegisterForm.tsx  (TẠO MỚI)
+            ├── hooks/
+            │   ├── useLogin.ts       (TẠO MỚI)
+            │   └── useRegister.ts    (TẠO MỚI)
+            └── index.ts              (APPEND exports)
+```

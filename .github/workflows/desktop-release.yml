@@ -7,6 +7,8 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/desktop-release.yml'
+  # Allow manual trigger
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,8 +41,34 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
+        working-directory: frontend
+
+      - name: Install Wine (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine wine32 wine64
+          wine --version
+
+      - name: Download 7zip binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p node_modules/7zip-bin/linux/x64
+          curl -fsSL "https://github.com/develar/7zip-bin/raw/master/linux/x64/7za" \
+            -o node_modules/7zip-bin/linux/x64/7za
+          chmod +x node_modules/7zip-bin/linux/x64/7za
+        working-directory: frontend
+
+      - name: Download 7zip binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "node_modules\7zip-bin\win\x64" | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe" `
+            -OutFile "node_modules\7zip-bin\win\x64\7za.exe"
         working-directory: frontend
 
       - name: Prepare sidecar placeholder (Windows)
@@ -61,21 +89,29 @@ jobs:
             chmod +x frontend/apps/desktop/sidecars/linux/tool
           fi
 
-      - name: Build desktop
-        run: npm run ${{ matrix.dist_script }} --workspace=@goportal/desktop
-        working-directory: frontend
+      - name: Build desktop (${{ matrix.target_name }})
+        run: npm run ${{ matrix.dist_script }}
+        working-directory: frontend/apps/desktop
 
-      - name: Upload artifact
+      - name: List release artifacts
+        run: ls -lah frontend/apps/desktop/release/
+        shell: bash
+
+      - name: Upload artifact - ${{ matrix.target_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target_name }}
-          path: frontend/apps/desktop/release/**/*.${{ matrix.extension }}
+          path: |
+            frontend/apps/desktop/release/**/*.${{ matrix.extension }}
+            frontend/apps/desktop/release/@goportal/**/*.${{ matrix.extension }}
           if-no-files-found: error
+          retention-days: 30
 
   release:
     name: Semantic release
     runs-on: ubuntu-latest
     needs: [build_desktop]
+    if: github.event_name == 'push'
     permissions:
       contents: write
 
@@ -102,6 +138,9 @@ jobs:
           name: linux-deb
           path: release-assets/linux
 
+      - name: List release assets
+        run: find release-assets -type f -exec ls -lh {} \;
+
       - name: Install semantic-release
         run: |
           npm install --no-save \
@@ -109,9 +148,11 @@ jobs:
             @semantic-release/commit-analyzer \
             @semantic-release/release-notes-generator \
             @semantic-release/github \
+            @semantic-release/git \
             conventional-changelog-conventionalcommits
 
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
+

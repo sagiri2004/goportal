@@ -1,0 +1,112 @@
+---
+description: Color tokens, Tailwind classes, and styling rules for GoPortal frontend.
+globs: frontend/**/*.{ts,tsx,css}
+alwaysApply: true
+---
+
+# Color Tokens & Styling
+
+## CSS Variables — defined in `packages/ui/src/styles/globals.css`
+
+All colors are RGB channel values to support opacity variants.
+
+```css
+--background:     15 17 23;     /* #0f1117 */
+--surface:        26 29 39;     /* #1a1d27 */
+--surface-raised: 34 37 54;     /* #222536 */
+--primary:        88 101 242;   /* #5865f2 */
+--primary-hover:  71  82 196;   /* #4752c4 */
+--foreground:     220 221 222;  /* #dcddde */
+--muted:         148 155 164;   /* #949ba4 */
+--subtle:         79  84  92;   /* #4f545c */
+--success:        35 165 90;    /* #23a55a */
+--danger:         242 63  67;   /* #f23f43 */
+--warning:        251 171 72;   /* #fbab48 */
+```
+
+## Tailwind class → where to use
+
+```
+bg-background       Outermost wrapper, full page, html/body
+bg-surface          Server rail, channel sidebar, member sidebar
+bg-surface-raised   Chat area, cards, input fields, dropdowns, modals
+bg-primary          Active button, active server icon, selected state
+bg-primary/10       Hover background on items with primary accent
+bg-primary/20       Active background (lighter), used in cards
+
+text-foreground     Body text, user names, message content
+text-muted          Supplementary label, timestamp, inactive channel name
+text-subtle         Placeholder, hint, "#" prefix in channel
+
+border-white/10     Default border between sections
+border-white/5      Lighter border, used in card/input
+
+text-success        Online status
+text-warning        Idle status
+text-danger         DND / error state / destructive action
+text-subtle         Offline status
+```
+
+## Slate → token migration table
+
+| ❌ Don't use | ✅ Use instead |
+|---|---|
+| `bg-slate-950` | `bg-background` |
+| `bg-slate-900` | `bg-surface` |
+| `bg-slate-800` | `bg-surface-raised` |
+| `bg-slate-700` | `bg-surface-raised` hover state |
+| `text-slate-50` | `text-foreground` |
+| `text-slate-100` | `text-foreground` |
+| `text-slate-300` | `text-foreground` |
+| `text-slate-400` | `text-muted` |
+| `text-slate-500` | `text-subtle` |
+| `text-slate-600` | `text-subtle` |
+| `border-slate-700` | `border-white/10` |
+| `border-slate-800` | `border-white/5` |
+| `bg-indigo-600` | `bg-primary` |
+| `text-indigo-400` | `text-primary` |
+| `ring-indigo-500` | `ring-primary` |
+
+**Also forbidden:** `bg-gray-*`, `bg-zinc-*`, `bg-neutral-*`, `bg-stone-*`
+and any hardcode hex `#xxxxxx` or `rgb(...)` in className.
+
+## Only exception for inline style
+
+`avatarColor` is hex string from data model, MUST use inline style:
+
+```tsx
+// ✅ Allowed
+<div style={{ backgroundColor: user.avatarColor }}>
+
+// ❌ Never hardcode anything else
+<div style={{ backgroundColor: '#1a1d27' }}>
+<div style={{ color: '#dcddde' }}>
+```
+
+## Spacing & Layout
+
+```
+Gap between list items:       gap-1 (4px)  or  gap-2 (8px)
+Padding in sidebar section:   px-2 py-1  or  px-3 py-2
+Padding in modal/card:        p-4  or  p-6
+Border radius for item:       rounded-md (8px)
+Border radius for avatar:     rounded-full
+Border radius for server:     rounded-[24px] → rounded-[16px] when active
+```
+
+## Typography
+
+```
+User name / header:      text-sm font-semibold text-foreground
+Body text / message:     text-sm text-foreground leading-relaxed
+Label / channel name:    text-sm text-muted
+Timestamp / hint:        text-xs text-subtle
+Section header:          text-xs font-semibold uppercase tracking-wide text-subtle
+```
+
+## Focus ring
+
+```tsx
+// Always use this pattern for interactive elements
+className="... focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+```

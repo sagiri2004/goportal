@@ -10,6 +10,16 @@
       "cache": false,
       "persistent": true
     },
+    "dist:win": {
+      "dependsOn": ["^build"],
+      "outputs": ["release/**"],
+      "cache": false
+    },
+    "dist:linux": {
+      "dependsOn": ["^build"],
+      "outputs": ["release/**"],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": []

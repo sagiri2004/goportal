@@ -1,3 +1,10 @@
+import { Providers } from '@goportal/app-core'
+import { Router } from '@goportal/app-core'
+
 export default function App() {
-  return <div className="bg-background text-foreground min-h-screen p-8">sagiri web</div>
+  return (
+    <Providers>
+      <Router />
+    </Providers>
+  )
 }

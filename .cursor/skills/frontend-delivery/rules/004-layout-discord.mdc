@@ -1,0 +1,282 @@
+---
+description: Discord-like layout patterns for GoPortal. AppShell, Server Rail, Channel Sidebar, Chat Area, Member Sidebar.
+globs: frontend/packages/{app-core,features}/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Layout Patterns — Discord Clone
+
+## AppShell — 4 fixed columns, h-screen, no scroll at root
+
+```tsx
+// packages/app-core/src/layout/AppShell.tsx
+
+export const AppShell: React.FC<{ children?: React.ReactNode }> = () => {
+  return (
+    <div className="h-screen flex bg-background text-foreground overflow-hidden">
+      <ServerRail />
+      <ChannelSidebar />
+      <main className="flex-1 flex flex-col bg-surface-raised min-w-0">
+        <ChatHeader />
+        <MessageList />
+        <MessageInput />
+      </main>
+      <MemberSidebar />
+    </div>
+  )
+}
+```
+
+```
+┌──────┬──────────┬────────────────────┬──────────┐
+│ 72px │  240px   │      flex-1        │  240px   │
+│      │          │                    │          │
+│Server│ Channel  │     Chat Area      │ Members  │
+│ Rail │  List    │                    │  List    │
+│      │          │                    │          │
+└──────┴──────────┴────────────────────┴──────────┘
+bg-    bg-surface  bg-surface-raised   bg-surface
+surface
+```
+
+## Server Rail — w-[72px]
+
+```tsx
+<aside className="w-[72px] bg-surface flex flex-col items-center py-3 gap-2 shrink-0 overflow-y-auto">
+  {/* Server icons */}
+  {servers.map(server => (
+    <ServerIcon key={server.id} server={server} isActive={server.id === activeServerId} />
+  ))}
+
+  {/* Separator */}
+  <div className="w-8 h-px bg-white/10 my-1" />
+
+  {/* Add server button */}
+  <button className={cn(
+    'w-12 h-12 rounded-[24px] flex items-center justify-center',
+    'bg-surface-raised text-success hover:bg-success hover:text-white hover:rounded-[16px]',
+    'transition-all duration-200'
+  )}>
+    <Plus className="w-5 h-5" />
+  </button>
+</aside>
+```
+
+## Server Icon — pill → square transition when active
+
+```tsx
+// packages/features/server-list/src/components/ServerIcon.tsx
+type ServerIconProps = { server: Server; isActive: boolean; onClick: () => void }
+
+export const ServerIcon: React.FC<ServerIconProps> = ({ server, isActive, onClick }) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      'w-12 h-12 flex items-center justify-center text-sm font-semibold shrink-0',
+      'transition-all duration-200 focus:outline-none focus-visible:ring-2',
+      'focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+      isActive
+        ? 'bg-primary text-white rounded-[16px]'
+        : 'bg-surface-raised text-foreground rounded-[24px] hover:bg-primary/20 hover:rounded-[16px]'
+    )}
+    title={server.name}
+  >
+    {server.initials}
+  </button>
+)
+```
+
+## Channel Sidebar — w-60
+
+```tsx
+<aside className="w-60 bg-surface flex flex-col shrink-0">
+  {/* Server header */}
+  <div className="h-12 px-4 flex items-center justify-between border-b border-white/10 shrink-0">
+    <span className="text-sm font-semibold text-foreground truncate">{serverName}</span>
+  </div>
+
+  {/* Channel list */}
+  <ScrollArea className="flex-1">
+    <div className="px-2 py-3 space-y-0.5">
+      <p className="px-2 mb-1 text-xs font-semibold uppercase tracking-wide text-subtle">
+        Text Channels
+      </p>
+      {textChannels.map(channel => (
+        <ChannelItem key={channel.id} channel={channel} isActive={channel.id === activeChannelId} />
+      ))}
+
+      {VOICE_ENABLED && (
+        <>
+          <p className="px-2 mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-subtle">
+            Voice Channels
+          </p>
+          {voiceChannels.map(channel => (
+            <ChannelItem key={channel.id} channel={channel} isActive={false} />
+          ))}
+        </>
+      )}
+    </div>
+  </ScrollArea>
+
+  {/* User panel — bottom */}
+  <div className="h-14 px-2 bg-background flex items-center gap-2 shrink-0 border-t border-white/10">
+    <UserAvatar user={currentUser} size="sm" />
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-semibold text-foreground truncate">{currentUser.username}</p>
+      <p className="text-[11px] text-muted capitalize">{currentUser.status}</p>
+    </div>
+    <Button variant="ghost" size="icon" aria-label="Logout" onClick={onLogout}>
+      <LogOut className="w-4 h-4" />
+    </Button>
+  </div>
+</aside>
+```
+
+## Channel Item
+
+```tsx
+// packages/features/channels/src/components/ChannelItem.tsx
+export const ChannelItem: React.FC<{ channel: Channel; isActive: boolean; onClick: () => void }> = ({
+  channel, isActive, onClick
+}) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      'w-full flex items-center gap-1.5 px-2 py-1 rounded-md text-left text-sm',
+      'transition-colors duration-150 focus:outline-none focus-visible:ring-2',
+      'focus-visible:ring-primary',
+      isActive
+        ? 'bg-surface-raised text-foreground'
+        : 'text-muted hover:bg-surface-raised/50 hover:text-foreground'
+    )}
+  >
+    {channel.type === 'text'
+      ? <Hash className="w-4 h-4 shrink-0" />
+      : <Volume2 className="w-4 h-4 shrink-0" />
+    }
+    <span className="truncate">{channel.name}</span>
+  </button>
+)
+```
+
+## Chat Header — h-12
+
+```tsx
+<header className="h-12 px-4 flex items-center gap-2 border-b border-white/10 shrink-0">
+  <Hash className="w-4 h-4 text-subtle" />
+  <span className="text-sm font-semibold text-foreground">{channelName}</span>
+  <Separator orientation="vertical" className="h-5 bg-white/10 mx-1" />
+  <p className="text-xs text-muted truncate hidden sm:block">{channelTopic}</p>
+</header>
+```
+
+## Message List — flex-1 overflow-y-auto
+
+```tsx
+<ScrollArea className="flex-1">
+  <div className="flex flex-col py-4">
+    {messages.map(msg => (
+      <MessageBubble
+        key={msg.id}
+        message={msg}
+        author={users.find(u => u.id === msg.authorId)}
+        isCurrentUser={msg.authorId === currentUser.id}
+      />
+    ))}
+  </div>
+</ScrollArea>
+```
+
+## MessageBubble — example component (follow this pattern)
+
+```tsx
+// packages/features/chat/src/components/MessageBubble.tsx
+export const MessageBubble: React.FC<{
+  message: Message
+  author: User | undefined
+  isCurrentUser: boolean
+}> = ({ message, author, isCurrentUser }) => (
+  <div className="flex items-start gap-3 px-4 py-1 hover:bg-white/[0.03] group">
+    <div
+      className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 shrink-0"
+      style={{ backgroundColor: author?.avatarColor ?? '#4f545c' }}
+    >
+      {author?.username[0]?.toUpperCase() ?? '?'}
+    </div>
+    <div className="flex-1 min-w-0 space-y-0.5">
+      <div className="flex items-baseline gap-2">
+        <span className={cn(
+          'text-sm font-semibold',
+          isCurrentUser ? 'text-primary' : 'text-foreground'
+        )}>
+          {author?.username ?? 'Unknown'}
+        </span>
+        <span className="text-[11px] text-subtle">{message.timestamp}</span>
+      </div>
+      <p className="text-sm text-foreground leading-relaxed break-words">{message.content}</p>
+    </div>
+  </div>
+)
+```
+
+## Message Input — shrink-0, bottom of chat
+
+```tsx
+<div className="px-4 pb-4 shrink-0">
+  <div className="flex items-center gap-2 bg-surface rounded-lg px-4 py-2.5 border border-white/10">
+    <Input
+      placeholder={`Message #${channelName}`}
+      className="flex-1 bg-transparent border-0 p-0 text-sm text-foreground placeholder:text-subtle focus-visible:ring-0"
+    />
+    {FILE_UPLOAD_ENABLED && (
+      <Button variant="ghost" size="icon">
+        <Plus className="w-4 h-4" />
+      </Button>
+    )}
+  </div>
+</div>
+```
+
+## Member Sidebar — w-60
+
+```tsx
+<aside className="w-60 bg-surface flex flex-col shrink-0 border-l border-white/10">
+  <div className="h-12 px-3 flex items-center border-b border-white/10 shrink-0">
+    <span className="text-xs font-semibold uppercase tracking-wide text-subtle">
+      Members — {members.length}
+    </span>
+  </div>
+  <ScrollArea className="flex-1">
+    <div className="px-3 py-3 space-y-2">
+      {members.map(member => (
+        <div key={member.id} className="flex items-center gap-2">
+          <div className="relative shrink-0">
+            <UserAvatar user={member} size="sm" />
+            <span className={cn(
+              'absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface',
+              STATUS_COLOR[member.status]
+            )} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-foreground truncate">{member.username}</p>
+            <p className="text-[11px] text-muted capitalize">{member.status}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </ScrollArea>
+</aside>
+```
+
+## Auth Layout — centered card
+
+```tsx
+// packages/app-core/src/layout/AuthLayout.tsx
+export const AuthLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-full max-w-md bg-surface rounded-lg shadow-xl px-8 py-10">
+      {children}
+    </div>
+  </div>
+)
+```

@@ -1,0 +1,81 @@
+---
+description: GoPortal frontend — master rule. Read this file BEFORE doing any task related to frontend/.
+globs: frontend/**
+alwaysApply: true
+---
+
+# GoPortal Frontend — Master Rule
+
+## Monorepo layout — each folder has exactly 1 responsibility
+
+```
+frontend/
+├── apps/
+│   ├── web/          ENTRY POINT for browser. Only contains: main.tsx, App.tsx, vite.config.ts, index.html.
+│   │                 MUST NOT contain components, hooks, or business logic.
+│   └── desktop/      ENTRY POINT for Electron. Only contains: main.tsx, vite.config.ts, index.html,
+│                     electron/main.ts, electron/preload.ts.
+│                     MUST NOT contain components, hooks, or business logic.
+│
+├── packages/
+│   ├── ui/           DESIGN SYSTEM. Contains Shadcn components, globals.css, cn() utility.
+│   │                 MUST NOT contain business logic, API calls, or state.
+│   │
+│   ├── app-core/     ROUTING + LAYOUT + PROVIDERS. Contains AppShell, AuthLayout, React Router,
+│   │                 QueryClient provider, ErrorBoundary.
+│   │                 MUST NOT contain feature-specific UI or API calls.
+│   │
+│   ├── features/     EACH SUBFOLDER = 1 INDEPENDENT FEATURE.
+│   │   ├── auth/         Login, Register, ForgotPassword
+│   │   ├── chat/         MessageList, MessageBubble, MessageInput, EmojiPicker
+│   │   ├── channels/     ChannelList, ChannelItem, CreateChannelModal
+│   │   ├── server-list/  ServerRail, ServerIcon, CreateServerModal
+│   │   ├── user-profile/ UserAvatar, UserPopover, UserSettingsModal
+│   │   ├── voice/        VoiceChannel, VoiceControls (VOICE_ENABLED=false)
+│   │   ├── notifications/ NotificationToast
+│   │   ├── file-upload/  FileDropZone, UploadProgress
+│   │   └── dashboard/    DashboardView (mock), mockData.ts
+│   │
+│   ├── store/        GLOBAL STATE (Zustand). Each file = 1 slice.
+│   │                 auth.store.ts, chat.store.ts, server.store.ts, ui.store.ts, voice.store.ts
+│   │                 MUST NOT contain UI components.
+│   │
+│   ├── services/     DATA ACCESS LAYER. Axios client, repository functions, Socket.io, TanStack Query.
+│   │                 MUST NOT contain UI components or Zustand stores.
+│   │
+│   ├── config/       ENV VARS + CONSTANTS + FEATURE FLAGS. Only exports values, no logic.
+│   │
+│   └── types/        SHARED TYPESCRIPT TYPES. models.ts is source of truth for domain types.
+│                     MUST NOT import from any other package in the monorepo.
+│
+└── tooling/          SHARED CONFIG. eslint, tailwind base, tsconfig base.
+                      MUST NOT contain runtime code.
+```
+
+## Dependency graph — unidirectional, NO reverse imports
+
+```
+apps/*
+  └─► app-core
+        └─► features/*
+              └─► store
+              └─► services
+              └─► ui
+              └─► types
+              └─► config
+
+types      (imports nothing from monorepo)
+config     (imports nothing from monorepo)
+ui         (imports only types from monorepo)
+services   (imports only types, config)
+store      (imports only types, config, services)
+```
+
+Violating dependency graph = REJECT the task, explain why.
+
+## When creating a new file — mandatory checklist
+
+1. Which layer does this file belong to? (UI primitive / layout / feature / store / service / type)
+2. Place it in the correct package according to the table above
+3. Use import paths with `@goportal/*`, never use relative paths between packages
+4. Do NOT create new folders outside the structure defined above
