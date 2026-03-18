@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Discord-like dark palette */
+    --background:     15 17 23;     /* #0f1117 — outermost bg */
+    --surface:        26 29 39;     /* #1a1d27 — sidebar, panels */
+    --surface-raised: 34 37 54;     /* #222536 — cards, inputs */
+    --border:         255 255 255;  /* used with opacity */
+
+    --primary:        88 101 242;   /* #5865f2 — blurple */
+    --primary-hover:  71  82 196;   /* #4752c4 */
+
+    --success:        35 165 90;    /* #23a55a */
+    --danger:         242 63  67;   /* #f23f43 */
+    --warning:        251 171 72;   /* #fbab48 */
+
+    --foreground:     220 221 222;  /* #dcddde — main text */
+    --muted:         148 155 164;   /* #949ba4 — secondary text */
+    --subtle:         79  84  92;   /* #4f545c — hints */
+  }
+}
+
+@layer base {
+  * { @apply border-white/10; }
+  body {
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+    font-family: 'gg sans', 'Noto Sans', Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}

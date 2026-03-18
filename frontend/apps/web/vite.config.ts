@@ -1,18 +1,17 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'node:path'
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@core": path.resolve(__dirname, "../../packages/app-core/src"),
-      "@ui": path.resolve(__dirname, "../../packages/ui/src"),
-      "@features": path.resolve(__dirname, "../../packages/features"),
-      "@services": path.resolve(__dirname, "../../packages/services"),
-      "@types": path.resolve(__dirname, "../../packages/types"),
-      "@config": path.resolve(__dirname, "../../packages/config")
-    }
-  }
-});
-
+      '@goportal/ui/styles': path.resolve(__dirname, '../../packages/ui/src/styles/globals.css'),
+      '@goportal/ui':        path.resolve(__dirname, '../../packages/ui/src'),
+      '@goportal/app-core':  path.resolve(__dirname, '../../packages/app-core/src'),
+      '@goportal/types':     path.resolve(__dirname, '../../packages/types'),
+      '@goportal/config':    path.resolve(__dirname, '../../packages/config/src'),
+      '@goportal/services':  path.resolve(__dirname, '../../packages/services/src'),
+    },
+  },
+})

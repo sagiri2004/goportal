@@ -1,0 +1,44 @@
+appId: com.sagiri2004.goportal
+productName: GoPortal
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - "!**/*.map"
+  - "!**/*.d.ts"
+
+extraResources:
+  - from: sidecars/${os}
+    to: sidecars
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: msi
+      arch: [x64]
+  icon: build/icon.ico
+
+msi:
+  oneClick: false
+  perMachine: false
+  runAfterFinish: true
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+  icon: build/icons/512x512.png
+  category: Network
+  maintainer: sagiri2004
+
+deb:
+  depends:
+    - libnotify4
+    - libxtst6
+    - libnss3
+    - libsecret-1-0
