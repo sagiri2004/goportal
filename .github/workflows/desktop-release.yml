@@ -52,6 +52,17 @@ jobs:
           chmod +x node_modules/7zip-bin/linux/x64/7za
         working-directory: frontend
 
+      - name: Debug node_modules paths
+        run: |
+          echo "=== find 7zip-bin ==="
+          find . -path "*/7zip-bin/linux" -not -path "*/node_modules/*/node_modules/*" 2>/dev/null || true
+          echo "=== electron-builder resolves from ==="
+          node -e "console.log(require.resolve('7zip-bin'))" || true
+          echo "=== npm root ==="
+          npm root
+          npm root -g
+        working-directory: frontend
+
       - name: Download 7zip binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
