@@ -1,4 +1,27 @@
-import type { Channel, Message, Server, User } from "@types/models";
+import type { Channel, Message, Server, User } from "@goportal/types"
+import type { AuthUser, LoginResponseData } from '@goportal/types'
+
+// ============================================================================
+// Auth Mock Data
+// ============================================================================
+
+export const mockAuthUser: AuthUser = {
+  id: "8d3f6506-6569-4b31-a74a-d9d43c359ee5",
+  username: "zutomayo",
+  is_admin: false,
+}
+
+export const mockLoginResponse: LoginResponseData = {
+  user: mockAuthUser,
+  token: "mock-jwt-token-for-development",
+}
+
+export const simulateDelay = (ms = 400): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, ms))
+
+// ============================================================================
+// Dashboard Mock Data
+// ============================================================================
 
 export const mockCurrentUser: User = {
   id: "u1",

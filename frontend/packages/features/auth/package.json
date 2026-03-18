@@ -6,8 +6,11 @@
   "main": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@goportal/types":  "*",
-    "@goportal/ui":     "*",
-    "@goportal/config": "*"
+    "@goportal/types":    "*",
+    "@goportal/ui":       "*",
+    "@goportal/config":   "*",
+    "@goportal/store":    "*",
+    "@goportal/services": "*",
+    "@tanstack/react-query": "latest"
   }
 }

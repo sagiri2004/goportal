@@ -1,15 +1,13 @@
-import React from "react";
+import React from 'react'
 
 type AppShellProps = {
-  children: React.ReactNode;
-};
+  children: React.ReactNode
+}
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
+    <div className="h-screen bg-background text-foreground overflow-hidden">
       {children}
     </div>
-  );
-};
-
-
+  )
+}

@@ -5,7 +5,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@goportal/*": ["../../packages/*/src"]
+      "@goportal/*": ["../../packages/*/src", "../../packages/features/*/src"],
+      "@goportal/feature-*": ["../../packages/features/*/src"]
     }
   },
   "include": ["src"],

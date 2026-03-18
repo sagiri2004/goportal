@@ -6,9 +6,13 @@
   "main": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@goportal/ui":       "*",
-    "@goportal/types":    "*",
-    "@goportal/services": "*",
-    "@goportal/config":   "*"
+    "@goportal/ui":               "*",
+    "@goportal/types":            "*",
+    "@goportal/services":         "*",
+    "@goportal/store":            "*",
+    "@goportal/config":           "*",
+    "@goportal/feature-auth":     "*",
+    "@goportal/feature-dashboard": "*",
+    "react-router-dom":           "latest"
   }
 }
