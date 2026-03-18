@@ -1,71 +1,35 @@
 {
-  "name": "desktop",
-  "version": "0.1.0",
-  "description": "GoPortal desktop app shell built with Electron.",
-  "homepage": "https://github.com/sagiri2004/goportal",
-  "author": {
-    "name": "GoPortal",
-    "email": "maintainers@goportal.local"
-  },
+  "name": "@sagiri/desktop",
   "private": true,
-  "main": "electron/main.cjs",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently \"npm --prefix ../web run dev\" \"electron . --no-sandbox\"",
-    "build": "npm --prefix ../web run build && echo \"Desktop shell build-ready (renderer from apps/web/dist)\"",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win msi",
-    "dist:linux": "npm run build && electron-builder --linux deb"
+    "dev": "vite",
+    "build": "vite build && tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'}))\" && electron-builder",
+    "build:vite": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "@sagiri/app-core": "*",
+    "@sagiri/config": "*",
+    "@sagiri/types": "*",
+    "@sagiri/ui": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0",
-    "typescript": "^5.6.0",
-    "electron": "30.0.0",
-    "electron-builder": "^24.13.3"
-  },
-  "build": {
-    "appId": "com.goprotal.desktop",
-    "productName": "GoPortal Desktop",
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
-    "files": [
-      "electron/**",
-      "../web/dist/**",
-      "package.json"
-    ],
-    "asar": true,
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        "msi"
-      ],
-      "extraResources": [
-        {
-          "from": "sidecars/win/tool.exe",
-          "to": "sidecars/tool.exe"
-        }
-      ]
-    },
-    "linux": {
-      "icon": "build/icons/512x512.png",
-      "target": [
-        "deb"
-      ],
-      "maintainer": "GoPortal <maintainers@goportal.local>",
-      "category": "Utility",
-      "extraResources": [
-        {
-          "from": "sidecars/linux/tool",
-          "to": "sidecars/tool"
-        }
-      ]
-    }
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vite-plugin-electron": "^0.28.6",
+    "vite-plugin-electron-renderer": "^0.14.5"
   }
 }
-
