@@ -1,14 +1,17 @@
-name: Desktop Release
+name: Build Desktop (Manual)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/desktop-release.yml'
-  # Allow manual trigger
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Build target'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - windows-msi
+          - linux-deb
+          - both
 
 permissions:
   contents: read
@@ -29,6 +32,8 @@ jobs:
             target_name: linux-deb
             dist_script: dist:linux
             extension: deb
+        exclude:
+          - target_name: ${{ github.event.inputs.target != 'both' && github.event.inputs.target != matrix.target_name && matrix.target_name || 'excluded' }}
 
     steps:
       - name: Checkout
@@ -41,7 +46,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: npm ci
         working-directory: frontend
 
@@ -51,25 +56,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wine wine32 wine64
           wine --version
-
-      - name: Download 7zip binary (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p node_modules/7zip-bin/linux/x64
-          curl -fsSL "https://github.com/develar/7zip-bin/raw/master/linux/x64/7za" \
-            -o node_modules/7zip-bin/linux/x64/7za
-          chmod +x node_modules/7zip-bin/linux/x64/7za
-        working-directory: frontend
-
-      - name: Download 7zip binary (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "node_modules\7zip-bin\win\x64" | Out-Null
-          Invoke-WebRequest `
-            -Uri "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe" `
-            -OutFile "node_modules\7zip-bin\win\x64\7za.exe"
-        working-directory: frontend
 
       - name: Prepare sidecar placeholder (Windows)
         if: runner.os == 'Windows'
@@ -100,59 +86,9 @@ jobs:
       - name: Upload artifact - ${{ matrix.target_name }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target_name }}
+          name: ${{ matrix.target_name }}-build
           path: |
             frontend/apps/desktop/release/**/*.${{ matrix.extension }}
             frontend/apps/desktop/release/@goportal/**/*.${{ matrix.extension }}
           if-no-files-found: error
-          retention-days: 30
-
-  release:
-    name: Semantic release
-    runs-on: ubuntu-latest
-    needs: [build_desktop]
-    if: github.event_name == 'push'
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Download Windows MSI
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-msi
-          path: release-assets/windows
-
-      - name: Download Linux DEB
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-deb
-          path: release-assets/linux
-
-      - name: List release assets
-        run: find release-assets -type f -exec ls -lh {} \;
-
-      - name: Install semantic-release
-        run: |
-          npm install --no-save \
-            semantic-release \
-            @semantic-release/commit-analyzer \
-            @semantic-release/release-notes-generator \
-            @semantic-release/github \
-            @semantic-release/git \
-            conventional-changelog-conventionalcommits
-
-      - name: Publish release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
-
+          retention-days: 7

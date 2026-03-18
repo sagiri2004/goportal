@@ -8,12 +8,14 @@
     "packages/features/*"
   ],
   "scripts": {
-    "dev:web":       "turbo run dev --filter=@goportal/web",
-    "dev:desktop":   "turbo run dev --filter=@goportal/desktop",
-    "build":         "turbo run build",
-    "build:web":     "turbo run build --filter=@goportal/web",
-    "build:desktop": "turbo run build --filter=@goportal/desktop",
-    "typecheck":     "turbo run typecheck"
+    "dev:web":         "turbo run dev --filter=@goportal/web",
+    "dev:desktop":     "turbo run dev --filter=@goportal/desktop",
+    "build":           "turbo run build",
+    "build:web":       "turbo run build --filter=@goportal/web",
+    "build:desktop":   "turbo run build --filter=@goportal/desktop",
+    "dist:win":        "turbo run dist:win --filter=@goportal/desktop",
+    "dist:linux":      "turbo run dist:linux --filter=@goportal/desktop",
+    "typecheck":       "turbo run typecheck"
   },
   "devDependencies": {
     "turbo": "^2.0.0"

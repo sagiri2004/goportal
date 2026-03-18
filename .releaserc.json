@@ -1,6 +1,10 @@
 {
   "branches": [
-    "main"
+    "main",
+    {
+      "name": "dev",
+      "prerelease": "alpha"
+    }
   ],
   "plugins": [
     [
@@ -12,7 +16,35 @@
     [
       "@semantic-release/release-notes-generator",
       {
-        "preset": "conventionalcommits"
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            {
+              "type": "feat",
+              "section": "✨ Features",
+              "hidden": false
+            },
+            {
+              "type": "fix",
+              "section": "🐛 Bug Fixes",
+              "hidden": false
+            },
+            {
+              "type": "perf",
+              "section": "⚡ Performance",
+              "hidden": false
+            },
+            {
+              "type": "docs",
+              "section": "📖 Documentation",
+              "hidden": true
+            },
+            {
+              "type": "chore",
+              "hidden": true
+            }
+          ]
+        }
       }
     ],
     [
@@ -20,14 +52,28 @@
       {
         "assets": [
           {
-            "path": "release-assets/**/*.msi",
-            "label": "Windows MSI"
+            "path": "release-assets/windows/**/*.msi",
+            "label": "Windows MSI Installer (x64)"
           },
           {
-            "path": "release-assets/**/*.deb",
-            "label": "Linux DEB"
+            "path": "release-assets/linux/**/*.deb",
+            "label": "Linux DEB Package (x64)"
           }
-        ]
+        ],
+        "addReleases": "top",
+        "releasedLabels": false,
+        "successComment": "🎉 Released as v${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "package.json",
+          "frontend/apps/desktop/package.json",
+          "frontend/package.json"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ]
   ]
