@@ -1,0 +1,96 @@
+---
+description: Fixed stack and import paths for GoPortal frontend.
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: true
+---
+
+# Stack Lock & Import Paths
+
+## Stack — MUST NOT be replaced or added
+
+| Layer | Package | Version |
+|---|---|---|
+| UI framework | react + react-dom | 18 |
+| Language | typescript | 5 |
+| Build | vite | 5 |
+| Styling | tailwindcss | 3 |
+| Components | shadcn/ui (Radix UI) | latest |
+| Icons | lucide-react | latest |
+| State | zustand | latest |
+| Data fetching | @tanstack/react-query | latest |
+| HTTP | axios | latest |
+| Realtime | socket.io-client | latest |
+| Desktop | electron | 28 |
+
+**Forbidden:** framer-motion, styled-components, emotion, chakra-ui, material-ui,
+ant-design, heroicons, react-icons, @mui/*, @chakra-ui/*, and any CSS-in-JS library.
+
+**Animation:** use Tailwind's `transition-*` and `animate-*`. No extra libraries.
+
+## Import paths — quick reference
+
+```ts
+// Utilities & types
+import { cn }                    from '@goportal/ui'
+import type { User, Message,
+  Channel, Server }              from '@goportal/types'
+import { APP_NAME,
+  MAX_FILE_SIZE_MB,
+  MAX_MESSAGE_LENGTH }           from '@goportal/config'
+import { VOICE_ENABLED,
+  THREAD_ENABLED,
+  FILE_UPLOAD_ENABLED }          from '@goportal/config'
+
+// UI Components (Shadcn)
+import { Button }                from '@goportal/ui/components/button'
+import { Input }                 from '@goportal/ui/components/input'
+import { Avatar, AvatarFallback,
+  AvatarImage }                  from '@goportal/ui/components/avatar'
+import { Dialog, DialogContent,
+  DialogHeader, DialogTitle }    from '@goportal/ui/components/dialog'
+import { Popover, PopoverContent,
+  PopoverTrigger }               from '@goportal/ui/components/popover'
+import { Tooltip, TooltipContent,
+  TooltipTrigger }               from '@goportal/ui/components/tooltip'
+import { ScrollArea }            from '@goportal/ui/components/scroll-area'
+import { Badge }                 from '@goportal/ui/components/badge'
+import { Separator }             from '@goportal/ui/components/separator'
+import { DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger }          from '@goportal/ui/components/dropdown-menu'
+
+// Icons — always set size explicitly
+import { Hash, Volume2, Settings,
+  LogOut, Plus, X, Search,
+  Mic, MicOff, Headphones,
+  Video, VideoOff }              from 'lucide-react'
+// Default icon size: className="w-4 h-4"
+// Large icon:        className="w-5 h-5"
+// XL icon:           className="w-6 h-6"
+
+// Store
+import { useAuthStore }          from '@goportal/store'
+import { useChatStore }          from '@goportal/store'
+import { useServerStore }        from '@goportal/store'
+import { useUIStore }            from '@goportal/store'
+
+// Services
+import { messagesRepo }          from '@goportal/services'
+import { socketClient }          from '@goportal/services'
+```
+
+## Wrong aliases — NEVER use
+
+```ts
+// ❌ Old alias (removed)
+import { Button } from '@ui/components/Button'
+import type { User } from '@types/models'
+
+// ❌ Relative path between packages
+import { cn } from '../../../packages/ui/src/lib/utils'
+import type { User } from '../../types/models'
+
+// ❌ Direct node_modules path
+import { cn } from 'tailwind-merge'   // use @goportal/ui instead
+```
