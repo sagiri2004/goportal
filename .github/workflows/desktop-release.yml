@@ -39,18 +39,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
         working-directory: frontend
 
-      - name: Install 7zip-bin
-        run: npm install 7zip-bin --no-save
-        working-directory: frontend
-
-      - name: Fix 7zip-bin permissions (Linux)
-        if: runner.os == 'Linux'
-        run: find ./node_modules/7zip-bin -name "7za" -exec chmod +x {} \;
-        working-directory: frontend
+      - name: Install desktop dependencies
+        run: npm install
+        working-directory: frontend/apps/desktop
 
       - name: Prepare sidecar placeholder (Windows)
         if: runner.os == 'Windows'
