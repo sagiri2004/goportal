@@ -1,7 +1,7 @@
 import React from 'react'
 import { useChannels } from '../hooks/useChannels'
 import { Button } from '@goportal/ui'
-import { Plus } from 'lucide-react'
+import { Plus, Hash, Volume2 } from 'lucide-react'
 
 type ChannelSidebarProps = {
   serverId: string
@@ -25,7 +25,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
   if (isLoading) {
     return (
-      <aside className="w-64 bg-card flex flex-col border-r border-border">
+      <aside className="w-60 bg-[hsl(240,6%,10%)] flex flex-col border-r border-border">
         <div className="text-xs text-muted-foreground p-4">Loading...</div>
       </aside>
     )
@@ -35,7 +35,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   const voiceChannels = channels?.filter(c => c.type === 'VOICE') ?? []
 
   return (
-    <aside className="w-64 bg-card flex flex-col border-r border-border">
+    <aside className="w-60 bg-[hsl(240,6%,10%)] flex flex-col border-r border-border">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <span className="text-sm font-semibold text-foreground truncate">
@@ -73,7 +73,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                     }`}
                   >
-                    <span className="text-muted-foreground">#</span>
+                    <Hash className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate">{channel.name}</span>
                   </button>
                 )
@@ -101,7 +101,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                     }`}
                   >
-                    <span className="text-muted-foreground">🔊</span>
+                    <Volume2 className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate">{channel.name}</span>
                   </button>
                 )

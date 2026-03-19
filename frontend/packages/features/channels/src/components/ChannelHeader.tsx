@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ChannelDTO } from '@goportal/types'
+import { Hash, Volume2 } from 'lucide-react'
 
 type ChannelHeaderProps = {
   channel?: ChannelDTO
@@ -18,11 +19,13 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({ channel }) => {
   }
 
   return (
-    <header className="h-12 border-b border-border px-4 flex items-center justify-between text-sm">
+    <header className="h-12 border-b border-border px-4 flex items-center justify-between text-sm bg-background">
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">
-          {channel.type === 'TEXT' ? '#' : '🔊'}
-        </span>
+        {channel.type === 'TEXT' ? (
+          <Hash className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <Volume2 className="w-4 h-4 text-muted-foreground" />
+        )}
         <span className="font-semibold text-foreground">
           {channel.name}
         </span>
