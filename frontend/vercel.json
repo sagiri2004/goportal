@@ -1,0 +1,11 @@
+{
+  "buildCommand": "turbo run build --filter=@goportal/web",
+  "outputDirectory": "apps/web/dist",
+  "devCommand": "turbo run dev --filter=@goportal/web",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
