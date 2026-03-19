@@ -7,6 +7,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@goportal/types":  "*",
-    "@goportal/config": "*"
+    "@goportal/config": "*",
+    "@goportal/store":  "*"
   }
 }

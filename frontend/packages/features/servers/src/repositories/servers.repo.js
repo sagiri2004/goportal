@@ -1,6 +1,6 @@
 import { apiClient } from '@goportal/services';
 import { shouldUseMockData } from '@goportal/config';
-import { mockServersData, simulateDelay } from '../mockData';
+import { mockServersData, simulateDelay } from '@goportal/app-core';
 /**
  * Servers Repository
  * Supports Real API (default) and Mock Data (via VITE_USE_MOCK_DATA env)

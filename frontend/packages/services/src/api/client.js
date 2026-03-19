@@ -9,6 +9,7 @@
  */
 import axios from 'axios';
 import { API_URL } from '@goportal/config';
+import { useAuthStore } from '@goportal/store';
 // Create Axios instance with default config
 export const apiClient = axios.create({
     baseURL: API_URL,
@@ -37,8 +38,11 @@ apiClient.interceptors.response.use((response) => {
     // (actual redirect handled by router guard)
     if (error.response?.status === 401) {
         localStorage.removeItem('auth-token');
-        localStorage.removeItem('auth-state');
-        // Router will handle redirect based on missing token in store
+        localStorage.removeItem('auth-store');
+        useAuthStore.getState().logout();
+        if (window.location.pathname !== '/auth/login') {
+            window.location.href = '/auth/login';
+        }
     }
     // Return error for caller to handle
     return Promise.reject(error);

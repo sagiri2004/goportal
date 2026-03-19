@@ -89,7 +89,7 @@ export const ServerRail: React.FC<ServerRailProps> = ({
                         }`}
                         type="button"
                       >
-                        {server.initials ?? getServerInitials(server.name)}
+                        {('initials' in server ? server.initials : undefined) ?? getServerInitials(server.name)}
                       </button>
                     </TooltipTrigger>
                     <TooltipContent>{server.name}</TooltipContent>

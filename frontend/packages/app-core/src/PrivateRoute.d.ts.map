@@ -1,1 +1,1 @@
-{"version":3,"file":"PrivateRoute.d.ts","sourceRoot":"","sources":["PrivateRoute.tsx"],"names":[],"mappings":"AAAA;;;;;GAKG;AAEH,OAAO,KAA8B,MAAM,OAAO,CAAA;AAKlD,KAAK,iBAAiB,GAAG;IACvB,QAAQ,EAAE,KAAK,CAAC,SAAS,CAAA;CAC1B,CAAA;AAED,eAAO,MAAM,YAAY,EAAE,KAAK,CAAC,EAAE,CAAC,iBAAiB,CAoBpD,CAAA"}
+{"version":3,"file":"PrivateRoute.d.ts","sourceRoot":"","sources":["PrivateRoute.tsx"],"names":[],"mappings":"AAAA;;;;;GAKG;AAEH,OAAO,KAA8B,MAAM,OAAO,CAAA;AAMlD,KAAK,iBAAiB,GAAG;IACvB,QAAQ,EAAE,KAAK,CAAC,SAAS,CAAA;CAC1B,CAAA;AAED,eAAO,MAAM,YAAY,EAAE,KAAK,CAAC,EAAE,CAAC,iBAAiB,CAiCpD,CAAA"}

@@ -1,0 +1,5 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export const LinkEmbed = ({ embed }) => {
+    return (_jsx("div", { className: "mt-1 max-w-[432px] overflow-hidden rounded-md border border-[hsl(240,4%,20%)] bg-[hsl(240,4%,15%)]", style: { borderLeftColor: embed.color ?? '#5865f2', borderLeftWidth: '4px' }, children: _jsxs("div", { className: "p-3", children: [embed.siteName && (_jsxs("div", { className: "mb-1 flex items-center gap-1.5", children: [embed.favicon && _jsx("img", { src: embed.favicon, className: "h-3.5 w-3.5 rounded-sm" }), _jsx("span", { className: "text-[11px] text-muted-foreground", children: embed.siteName })] })), embed.title && (_jsx("a", { href: embed.url, target: "_blank", rel: "noreferrer", className: "mb-1 block line-clamp-2 text-sm font-semibold text-indigo-400 hover:underline", children: embed.title })), embed.description && (_jsx("p", { className: "mb-2 line-clamp-3 text-xs text-muted-foreground", children: embed.description })), embed.image && (_jsx("img", { src: embed.image, className: "mt-1 max-h-[200px] w-full rounded-sm object-cover" }))] }) }));
+};
+//# sourceMappingURL=LinkEmbed.js.map

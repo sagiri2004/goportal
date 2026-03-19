@@ -1,0 +1,31 @@
+export const simulateDelay = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));
+export const mockCurrentUser = {
+    id: 'u1',
+    username: 'zutomayo',
+    avatarColor: '#6366f1',
+    status: 'online',
+    name: 'You',
+    initials: 'Y',
+    color: 'bg-indigo-500',
+    avatarUrl: undefined,
+};
+export const mockUsers = [
+    mockCurrentUser,
+    { id: 'u2', username: 'alice', avatarColor: '#f97316', status: 'online' },
+    { id: 'u3', username: 'bob', avatarColor: '#22c55e', status: 'idle' },
+    { id: 'u4', username: 'charlie', avatarColor: '#e11d48', status: 'offline' },
+];
+export const mockAuthUser = {
+    id: '8d3f6506-6569-4b31-a74a-d9d43c359ee5',
+    username: 'zutomayo',
+    is_admin: false,
+};
+export const mockAuthCredentials = [
+    { username: 'demo', password: 'Demo123!' },
+    { username: 'testuser', password: 'Test123!' },
+];
+export const mockLoginResponse = {
+    user: mockAuthUser,
+    token: 'mock-jwt-token-for-development',
+};
+//# sourceMappingURL=user.js.map

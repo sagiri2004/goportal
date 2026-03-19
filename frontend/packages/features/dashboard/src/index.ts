@@ -1,13 +1,16 @@
 export { DashboardView } from './DashboardView'
 export { DMView } from './DMView'
 export { DirectMessagesSidebar } from './DirectMessagesSidebar'
-export { 
-  mockCurrentUser, 
-  mockServers, 
-  mockChannels, 
-  mockUsers, 
+export { VoiceChannelView } from './VoiceChannelView'
+export {
+  mockCurrentUser,
+  mockServers,
+  mockChannels,
+  mockUsers,
   mockMessages,
   mockAuthUser,
   mockLoginResponse,
+  mockVoiceParticipants,
   simulateDelay,
-} from './mockData'
+  IS_MOCK,
+} from '@goportal/app-core'

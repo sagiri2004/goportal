@@ -1,7 +1,3 @@
 import React from 'react';
-type DashboardViewProps = {
-    onLogout?: () => void;
-};
-export declare const DashboardView: React.FC<DashboardViewProps>;
-export {};
+export declare const DashboardView: React.FC;
 //# sourceMappingURL=DashboardView.d.ts.map

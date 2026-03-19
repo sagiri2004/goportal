@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./mock": "./src/mock/index.ts"
+  },
   "dependencies": {
     "@goportal/ui":               "*",
     "@goportal/types":            "*",
-    "@goportal/services":         "*",
     "@goportal/store":            "*",
     "@goportal/config":           "*",
     "@goportal/feature-auth":     "*",

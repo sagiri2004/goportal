@@ -1,7 +1,7 @@
 import type { ChannelDTO, CreateChannelRequest } from '@goportal/types'
 import { apiClient } from '@goportal/services'
 import { shouldUseMockData } from '@goportal/config'
-import { mockChannelsData, simulateDelay } from '../mockData'
+import { mockChannelsData, simulateDelay } from '@goportal/app-core'
 
 /**
  * Channels Repository

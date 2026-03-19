@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 // @ts-ignore: external package '@goportal/store' has no local type declarations
 import { useAuthStore } from '@goportal/store'
+import { hydrateSession } from './services/auth'
 
 type PrivateRouteProps = {
   children: React.ReactNode
@@ -20,8 +21,21 @@ export const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
   const token = useAuthStore((state: any) => state.token)
 
   useEffect(() => {
-    // Zustand's persist middleware hydrates on mount
-    setIsHydrated(true)
+    let isMounted = true
+
+    const restore = async () => {
+      await hydrateSession()
+      if (isMounted) {
+        // Zustand's persist middleware hydrates on mount
+        setIsHydrated(true)
+      }
+    }
+
+    void restore()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // Wait for hydration before checking auth

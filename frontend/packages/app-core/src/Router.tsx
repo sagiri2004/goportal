@@ -13,7 +13,7 @@ import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
-import { DashboardView, DMView } from '@goportal/feature-dashboard'
+import { DashboardView, DMView, VoiceChannelView } from '@goportal/feature-dashboard'
 
 export const Router: React.FC = () => {
   const handleAuthSuccess = () => {
@@ -42,8 +42,10 @@ export const Router: React.FC = () => {
             </PrivateRoute>
           }
         >
-          <Route index element={<DashboardView />} />
+          <Route index element={<Navigate to="/app/servers/1/channels/general" replace />} />
           <Route path="@me" element={<DMView />} />
+          <Route path="servers/:serverId/channels/:channelId" element={<DashboardView />} />
+          <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
         </Route>
 
         {/* Fallback */}

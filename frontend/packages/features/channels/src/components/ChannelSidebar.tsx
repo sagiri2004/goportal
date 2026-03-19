@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
 import { useChannels } from '../hooks/useChannels'
 import {
-  Badge,
-  Button,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -28,6 +26,11 @@ import {
   Bell,
   Users,
   LogOut,
+  Zap,
+  Monitor,
+  MoreHorizontal,
+  PhoneOff,
+  Wifi,
 } from 'lucide-react'
 
 type ChannelSidebarProps = {
@@ -35,6 +38,9 @@ type ChannelSidebarProps = {
   serverName?: string
   serverInitials?: string
   serverColor?: string
+  serverBannerUrl?: string
+  serverIconUrl?: string
+  serverBoostLevel?: number
   categories?: Array<{
     id: string
     name: string
@@ -43,32 +49,291 @@ type ChannelSidebarProps = {
       name: string
       type: 'text' | 'voice'
       unread: number
+      activeMembers?: ChannelMember[]
+      liveLabel?: string
+      isLive?: boolean
     }>
   }>
   activeChannelId?: string
-  onSelectChannel?: (channelId: string) => void
+  onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void
   onCreateChannel?: () => void
+  onInviteMember?: () => void
+  isInVoiceChannel?: boolean
+  activeVoiceChannelName?: string
+}
+
+type ChannelMember = {
+  id: string
+  name?: string
+  avatarUrl?: string
+  initials: string
+  color: string
+  isStreaming?: boolean
+}
+
+type SidebarChannel = {
+  id: string
+  name: string
+  type: 'text' | 'voice'
+  unread?: number
+  activeMembers?: ChannelMember[]
+  liveLabel?: string
+  isLive?: boolean
+}
+
+const sectionLabelClassName =
+  'text-[11px] uppercase tracking-[0.04em] font-semibold text-muted-foreground/70 whitespace-nowrap'
+
+const SectionHeader: React.FC<{
+  name: string
+  expanded: boolean
+  onToggle: () => void
+  onCreateChannel: () => void
+  className?: string
+}> = ({ name, expanded, onToggle, onCreateChannel, className = 'mt-4' }) => (
+  <div className={`flex items-center gap-2 ${className} mb-0.5 px-2 group`}>
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+    >
+      <ChevronDown
+        className={`h-3 w-3 flex-shrink-0 text-muted-foreground/70 transition-transform ${
+          !expanded ? '-rotate-90' : ''
+        }`}
+      />
+      <span className={sectionLabelClassName}>{name}</span>
+    </button>
+    <div className="h-px flex-1 bg-muted-foreground/20" />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onCreateChannel}
+          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+          type="button"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Add Channel</TooltipContent>
+    </Tooltip>
+  </div>
+)
+
+const ChannelRow: React.FC<{
+  channel: SidebarChannel
+  active: boolean
+  onSelect: () => void
+}> = ({ channel, active, onSelect }) => {
+  const unreadCount = typeof channel.unread === 'number' ? channel.unread : 0
+  const hasUnread = unreadCount > 0
+  const isVoice = channel.type === 'voice'
+  const Icon = isVoice ? Volume2 : Hash
+
+  const rowClassName = active
+    ? 'bg-[hsl(240,5%,17%)] text-[hsl(0,0%,96%)]'
+    : hasUnread
+      ? 'text-[hsl(0,0%,82%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,82%)]'
+      : 'text-[hsl(0,0%,55%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,82%)]'
+
+  const iconClassName = active
+    ? 'text-[hsl(0,0%,82%)]'
+    : hasUnread
+      ? 'text-[hsl(0,0%,72%)] group-hover:text-[hsl(0,0%,82%)]'
+      : 'text-[hsl(0,0%,55%)] group-hover:text-[hsl(0,0%,82%)]'
+
+  return (
+    <div className="relative overflow-visible">
+      {hasUnread && <span className="absolute -left-1 top-1/2 h-2 w-[3px] -translate-y-1/2 rounded-r-full bg-white" />}
+      <button
+        key={channel.id}
+        onClick={onSelect}
+        className={`group relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left text-[14px] font-normal leading-5 transition-colors ${rowClassName}`}
+        type="button"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <Icon className={`h-4 w-4 flex-shrink-0 ${iconClassName}`} />
+          <span className="min-w-0 truncate">{channel.name}</span>
+        </div>
+
+        <div className="relative flex h-[18px] w-[46px] flex-shrink-0 items-center justify-end">
+          {!isVoice && hasUnread && (
+            <span className="inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[9px] bg-[#f23f43] px-1.5 text-[11px] font-semibold leading-none text-white transition-opacity group-hover:opacity-0">
+              {unreadCount}
+            </span>
+          )}
+
+          <div className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]">
+                  <UserPlus className="h-[14px] w-[14px]" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Invite</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]">
+                  <Settings className="h-[14px] w-[14px]" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </button>
+    </div>
+  )
+}
+
+const VoiceActivityRow: React.FC<{
+  channel: SidebarChannel
+}> = ({ channel }) => {
+  if (channel.type !== 'voice' || !channel.activeMembers?.length) return null
+
+  return (
+    <div className="mb-0.5 ml-[22px]">
+      <div className="flex items-center gap-1.5 px-2 py-[3px]">
+        {channel.liveLabel && (
+          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/70">
+            {channel.liveLabel}
+          </span>
+        )}
+
+        {channel.isLive && (
+          <span className="flex-shrink-0 rounded-sm bg-red-500 px-1.5 py-[2px] text-[10px] font-bold leading-none tracking-wide text-white">
+            TRUC TIEP
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 px-2 py-[2px]">
+        <div className="flex items-center">
+          {channel.activeMembers.slice(0, 4).map((member, index) => (
+            <Tooltip key={member.id}>
+              <TooltipTrigger asChild>
+                <div
+                  className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ring-[1.5px] ring-[hsl(240,6%,10%)] ${member.color} ${
+                    index > 0 ? '-ml-1.5' : ''
+                  }`}
+                >
+                  {member.avatarUrl ? (
+                    <img
+                      src={member.avatarUrl}
+                      alt={member.name ?? member.initials}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    member.initials
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{member.name ?? member.initials}</TooltipContent>
+            </Tooltip>
+          ))}
+
+          {channel.activeMembers.length > 4 && (
+            <div className="flex h-5 w-5 -ml-1.5 items-center justify-center rounded-full bg-[hsl(240,4%,22%)] text-[9px] font-semibold text-muted-foreground ring-[1.5px] ring-[hsl(240,6%,10%)]">
+              +{channel.activeMembers.length - 4}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const VoiceConnectedPanel: React.FC<{
+  channelName: string
+  serverName: string
+}> = ({ channelName, serverName }) => {
+  const [muted, setMuted] = useState(false)
+  const [deafened, setDeafened] = useState(false)
+  const [sharing, setSharing] = useState(false)
+
+  return (
+    <div className="bg-[hsl(240,7%,7%)] px-2 pb-1.5 pt-1.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="mb-0.5 flex items-center gap-1.5">
+            <Wifi className="h-3.5 w-3.5 text-green-500" />
+            <p className="text-xs font-semibold text-green-400">Đã Kết Nối Giọng Nói</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
+        >
+          <PhoneOff className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mb-1 truncate text-xs text-muted-foreground">#{channelName} / {serverName}</p>
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setMuted((v) => !v)}
+          className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            muted
+              ? 'text-red-400 hover:bg-red-500/20'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Mic className="h-4 w-4" />
+          {muted && <span className="absolute h-[2px] w-5 rotate-[-35deg] bg-red-400" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeafened((v) => !v)}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            deafened
+              ? 'text-red-400 hover:bg-red-500/20'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Headphones className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setSharing((v) => !v)}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            sharing
+              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/25'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Monitor className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-accent hover:text-[hsl(0,0%,96%)]"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
  * ChannelSidebar - 240px wide sidebar showing channels for a server
- *
- * Layout:
- * - Header (48px): server name + ChevronDown, border-b shadow-sm
- * - Channel list (scrollable): text channels with Hash icon, voice channels with Volume2 icon
- *   - Section label: uppercase text-xs tracking-wide + ChevronDown + Plus (on hover)
- *   - Channel row: flex items-center gap-1.5 px-2 py-[6px] rounded-md, hover shows icons
- * - Bottom user panel (52px): avatar + username + status, icons (Mic, Headphones, Settings)
  */
 export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   serverId = 'default',
   serverName = 'Server',
   serverInitials,
   serverColor = 'bg-indigo-500',
+  serverBannerUrl,
+  serverIconUrl,
+  serverBoostLevel,
   categories,
   activeChannelId,
   onSelectChannel = () => {},
   onCreateChannel = () => {},
+  onInviteMember = () => {},
+  isInVoiceChannel = false,
+  activeVoiceChannelName = 'afk-base',
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
@@ -87,141 +352,156 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
     setExpandedCategories((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
   }
 
+  const initials = (serverInitials ?? serverName)
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('')
+    .slice(0, 2)
+
   return (
-    <aside className="h-full w-full bg-background flex flex-col border-r border-border overflow-hidden">
-      {/* Header Bar (48px) */}
+    <aside className="flex h-full w-full flex-col overflow-hidden border-r border-white/5 bg-[hsl(240,6%,10%)]">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="cursor-pointer h-12 w-full px-3 flex items-center gap-2 hover:bg-accent transition-colors border-b border-border"
-          >
-            <div
-              className={`w-8 h-8 rounded-lg ${serverColor} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}
+        {serverBannerUrl ? (
+          <div className="flex-shrink-0 border-b border-[hsl(240,4%,13%)]">
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="group relative w-full cursor-pointer overflow-hidden text-left"
+                style={{ height: '110px' }}
+              >
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${serverBannerUrl})` }}
+                />
+                <div className="absolute inset-0 backdrop-blur-[1px]" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-black/0 transition-colors duration-150 group-hover:bg-black/20" />
+
+                <div className="absolute right-2 top-2 z-20">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onInviteMember()
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onInviteMember()
+                          }
+                        }}
+                        className="rounded-md bg-black/30 p-1.5 text-white/70 transition-colors hover:bg-black/50 hover:text-white"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Invite People</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center gap-2 px-3 pb-2.5 pt-1">
+                  {serverIconUrl ? (
+                    <img
+                      src={serverIconUrl}
+                      alt={serverName}
+                      className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-2 ring-black/30"
+                    />
+                  ) : (
+                    <div
+                      className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${serverColor} text-sm font-bold text-white ring-2 ring-black/30`}
+                    >
+                      {initials}
+                    </div>
+                  )}
+
+                  <span className="min-w-0 flex-1 truncate text-left text-[15px] font-semibold text-white drop-shadow-md">
+                    {serverName}
+                  </span>
+
+                  {typeof serverBoostLevel === 'number' && serverBoostLevel > 0 && (
+                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-indigo-500/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      <Zap className="h-2.5 w-2.5" />
+                      BOOST {serverBoostLevel}
+                    </span>
+                  )}
+
+                  <ChevronDown className="h-4 w-4 flex-shrink-0 text-white/80 drop-shadow-md" />
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+          </div>
+        ) : (
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex h-12 w-full items-center gap-3 border-b border-[hsl(240,4%,13%)] px-3 transition-colors hover:bg-white/[0.03]"
             >
-              {(serverInitials ?? serverName)
-                .split(' ')
-                .slice(0, 2)
-                .map((w) => w[0]?.toUpperCase())
-                .join('')
-                .slice(0, 2)}
-            </div>
-            <span className="flex-1 text-left font-semibold text-sm text-foreground truncate">
-              {serverName}
-            </span>
-            <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          </button>
-        </DropdownMenuTrigger>
+              <div
+                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${serverColor} text-sm font-bold text-white`}
+              >
+                {initials}
+              </div>
+              <span className="flex-1 truncate text-left text-[15px] font-semibold text-[hsl(0,0%,96%)]">
+                {serverName}
+              </span>
+              <ChevronDown className="h-4 w-4 flex-shrink-0 text-[hsl(0,0%,72%)]" />
+            </button>
+          </DropdownMenuTrigger>
+        )}
         <DropdownMenuContent className="w-56" align="start" side="bottom">
           <DropdownMenuItem>
-            <UserPlus className="w-4 h-4 mr-2" /> Invite People
+            <UserPlus className="mr-2 h-4 w-4" /> Invite People
           </DropdownMenuItem>
           <DropdownMenuItem>
-            <Settings className="w-4 h-4 mr-2" /> Server Settings
+            <Settings className="mr-2 h-4 w-4" /> Server Settings
           </DropdownMenuItem>
           <DropdownMenuItem>
-            <Users className="w-4 h-4 mr-2" /> Members
+            <Users className="mr-2 h-4 w-4" /> Members
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
-            <Bell className="w-4 h-4 mr-2" /> Notifications
+            <Bell className="mr-2 h-4 w-4" /> Notifications
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="text-red-400 focus:text-red-400">
-            <LogOut className="w-4 h-4 mr-2" /> Leave Server
+          <DropdownMenuItem className="text-red-400 focus:bg-red-500/10 focus:text-red-400">
+            <LogOut className="mr-2 h-4 w-4" /> Leave Server
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Channel List (scrollable) */}
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto px-2 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         {fromCategories && (
-          <div className="space-y-4">
-            {categories!.map((cat) => {
+          <div className="space-y-0.5">
+            {categories!.map((cat, index) => {
               const isExpanded = expandedCategories[cat.id] ?? true
+
               return (
                 <div key={cat.id}>
-                  <div className="flex items-center justify-between px-2 py-1 group">
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(cat.id)}
-                      className="cursor-pointer flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground min-w-0"
-                    >
-                      <ChevronDown
-                        className={`h-3 w-3 transition-transform ${
-                          !isExpanded ? '-rotate-90' : ''
-                        }`}
-                      />
-                      <span>{cat.name}</span>
-                    </button>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={onCreateChannel}
-                          className="cursor-pointer p-1.5 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150 opacity-0 group-hover:opacity-100"
-                          type="button"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>Add Channel</TooltipContent>
-                    </Tooltip>
-                  </div>
+                  <SectionHeader
+                    name={cat.name}
+                    expanded={isExpanded}
+                    onToggle={() => toggleCategory(cat.id)}
+                    onCreateChannel={onCreateChannel}
+                    className={index === 0 ? 'mt-0' : 'mt-4'}
+                  />
 
                   {isExpanded && (
                     <div className="space-y-0.5">
-                      {cat.channels.map((ch) => {
-                        const isActive = ch.id === activeChannelId
-                        const unreadCount = ch.unread
-                        const isVoice = ch.type === 'voice'
-                        return (
-                          <button
-                            key={ch.id}
-                            onClick={() => onSelectChannel(ch.id)}
-                            className={`group relative w-full flex items-center gap-1.5 px-2 py-[6px] rounded-md text-sm transition-colors min-w-0 ${
-                              isActive
-                                ? 'bg-accent text-foreground font-medium'
-                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                            }`}
-                            type="button"
-                          >
-                            {unreadCount > 0 && (
-                              <span className="absolute left-0 w-1 h-2 bg-white rounded-r-full" />
-                            )}
-                            {isVoice ? (
-                              <Volume2 className="w-4 h-4 flex-shrink-0" />
-                            ) : (
-                              <Hash className="w-4 h-4 flex-shrink-0" />
-                            )}
-                            <span className="truncate text-sm flex-1 min-w-0">{ch.name}</span>
-
-                            {unreadCount > 0 && (
-                              <Badge className="ml-auto text-[10px] h-4 min-w-4 bg-red-500 text-white px-1.5 rounded-full">
-                                {unreadCount}
-                              </Badge>
-                            )}
-
-                            <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                                    <UserPlus className="w-3.5 h-3.5" />
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>Invite</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                                    <Settings className="w-3.5 h-3.5" />
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>Settings</TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </button>
-                        )
-                      })}
+                      {cat.channels.map((ch) => (
+                        <React.Fragment key={ch.id}>
+                          <ChannelRow
+                            channel={ch}
+                            active={ch.id === activeChannelId}
+                            onSelect={() => onSelectChannel(ch.id, ch.type)}
+                          />
+                          {ch.type === 'voice' && <VoiceActivityRow channel={ch} />}
+                        </React.Fragment>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -230,252 +510,211 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
           </div>
         )}
 
-        {/* Text Channels Section */}
         {!fromCategories && textChannels.length > 0 && (
           <div>
-            {/* Section Header */}
-            <div className="flex items-center justify-between px-2 py-1 group">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setExpandedText(!expandedText)}
-                  className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-foreground"
-                  type="button"
-                >
-                  <ChevronDown
-                    className={`h-3 w-3 transition-transform ${
-                      !expandedText ? '-rotate-90' : ''
-                    }`}
-                  />
-                </button>
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Text Channels
-                </span>
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={onCreateChannel}
-                    className="cursor-pointer p-1.5 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150 opacity-0 group-hover:opacity-100"
-                    type="button"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Add Channel</TooltipContent>
-              </Tooltip>
-            </div>
+            <SectionHeader
+              name="Text Channels"
+              expanded={expandedText}
+              onToggle={() => setExpandedText(!expandedText)}
+              onCreateChannel={onCreateChannel}
+              className="mt-0"
+            />
 
-            {/* Channel Items */}
             {expandedText && (
               <div className="space-y-0.5">
-                {textChannels.map((channel) => {
-                  const isActive = channel.id === activeChannelId
-                  const unreadCount =
-                    (channel as any)?.unreadCount ?? (channel as any)?.unread_count
-
-                  return (
-                    <button
-                      key={channel.id}
-                      onClick={() => onSelectChannel(channel.id)}
-                      className={`group relative w-full flex items-center gap-1.5 px-2 py-[6px] rounded-md text-sm transition-colors min-w-0 ${
-                        isActive
-                          ? 'bg-accent text-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      }`}
-                      type="button"
-                    >
-                      {typeof unreadCount === 'number' && unreadCount > 0 && (
-                        <span className="absolute left-0 w-1 h-2 bg-white rounded-r-full" />
-                      )}
-                      <Hash className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate text-sm flex-1 min-w-0">{channel.name}</span>
-
-                      {typeof unreadCount === 'number' && unreadCount > 0 && (
-                        <Badge className="ml-auto text-[10px] h-4 min-w-4 bg-red-500 text-white px-1.5 rounded-full">
-                          {unreadCount}
-                        </Badge>
-                      )}
-
-                      {/* Hover Icons */}
-                      <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                              <UserPlus className="w-3.5 h-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Invite</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                              <Settings className="w-3.5 h-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Settings</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </button>
-                  )
-                })}
+                {textChannels.map((channel) => (
+                  <ChannelRow
+                    key={channel.id}
+                    channel={{
+                      id: channel.id,
+                      name: channel.name,
+                      type: 'text',
+                      unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
+                    }}
+                    active={channel.id === activeChannelId}
+                    onSelect={() => onSelectChannel(channel.id, 'text')}
+                  />
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Voice Channels Section */}
         {!fromCategories && voiceChannels.length > 0 && (
           <div>
-            {/* Section Header */}
-            <div className="flex items-center justify-between px-2 py-1 group">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setExpandedVoice(!expandedVoice)}
-                  className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-foreground"
-                  type="button"
-                >
-                  <ChevronDown
-                    className={`h-3 w-3 transition-transform ${
-                      !expandedVoice ? '-rotate-90' : ''
-                    }`}
-                  />
-                </button>
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Voice Channels
-                </span>
+            <SectionHeader
+              name="Voice Channels"
+              expanded={expandedVoice}
+              onToggle={() => setExpandedVoice(!expandedVoice)}
+              onCreateChannel={onCreateChannel}
+            />
+
+            {expandedVoice && (
+              <div className="space-y-0.5">
+                {voiceChannels.map((channel) => (
+                  <React.Fragment key={channel.id}>
+                    <ChannelRow
+                      channel={{
+                        id: channel.id,
+                        name: channel.name,
+                        type: 'voice',
+                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
+                        activeMembers: (channel as any)?.activeMembers,
+                        liveLabel: (channel as any)?.liveLabel,
+                        isLive: (channel as any)?.isLive,
+                      }}
+                      active={channel.id === activeChannelId}
+                      onSelect={() => onSelectChannel(channel.id, 'voice')}
+                    />
+                    <VoiceActivityRow
+                      channel={{
+                        id: channel.id,
+                        name: channel.name,
+                        type: 'voice',
+                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
+                        activeMembers: (channel as any)?.activeMembers,
+                        liveLabel: (channel as any)?.liveLabel,
+                        isLive: (channel as any)?.isLive,
+                      }}
+                    />
+                  </React.Fragment>
+                ))}
               </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {isInVoiceChannel ? (
+        <>
+          <VoiceConnectedPanel channelName={activeVoiceChannelName} serverName={serverName} />
+          <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
+                >
+                  <div className="relative h-8 w-8 flex-shrink-0">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                      <span className="text-xs font-bold text-accent-foreground">Y</span>
+                    </div>
+                    <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
+                      You
+                    </p>
+                    <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
+                  </div>
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="w-40">
+                <ContextMenuItem>Log out</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+
+            <div className="flex items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={onCreateChannel}
-                    className="cursor-pointer p-1.5 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150 opacity-0 group-hover:opacity-100"
                     type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Mic className="h-4 w-4" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Add Channel</TooltipContent>
+                <TooltipContent>Mic</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Headphones className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Headphones</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Settings</TooltipContent>
               </Tooltip>
             </div>
-
-            {/* Channel Items */}
-            {expandedVoice && (
-              <div className="space-y-0.5">
-                {voiceChannels.map((channel) => {
-                  const isActive = channel.id === activeChannelId
-                  const unreadCount =
-                    (channel as any)?.unreadCount ?? (channel as any)?.unread_count
-
-                  return (
-                    <button
-                      key={channel.id}
-                      onClick={() => onSelectChannel(channel.id)}
-                      className={`group relative w-full flex items-center gap-1.5 px-2 py-[6px] rounded-md text-sm transition-colors min-w-0 ${
-                        isActive
-                          ? 'bg-accent text-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      }`}
-                      type="button"
-                    >
-                      {typeof unreadCount === 'number' && unreadCount > 0 && (
-                        <span className="absolute left-0 w-1 h-2 bg-white rounded-r-full" />
-                      )}
-                      <Volume2 className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate text-sm flex-1 min-w-0">{channel.name}</span>
-
-                      {typeof unreadCount === 'number' && unreadCount > 0 && (
-                        <Badge className="ml-auto text-[10px] h-4 min-w-4 bg-red-500 text-white px-1.5 rounded-full">
-                          {unreadCount}
-                        </Badge>
-                      )}
-
-                      {/* Hover Icons */}
-                      <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                              <UserPlus className="w-3.5 h-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Invite</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150">
-                              <Settings className="w-3.5 h-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Settings</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
+              >
+                <div className="relative h-8 w-8 flex-shrink-0">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                    <span className="text-xs font-bold text-accent-foreground">Y</span>
+                  </div>
+                  <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
+                    You
+                  </p>
+                  <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
+                </div>
+              </button>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-40">
+              <ContextMenuItem>Log out</ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
 
-      {/* Bottom User Panel (52px) */}
-      <div className="h-[52px] px-2 border-t border-border bg-[hsl(240,6%,10%)] flex items-center justify-between">
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div className="cursor-pointer flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-accent-foreground">Y</span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">You</p>
-                <p className="text-xs text-muted-foreground truncate">Online</p>
-              </div>
-            </div>
-          </ContextMenuTrigger>
-          <ContextMenuContent className="w-40">
-            <ContextMenuItem>Log out</ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-
-        {/* Icons */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer h-7 w-7 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150"
-              >
-                <Mic className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Mic</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer h-7 w-7 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150"
-              >
-                <Headphones className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Headphones</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer h-7 w-7 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Mic</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Headphones className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Headphones</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }
