@@ -19,7 +19,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md bg-card rounded-lg shadow-2xl px-8 py-10 space-y-6">
+      <div className="w-full max-w-md bg-[hsl(240,6%,10%)] rounded-lg shadow-2xl px-8 py-10 space-y-6">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">
             {mode === 'login' ? 'Welcome back!' : 'Create an account'}

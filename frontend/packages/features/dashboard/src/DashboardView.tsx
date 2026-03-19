@@ -85,7 +85,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
         </footer>
       </main>
 
-      <aside className="w-60 bg-card border-l border-border flex flex-col">
+      <aside className="w-60 bg-[hsl(240,6%,10%)] border-l border-border flex flex-col">
         <div className="h-12 border-b border-border px-3 flex items-center text-xs font-semibold text-muted-foreground">
           MEMBERS — {mockUsers.length}
         </div>
@@ -119,7 +119,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
         onOpenChange={setIsCreateChannelOpen}
       />
 
-      <div className="absolute bottom-0 right-0 w-60 h-16 bg-card border-t border-border border-l px-3 py-2 flex items-center justify-between">
+      <div className="absolute bottom-0 right-0 w-60 h-16 bg-[hsl(240,6%,10%)] border-t border-border border-l px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold"
