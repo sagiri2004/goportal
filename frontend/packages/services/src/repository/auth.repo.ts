@@ -13,20 +13,10 @@ import type { RegisterRequest, LoginRequest, LoginResponseData } from '@goportal
 import { shouldUseMockData } from '@goportal/config'
 import { apiClient } from '../api/client'
 
-// Mock data for auth
-const mockUsers = [
+const mockAuthCredentials = [
   { username: 'demo', password: 'Demo123!' },
   { username: 'testuser', password: 'Test123!' },
 ]
-
-const mockLoginResponse: LoginResponseData = {
-  token: 'mock_jwt_token_' + Date.now(),
-  user: {
-    id: 'user-' + Date.now(),
-    username: 'demo',
-    is_admin: false,
-  },
-}
 
 const simulateDelay = async () => {
   await new Promise(resolve => setTimeout(resolve, 500))
@@ -70,15 +60,16 @@ export const authRepo = {
     if (shouldUseMockData()) {
       await simulateDelay()
       // Mock: Check against mock users
-      const user = mockUsers.find(u => u.username === body.username)
+      const user = mockAuthCredentials.find(u => u.username === body.username)
       if (!user || user.password !== body.password) {
         throw new Error('Invalid username or password')
       }
       return {
-        ...mockLoginResponse,
+        token: 'mock_jwt_token_' + Date.now(),
         user: {
-          ...mockLoginResponse.user,
+          id: 'user-' + Date.now(),
           username: body.username,
+          is_admin: false,
         },
       }
     }
@@ -92,4 +83,3 @@ export const authRepo = {
     }
   },
 }
-

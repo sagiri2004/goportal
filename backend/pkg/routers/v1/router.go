@@ -34,6 +34,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	servers.Use(middlewares.AuthMiddleware())
 	{
 		servers.GET("", v1.Server.ListMine)
+		servers.GET("/:id", v1.Server.GetByID)
 		servers.POST("", v1.Server.Create)
 		servers.POST("/:id/join", v1.Server.JoinPublic)
 		servers.POST("/:id/join-requests", v1.Server.CreateJoinRequest)

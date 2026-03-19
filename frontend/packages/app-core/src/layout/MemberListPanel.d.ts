@@ -1,5 +1,5 @@
 import React from 'react';
-import type { MockMember } from '../lib/mock-data';
+import type { MockMember } from '../mock';
 type MemberListPanelProps = {
     members: MockMember[];
 };

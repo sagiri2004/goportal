@@ -1,6 +1,6 @@
 import React from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { mockUsers } from './mockData'
+import { mockUsers } from '@goportal/app-core'
 import { Users } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 
@@ -62,4 +62,3 @@ export const DMView: React.FC = () => {
     </div>
   )
 }
-

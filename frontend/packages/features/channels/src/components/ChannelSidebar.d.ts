@@ -21,9 +21,11 @@ type ChannelSidebarProps = {
         }>;
     }>;
     activeChannelId?: string;
-    onSelectChannel?: (channelId: string) => void;
+    onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void;
     onCreateChannel?: () => void;
     onInviteMember?: () => void;
+    isInVoiceChannel?: boolean;
+    activeVoiceChannelName?: string;
 };
 type ChannelMember = {
     id: string;

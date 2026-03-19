@@ -65,6 +65,28 @@ func (ctrl *serverController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, serializers.Success("OK", "Server created", serializers.NewServerResponse(server)))
 }
 
+func (ctrl *serverController) GetByID(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	serverID := c.Param("id")
+	server, err := containers.ServerService().GetServerByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, serializers.Success("OK", "Server fetched", serializers.NewServerResponse(server)))
+}
+
 func (ctrl *serverController) ListMembers(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {

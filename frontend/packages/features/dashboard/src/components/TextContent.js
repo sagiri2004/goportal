@@ -17,6 +17,7 @@ const transformSegments = (segments, pattern, type, pickValue = (match) => match
             next.push(segment);
             return;
         }
+        pattern.lastIndex = 0;
         let lastIndex = 0;
         let match = pattern.exec(segment.value);
         while (match) {

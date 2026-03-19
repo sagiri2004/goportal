@@ -17,8 +17,9 @@ import {
 } from 'lucide-react'
 import { useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
-import { mockMessages } from '@goportal/app-core'
+import { getMessages, sendMessage } from '@goportal/app-core'
 import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
+import type { Message as ChatMessage } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
 import { useDropzone } from 'react-dropzone'
 import { TextContent } from './components/TextContent'
@@ -39,8 +40,12 @@ type ShellContext = {
 
 export const DashboardView: React.FC = () => {
   const { showMembers, setShowMembers, activeChannelId } = useOutletContext<ShellContext>()
-  const [messagesByChannel, setMessagesByChannel] = useState(mockMessages)
+  const [messagesByChannel, setMessagesByChannel] = useState<Record<string, ChatMessage[]>>({})
+  const [pagingByChannel, setPagingByChannel] = useState<
+    Record<string, { offset: number; hasMore: boolean; isLoadingMore: boolean }>
+  >({})
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null)
+  const messageListRef = useRef<HTMLElement>(null)
   const inputRef = useRef<HTMLDivElement>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [composerHasContent, setComposerHasContent] = useState(false)
@@ -58,10 +63,7 @@ export const DashboardView: React.FC = () => {
     [activeChannelId]
   )
 
-  const activeChannelKey = useMemo(
-    () => (messagesByChannel[activeChannelId] ? activeChannelId : 'general'),
-    [activeChannelId, messagesByChannel]
-  )
+  const activeChannelKey = activeChannelId
 
   const activeMessages = useMemo(
     () => messagesByChannel[activeChannelKey] ?? [],
@@ -83,6 +85,101 @@ export const DashboardView: React.FC = () => {
       return { ...m, startsGroup }
     })
   }, [activeMessages])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadInitialMessages = async () => {
+      if (!activeChannelId) {
+        return
+      }
+
+      const page = await getMessages(activeChannelId, {
+        limit: 50,
+        offset: 0,
+      })
+
+      if (isCancelled) {
+        return
+      }
+
+      setMessagesByChannel((prev) => ({
+        ...prev,
+        [activeChannelId]: page.items,
+      }))
+
+      setPagingByChannel((prev) => ({
+        ...prev,
+        [activeChannelId]: {
+          offset: page.offset + page.items.length,
+          hasMore: page.items.length === 50,
+          isLoadingMore: false,
+        },
+      }))
+    }
+
+    void loadInitialMessages()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeChannelId])
+
+  const handleScrollToLoadMore = useCallback(
+    async (event: React.UIEvent<HTMLElement>) => {
+      const container = event.currentTarget
+      if (container.scrollTop > 48) {
+        return
+      }
+
+      const pageState = pagingByChannel[activeChannelId]
+      if (!pageState || !pageState.hasMore || pageState.isLoadingMore) {
+        return
+      }
+
+      setPagingByChannel((prev) => ({
+        ...prev,
+        [activeChannelId]: {
+          ...pageState,
+          isLoadingMore: true,
+        },
+      }))
+
+      const previousHeight = container.scrollHeight
+      const page = await getMessages(activeChannelId, {
+        limit: 50,
+        offset: pageState.offset,
+      })
+
+      setMessagesByChannel((prev) => {
+        const current = prev[activeChannelId] ?? []
+        const next = [...page.items, ...current]
+        const deduped = next.filter(
+          (message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index
+        )
+
+        return {
+          ...prev,
+          [activeChannelId]: deduped,
+        }
+      })
+
+      setPagingByChannel((prev) => ({
+        ...prev,
+        [activeChannelId]: {
+          offset: pageState.offset + page.items.length,
+          hasMore: page.items.length === 50,
+          isLoadingMore: false,
+        },
+      }))
+
+      requestAnimationFrame(() => {
+        const updatedHeight = container.scrollHeight
+        container.scrollTop = updatedHeight - previousHeight + container.scrollTop
+      })
+    },
+    [activeChannelId, pagingByChannel]
+  )
 
   const extractFirstUrl = useCallback((text: string): string | null => {
     const match = text.match(/https?:\/\/[^\s<]+/i)
@@ -252,23 +349,12 @@ export const DashboardView: React.FC = () => {
   }, [])
 
   const onSend = useCallback(
-    ({ content, files }: { content: string; files: File[] }) => {
-      const now = new Date()
-      const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-      const attachments = files.map((file, index) => ({
-        id: `upload-${now.getTime()}-${index}`,
-        type: file.type.startsWith('image/')
-          ? ('image' as const)
-          : file.type.startsWith('video/')
-            ? ('video' as const)
-            : file.type.startsWith('audio/')
-              ? ('audio' as const)
-              : ('file' as const),
-        url: URL.createObjectURL(file),
-        filename: file.name,
-        filesize: file.size,
-        mimeType: file.type || 'application/octet-stream',
-      }))
+    async ({ content, files }: { content: string; files: File[] }) => {
+      if (!activeChannelId) {
+        return
+      }
+
+      const message = await sendMessage(activeChannelId, content)
 
       setMessagesByChannel((prev) => {
         const currentMessages = prev[activeChannelKey] ?? []
@@ -277,33 +363,41 @@ export const DashboardView: React.FC = () => {
           [activeChannelKey]: [
             ...currentMessages,
             {
-              id: `m-${now.getTime()}`,
-              authorId: 'you',
-              author: 'you',
-              authorColor: 'text-indigo-300',
-              avatarColor: 'bg-indigo-500',
-              avatarInitials: 'Y',
-              content,
-              timestamp,
-              date: 'Today',
-              attachments,
+              ...message,
+              // TODO: remove when backend attachment upload flow is integrated with composer
+              attachments: files.length > 0
+                ? files.map((file, index) => ({
+                    id: `upload-${Date.now()}-${index}`,
+                    type: file.type.startsWith('image/')
+                      ? ('image' as const)
+                      : file.type.startsWith('video/')
+                        ? ('video' as const)
+                        : file.type.startsWith('audio/')
+                          ? ('audio' as const)
+                          : ('file' as const),
+                    url: URL.createObjectURL(file),
+                    filename: file.name,
+                    filesize: file.size,
+                    mimeType: file.type || 'application/octet-stream',
+                  }))
+                : message.attachments,
             },
           ],
         }
       })
     },
-    [activeChannelKey]
+    [activeChannelId, activeChannelKey]
   )
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
+    async (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
         const content = inputRef.current?.innerText.trim() ?? ''
         if (!content && pendingFiles.length === 0) {
           return
         }
-        onSend({ content, files: pendingFiles })
+        await onSend({ content, files: pendingFiles })
         if (inputRef.current) {
           inputRef.current.innerText = ''
         }
@@ -368,7 +462,11 @@ export const DashboardView: React.FC = () => {
         />
       </div>
 
-      <section className="flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+      <section
+        ref={messageListRef}
+        onScroll={handleScrollToLoadMore}
+        className="flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
+      >
         <div className="py-4">
           <Hash className="w-16 h-16 p-3 rounded-full bg-muted text-muted-foreground mb-4" />
           <h2 className="text-2xl font-bold text-foreground">

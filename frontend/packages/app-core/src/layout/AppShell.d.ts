@@ -12,5 +12,6 @@
  * - members Panel conditionally mounted — PanelGroup re-evaluates sizes on mount
  */
 import React from 'react';
+export declare const ResizeHandle: React.FC;
 export declare const AppShell: React.FC;
 //# sourceMappingURL=AppShell.d.ts.map

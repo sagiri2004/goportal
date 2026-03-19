@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import type { MockMember } from '../lib/mock-data'
+import type { MockMember } from '../mock'
 import { MoreHorizontal } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 
@@ -77,4 +77,3 @@ export const MemberListPanel: React.FC<MemberListPanelProps> = ({ members }) => 
     </div>
   )
 }
-

@@ -59,6 +59,25 @@ func (s *serverService) ListUserServers(ctx context.Context, userID string) ([]m
 	return s.serverRepo.ListByUserID(ctx, userID)
 }
 
+func (s *serverService) GetServerByID(ctx context.Context, actorID, serverID string) (*models.Server, error) {
+	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
+	if actorID == "" || serverID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+
+	server, err := s.serverRepo.FindByID(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.serverRepo.FindMember(ctx, serverID, actorID); err != nil {
+		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+
+	return server, nil
+}
+
 func (s *serverService) ListMembers(ctx context.Context, actorID, serverID string) ([]models.User, error) {
 	actorID = strings.TrimSpace(actorID)
 	serverID = strings.TrimSpace(serverID)

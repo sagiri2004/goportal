@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { mockUsers } from './mockData';
+import { mockUsers } from '@goportal/app-core';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
 const statusDotClass = {
     online: 'bg-green-500',

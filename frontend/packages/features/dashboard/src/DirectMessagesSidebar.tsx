@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { mockUsers } from './mockData'
+import { mockUsers } from '@goportal/app-core'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 
 const statusDotClass: Record<string, string> = {
@@ -67,4 +67,3 @@ export const DirectMessagesSidebar: React.FC = () => {
     </aside>
   )
 }
-

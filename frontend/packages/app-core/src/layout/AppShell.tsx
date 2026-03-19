@@ -25,7 +25,16 @@ import { ServerRail } from '@goportal/feature-servers'
 import { ChannelSidebar } from '@goportal/feature-channels'
 import { DirectMessagesSidebar } from '@goportal/feature-dashboard'
 import { MemberListPanel } from './MemberListPanel'
-import { mockChannels, mockMembers, mockServers } from '../lib/mock-data'
+import type { MockCategory, MockServer } from '../mock/servers'
+import type { MockMember } from '../mock/members'
+import {
+  createChannel,
+  createServer,
+  getChannels,
+  getMembers,
+  getServerById,
+  getServers,
+} from '../services'
 
 // ─── Panel size constants (% of PanelGroup width, must sum ≤ 100) ────────────
 const SIZE = {
@@ -53,6 +62,10 @@ export const AppShell: React.FC = () => {
   const [activeServerId, setActiveServerId] = useState('1')
   const [activeChannelId, setActiveChannelId] = useState('general')
   const [showMembers, setShowMembers] = useState(false)
+  const [servers, setServers] = useState<MockServer[]>([])
+  const [serverDetails, setServerDetails] = useState<Record<string, MockServer>>({})
+  const [channelsByServer, setChannelsByServer] = useState<Record<string, MockCategory[]>>({})
+  const [membersByServer, setMembersByServer] = useState<Record<string, MockMember[]>>({})
 
   // Imperative handle — resize main panel when member list toggles
   const mainRef = useRef<PanelImperativeHandle>(null)
@@ -82,15 +95,143 @@ export const AppShell: React.FC = () => {
     }
   }, [isVoiceMode])
 
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadServers = async () => {
+      const data = await getServers()
+      if (isCancelled) {
+        return
+      }
+
+      setServers(data)
+
+      if (data.length === 0) {
+        return
+      }
+
+      const paramServerId = params.serverId
+      const nextServerId =
+        paramServerId && data.some((server) => server.id === paramServerId)
+          ? paramServerId
+          : data[0].id
+      setActiveServerId(nextServerId)
+
+      if (!paramServerId || paramServerId !== nextServerId || location.pathname === '/app') {
+        navigate(`/app/servers/${nextServerId}/channels/general`, { replace: true })
+      }
+    }
+
+    void loadServers()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [location.pathname, navigate, params.serverId])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadServerDetail = async () => {
+      if (!activeServerId) {
+        return
+      }
+
+      const detail = await getServerById(activeServerId)
+      if (!detail || isCancelled) {
+        return
+      }
+
+      setServerDetails((prev) => ({
+        ...prev,
+        [activeServerId]: detail,
+      }))
+    }
+
+    void loadServerDetail()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeServerId])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadChannels = async () => {
+      if (!activeServerId) {
+        return
+      }
+
+      const data = await getChannels(activeServerId)
+      if (isCancelled) {
+        return
+      }
+
+      setChannelsByServer((prev) => ({
+        ...prev,
+        [activeServerId]: data.categories,
+      }))
+
+      const availableChannels = data.categories.flatMap((category) => category.channels)
+      const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId)
+
+      if (!hasActiveChannel && availableChannels.length > 0) {
+        const fallbackChannel = availableChannels[0]
+        setActiveChannelId(fallbackChannel.id)
+        navigate(`/app/servers/${activeServerId}/channels/${fallbackChannel.id}`, { replace: true })
+      }
+    }
+
+    void loadChannels()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeChannelId, activeServerId, navigate])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadMembers = async () => {
+      if (!activeServerId) {
+        return
+      }
+
+      const data = await getMembers(activeServerId)
+      if (isCancelled) {
+        return
+      }
+
+      setMembersByServer((prev) => ({
+        ...prev,
+        [activeServerId]: data,
+      }))
+    }
+
+    void loadMembers()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeServerId])
+
   const toggleMembers = useCallback(() => setShowMembers((v) => !v), [])
 
-  const activeServer     = useMemo(
-    () => mockServers.find((s) => s.id === activeServerId) ?? mockServers[0],
-    [activeServerId],
+  const activeServer = useMemo(
+    () =>
+      serverDetails[activeServerId] ??
+      servers.find((server) => server.id === activeServerId) ??
+      servers[0],
+    [activeServerId, serverDetails, servers]
   )
   const activeCategories = useMemo(
-    () => mockChannels[activeServerId]?.categories ?? [],
-    [activeServerId],
+    () => channelsByServer[activeServerId] ?? [],
+    [activeServerId, channelsByServer]
+  )
+  const activeMembers = useMemo(
+    () => membersByServer[activeServerId] ?? [],
+    [activeServerId, membersByServer]
   )
 
   // Context passed to all child routes via <Outlet>
@@ -115,12 +256,28 @@ export const AppShell: React.FC = () => {
         {/* ── Server Rail (fixed width, outside PanelGroup) ── */}
         <div className="w-[72px] flex-none overflow-hidden">
           <ServerRail
-            servers={mockServers}
+            servers={servers}
             activeServerId={activeServerId}
-            onSelectServer={(id) => {
-              setActiveServerId(id)
+            onSelectServer={(serverId) => {
+              setActiveServerId(serverId)
               setActiveChannelId('general')
-              navigate(`/app/servers/${id}/channels/general`)
+              navigate(`/app/servers/${serverId}/channels/general`)
+            }}
+            onCreateServer={async () => {
+              const name = window.prompt('Server name')
+              if (!name || !name.trim()) {
+                return
+              }
+
+              const created = await createServer({
+                name: name.trim(),
+                is_public: true,
+              })
+
+              setServers((prev) => [...prev, created])
+              setActiveServerId(created.id)
+              setActiveChannelId('general')
+              navigate(`/app/servers/${created.id}/channels/general`)
             }}
           />
         </div>
@@ -161,6 +318,27 @@ export const AppShell: React.FC = () => {
                     }
                     navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
                   }}
+                  onCreateChannel={async () => {
+                    if (!activeServerId) {
+                      return
+                    }
+
+                    const name = window.prompt('Channel name')
+                    if (!name || !name.trim()) {
+                      return
+                    }
+
+                    await createChannel(activeServerId, {
+                      name: name.trim(),
+                      type: 'TEXT',
+                    })
+
+                    const refreshed = await getChannels(activeServerId)
+                    setChannelsByServer((prev) => ({
+                      ...prev,
+                      [activeServerId]: refreshed.categories,
+                    }))
+                  }}
                   isInVoiceChannel={isVoiceMode}
                   activeVoiceChannelName={activeChannelId}
                 />
@@ -176,7 +354,7 @@ export const AppShell: React.FC = () => {
             panelRef={mainRef}             // ← ref, not panelRef
             defaultSize={showMembers ? SIZE.mainWithMembers : SIZE.mainAlone}
             minSize={35}
-            maxSize={180}
+            maxSize={120}
             className="overflow-hidden"
           >
             {/*
@@ -201,13 +379,13 @@ export const AppShell: React.FC = () => {
                 className="overflow-hidden"
               >
                 <div className="h-full overflow-hidden border-l border-border bg-[hsl(240,6%,10%)]">
-                  <MemberListPanel members={mockMembers} />
+                  <MemberListPanel members={activeMembers} />
                 </div>
               </Panel>
             </>
           )}
         </PanelGroup>
-
+        
       </div>
     </TooltipProvider>
   )

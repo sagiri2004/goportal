@@ -16,6 +16,9 @@ export const useLogin = () => {
   return useMutation({
     mutationFn: (body: LoginRequest) => authRepo.login(body),
     onSuccess: (data) => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('auth-token', data.token)
+      }
       setToken(data.token)
       setUser(data.user)
     },

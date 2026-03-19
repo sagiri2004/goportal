@@ -410,4 +410,3 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
     </>
   )
 }
-

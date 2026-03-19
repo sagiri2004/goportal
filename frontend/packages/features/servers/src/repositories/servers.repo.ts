@@ -1,7 +1,7 @@
 import type { ServerDTO, CreateServerRequest } from '@goportal/types'
 import { apiClient } from '@goportal/services'
 import { shouldUseMockData } from '@goportal/config'
-import { mockServersData, simulateDelay } from '../mockData'
+import { mockServersData, simulateDelay } from '@goportal/app-core'
 
 /**
  * Servers Repository

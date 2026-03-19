@@ -4,11 +4,11 @@ import { AuthLayout } from './AuthLayout';
 import { PrivateRoute } from './PrivateRoute';
 import { AppShell } from './layout/AppShell';
 import { AuthView } from '@goportal/feature-auth';
-import { DashboardView, DMView } from '@goportal/feature-dashboard';
+import { DashboardView, DMView, VoiceChannelView } from '@goportal/feature-dashboard';
 export const Router = () => {
     const handleAuthSuccess = () => {
         window.location.href = '/app';
     };
-    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "@me", element: _jsx(DMView, {}) })] }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
+    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(Navigate, { to: "/app/servers/1/channels/general", replace: true }) }), _jsx(Route, { path: "@me", element: _jsx(DMView, {}) }), _jsx(Route, { path: "servers/:serverId/channels/:channelId", element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "servers/:serverId/voice/:channelId", element: _jsx(VoiceChannelView, {}) })] }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
 };
 //# sourceMappingURL=Router.js.map
