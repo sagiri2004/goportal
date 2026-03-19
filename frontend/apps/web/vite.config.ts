@@ -26,6 +26,7 @@ export default defineConfig({
       '@goportal/feature-auth': path.resolve(__dirname, '../../packages/features/auth/src'),
       '@goportal/feature-dashboard': path.resolve(__dirname, '../../packages/features/dashboard/src'),
       '@goportal/feature-dashboard/mockData': path.resolve(__dirname, '../../packages/features/dashboard/mockData.ts'),
+      '@goportal/feature-servers': path.resolve(__dirname, '../../packages/features/servers/src'),
       '@goportal/feature-server-list': path.resolve(__dirname, '../../packages/features/server-list/src'),
       '@goportal/feature-channels': path.resolve(__dirname, '../../packages/features/channels/src'),
       '@goportal/feature-chat': path.resolve(__dirname, '../../packages/features/chat/src'),
