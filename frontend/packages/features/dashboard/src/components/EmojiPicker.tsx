@@ -38,6 +38,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           side="top"
           align={align}
           sideOffset={8}
+          avoidCollisions
+          collisionPadding={16}
         >
           <Picker
             data={data}

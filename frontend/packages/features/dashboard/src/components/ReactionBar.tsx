@@ -1,22 +1,17 @@
 import React from 'react'
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
-import { SmilePlus } from 'lucide-react'
 import type { Reaction } from '@goportal/app-core'
 
 type ReactionBarProps = {
   reactions: Reaction[]
   onToggleReaction: (emoji: string) => void
-  showAddReaction: boolean
-  onOpenEmojiPicker: () => void
 }
 
 export const ReactionBar: React.FC<ReactionBarProps> = ({
   reactions,
   onToggleReaction,
-  showAddReaction,
-  onOpenEmojiPicker,
 }) => {
-  if (reactions.length === 0 && !showAddReaction) {
+  if (reactions.length === 0) {
     return null
   }
 
@@ -54,16 +49,6 @@ export const ReactionBar: React.FC<ReactionBarProps> = ({
           </TooltipContent>
         </Tooltip>
       ))}
-
-      {showAddReaction && (
-        <button
-          type="button"
-          onClick={onOpenEmojiPicker}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[hsl(240,4%,22%)] bg-[hsl(240,4%,16%)] text-sm text-muted-foreground transition-colors hover:bg-[hsl(240,4%,22%)] hover:text-foreground"
-        >
-          <SmilePlus className="h-3.5 w-3.5" />
-        </button>
-      )}
     </div>
   )
 }

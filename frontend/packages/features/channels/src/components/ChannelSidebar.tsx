@@ -27,6 +27,10 @@ import {
   Users,
   LogOut,
   Zap,
+  Monitor,
+  MoreHorizontal,
+  PhoneOff,
+  Wifi,
 } from 'lucide-react'
 
 type ChannelSidebarProps = {
@@ -51,9 +55,11 @@ type ChannelSidebarProps = {
     }>
   }>
   activeChannelId?: string
-  onSelectChannel?: (channelId: string) => void
+  onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void
   onCreateChannel?: () => void
   onInviteMember?: () => void
+  isInVoiceChannel?: boolean
+  activeVoiceChannelName?: string
 }
 
 type ChannelMember = {
@@ -238,6 +244,78 @@ const VoiceActivityRow: React.FC<{
   )
 }
 
+const VoiceConnectedPanel: React.FC<{
+  channelName: string
+  serverName: string
+}> = ({ channelName, serverName }) => {
+  const [muted, setMuted] = useState(false)
+  const [deafened, setDeafened] = useState(false)
+  const [sharing, setSharing] = useState(false)
+
+  return (
+    <div className="bg-[hsl(240,7%,7%)] px-2 pb-1.5 pt-1.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="mb-0.5 flex items-center gap-1.5">
+            <Wifi className="h-3.5 w-3.5 text-green-500" />
+            <p className="text-xs font-semibold text-green-400">Đã Kết Nối Giọng Nói</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
+        >
+          <PhoneOff className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mb-1 truncate text-xs text-muted-foreground">#{channelName} / {serverName}</p>
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setMuted((v) => !v)}
+          className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            muted
+              ? 'text-red-400 hover:bg-red-500/20'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Mic className="h-4 w-4" />
+          {muted && <span className="absolute h-[2px] w-5 rotate-[-35deg] bg-red-400" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeafened((v) => !v)}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            deafened
+              ? 'text-red-400 hover:bg-red-500/20'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Headphones className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setSharing((v) => !v)}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+            sharing
+              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/25'
+              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+          }`}
+        >
+          <Monitor className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-accent hover:text-[hsl(0,0%,96%)]"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /**
  * ChannelSidebar - 240px wide sidebar showing channels for a server
  */
@@ -254,6 +332,8 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onSelectChannel = () => {},
   onCreateChannel = () => {},
   onInviteMember = () => {},
+  isInVoiceChannel = false,
+  activeVoiceChannelName = 'afk-base',
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
@@ -417,7 +497,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                           <ChannelRow
                             channel={ch}
                             active={ch.id === activeChannelId}
-                            onSelect={() => onSelectChannel(ch.id)}
+                            onSelect={() => onSelectChannel(ch.id, ch.type)}
                           />
                           {ch.type === 'voice' && <VoiceActivityRow channel={ch} />}
                         </React.Fragment>
@@ -452,7 +532,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                       unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
                     }}
                     active={channel.id === activeChannelId}
-                    onSelect={() => onSelectChannel(channel.id)}
+                    onSelect={() => onSelectChannel(channel.id, 'text')}
                   />
                 ))}
               </div>
@@ -484,7 +564,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         isLive: (channel as any)?.isLive,
                       }}
                       active={channel.id === activeChannelId}
-                      onSelect={() => onSelectChannel(channel.id)}
+                      onSelect={() => onSelectChannel(channel.id, 'voice')}
                     />
                     <VoiceActivityRow
                       channel={{
@@ -505,68 +585,136 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         )}
       </div>
 
-      <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
-            >
-              <div className="relative h-8 w-8 flex-shrink-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
-                  <span className="text-xs font-bold text-accent-foreground">Y</span>
-                </div>
-                <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
-              </div>
-              <div className="min-w-0 text-left">
-                <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
-                  You
-                </p>
-                <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
-              </div>
-            </button>
-          </ContextMenuTrigger>
-          <ContextMenuContent className="w-40">
-            <ContextMenuItem>Log out</ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
+      {isInVoiceChannel ? (
+        <>
+          <VoiceConnectedPanel channelName={activeVoiceChannelName} serverName={serverName} />
+          <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
+                >
+                  <div className="relative h-8 w-8 flex-shrink-0">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                      <span className="text-xs font-bold text-accent-foreground">Y</span>
+                    </div>
+                    <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
+                      You
+                    </p>
+                    <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
+                  </div>
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="w-40">
+                <ContextMenuItem>Log out</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
 
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
+            <div className="flex items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Mic</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Headphones className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Headphones</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Settings</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
               >
-                <Mic className="h-4 w-4" />
+                <div className="relative h-8 w-8 flex-shrink-0">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                    <span className="text-xs font-bold text-accent-foreground">Y</span>
+                  </div>
+                  <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
+                    You
+                  </p>
+                  <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
+                </div>
               </button>
-            </TooltipTrigger>
-            <TooltipContent>Mic</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-              >
-                <Headphones className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Headphones</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-40">
+              <ContextMenuItem>Log out</ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Mic</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Headphones className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Headphones</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }

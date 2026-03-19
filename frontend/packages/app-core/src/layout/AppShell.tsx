@@ -13,7 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Group as PanelGroup,
   Panel,
@@ -36,7 +36,7 @@ const SIZE = {
 } as const
 
 // ─── Resize handle ────────────────────────────────────────────────────────────
-const ResizeHandle: React.FC = () => (
+export const ResizeHandle: React.FC = () => (
   <PanelResizeHandle className="group relative w-[6px] flex-shrink-0 cursor-col-resize bg-transparent">
     <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors duration-150 group-hover:bg-indigo-500/60 group-active:bg-indigo-500" />
   </PanelResizeHandle>
@@ -44,12 +44,15 @@ const ResizeHandle: React.FC = () => (
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 export const AppShell: React.FC = () => {
-  const location  = useLocation()
-  const isDmMode  = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
+  const location = useLocation()
+  const navigate = useNavigate()
+  const params = useParams<{ serverId?: string; channelId?: string }>()
+  const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
+  const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname])
 
-  const [activeServerId,  setActiveServerId]  = useState('1')
+  const [activeServerId, setActiveServerId] = useState('1')
   const [activeChannelId, setActiveChannelId] = useState('general')
-  const [showMembers,     setShowMembers]     = useState(false)
+  const [showMembers, setShowMembers] = useState(false)
 
   // Imperative handle — resize main panel when member list toggles
   const mainRef = useRef<PanelImperativeHandle>(null)
@@ -60,6 +63,24 @@ export const AppShell: React.FC = () => {
     const target = showMembers ? SIZE.mainWithMembers : SIZE.mainAlone
     mainRef.current?.resize(target)
   }, [showMembers])
+
+  useEffect(() => {
+    if (params.serverId) {
+      setActiveServerId(params.serverId)
+    }
+  }, [params.serverId])
+
+  useEffect(() => {
+    if (params.channelId) {
+      setActiveChannelId(params.channelId)
+    }
+  }, [params.channelId])
+
+  useEffect(() => {
+    if (isVoiceMode) {
+      setShowMembers(false)
+    }
+  }, [isVoiceMode])
 
   const toggleMembers = useCallback(() => setShowMembers((v) => !v), [])
 
@@ -99,6 +120,7 @@ export const AppShell: React.FC = () => {
             onSelectServer={(id) => {
               setActiveServerId(id)
               setActiveChannelId('general')
+              navigate(`/app/servers/${id}/channels/general`)
             }}
           />
         </div>
@@ -131,7 +153,16 @@ export const AppShell: React.FC = () => {
                   serverBoostLevel={activeServer?.boostLevel}
                   categories={activeCategories}
                   activeChannelId={activeChannelId}
-                  onSelectChannel={setActiveChannelId}
+                  onSelectChannel={(channelId, type) => {
+                    setActiveChannelId(channelId)
+                    if (type === 'voice') {
+                      navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+                      return
+                    }
+                    navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
+                  }}
+                  isInVoiceChannel={isVoiceMode}
+                  activeVoiceChannelName={activeChannelId}
                 />
               )}
             </div>
@@ -159,7 +190,7 @@ export const AppShell: React.FC = () => {
           </Panel>
 
           {/* Member list — conditionally mounted */}
-          {showMembers && (
+          {showMembers && !isVoiceMode && (
             <>
               <ResizeHandle />
               <Panel

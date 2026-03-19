@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Separator } from '@goportal/ui'
+import { Separator, cn } from '@goportal/ui'
 import { ChannelHeader } from '@goportal/feature-channels'
 import {
   Edit,
@@ -18,6 +18,7 @@ import {
 import { useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 import { mockMessages } from '@goportal/app-core'
+import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
 import { useDropzone } from 'react-dropzone'
 import { TextContent } from './components/TextContent'
@@ -39,11 +40,13 @@ type ShellContext = {
 export const DashboardView: React.FC = () => {
   const { showMembers, setShowMembers, activeChannelId } = useOutletContext<ShellContext>()
   const [messagesByChannel, setMessagesByChannel] = useState(mockMessages)
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null)
   const inputRef = useRef<HTMLDivElement>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [composerHasContent, setComposerHasContent] = useState(false)
+  const embedCacheRef = useRef<Record<string, LinkEmbedData | null>>({})
+  const embedInFlightRef = useRef<Record<string, boolean>>({})
+  const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
 
   const activeChannel = useMemo(
     () =>
@@ -80,6 +83,93 @@ export const DashboardView: React.FC = () => {
       return { ...m, startsGroup }
     })
   }, [activeMessages])
+
+  const extractFirstUrl = useCallback((text: string): string | null => {
+    const match = text.match(/https?:\/\/[^\s<]+/i)
+    return match ? match[0] : null
+  }, [])
+
+  useEffect(() => {
+    let isCancelled = false
+    const messagesNeedingEmbed = activeMessages.filter(
+      (message) => (!message.embeds || message.embeds.length === 0) && !!extractFirstUrl(message.content)
+    )
+
+    messagesNeedingEmbed.forEach((message) => {
+      const url = extractFirstUrl(message.content)
+      if (!url) {
+        return
+      }
+
+      if (embedCacheRef.current[url] !== undefined) {
+        const cached = embedCacheRef.current[url]
+        if (cached) {
+          setAutoEmbedsByUrl((prev) => (prev[url] ? prev : { ...prev, [url]: cached }))
+        }
+        return
+      }
+
+      if (embedInFlightRef.current[url]) {
+        return
+      }
+
+      embedInFlightRef.current[url] = true
+      const apiUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+
+      fetch(apiUrl)
+        .then((response) => response.json() as Promise<{ contents?: string }>)
+        .then((payload) => {
+          const html = payload.contents ?? ''
+          if (!html) {
+            embedCacheRef.current[url] = null
+            return
+          }
+
+          const doc = new DOMParser().parseFromString(html, 'text/html')
+          const readMeta = (name: string) =>
+            doc.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ??
+            doc.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ??
+            undefined
+
+          const title = readMeta('og:title') ?? (doc.title || undefined)
+          const description = readMeta('og:description')
+          const image = readMeta('og:image')
+          const siteName = readMeta('og:site_name') ?? (() => {
+            try {
+              return new URL(url).hostname
+            } catch {
+              return undefined
+            }
+          })()
+
+          const hasAnyPreviewData = !!(title || description || image || siteName)
+          const embed = hasAnyPreviewData
+            ? {
+                url,
+                title,
+                description,
+                image,
+                siteName,
+              }
+            : null
+
+          embedCacheRef.current[url] = embed
+          if (!isCancelled && embed) {
+            setAutoEmbedsByUrl((prev) => ({ ...prev, [url]: embed }))
+          }
+        })
+        .catch(() => {
+          embedCacheRef.current[url] = null
+        })
+        .finally(() => {
+          delete embedInFlightRef.current[url]
+        })
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeMessages, extractFirstUrl])
 
   const actionButtons = [
     { icon: Reply, label: 'Reply' },
@@ -316,9 +406,7 @@ export const DashboardView: React.FC = () => {
               return (
                 <div
                   key={msg.id}
-                  className="relative group"
-                  onMouseEnter={() => setHoveredMessageId(msg.id)}
-                  onMouseLeave={() => setHoveredMessageId((current) => (current === msg.id ? null : current))}
+                  className="relative group overflow-visible"
                 >
                   {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}
                   <div className="flex gap-3 px-2 py-1 rounded-md hover:bg-white/5">
@@ -354,26 +442,35 @@ export const DashboardView: React.FC = () => {
                       {fileAttachments.map((attachment) => (
                         <FileAttachment key={attachment.id} attachment={attachment} />
                       ))}
-                      {(msg.embeds ?? []).map((embed, index) => (
+                      {(msg.embeds && msg.embeds.length > 0
+                        ? msg.embeds
+                        : (() => {
+                            const contentUrl = extractFirstUrl(msg.content)
+                            return contentUrl && autoEmbedsByUrl[contentUrl] ? [autoEmbedsByUrl[contentUrl]] : []
+                          })()
+                      ).map((embed, index) => (
                         <LinkEmbed key={`${msg.id}-${embed.url}-${index}`} embed={embed} />
                       ))}
                       <ReactionBar
                         reactions={reactions}
                         onToggleReaction={(emoji) => toggleReaction(msg.id, emoji)}
-                        showAddReaction={hoveredMessageId === msg.id}
-                        onOpenEmojiPicker={() => setReactionPickerMessageId(msg.id)}
                       />
                     </div>
                   </div>
 
-                  <div className="hidden group-hover:flex absolute right-2 top-1 bg-card border border-border rounded-md shadow-sm px-1 gap-0.5">
+                  <div
+                    className={cn(
+                      'absolute right-2 top-1 z-20 overflow-visible bg-card border border-border rounded-md shadow-sm px-1 gap-0.5',
+                      reactionPickerMessageId === msg.id ? 'flex' : 'hidden group-hover:flex'
+                    )}
+                  >
                     <EmojiPicker
                       open={reactionPickerMessageId === msg.id}
                       onOpenChange={(open) => setReactionPickerMessageId(open ? msg.id : null)}
                       onSelect={(emoji) => toggleReaction(msg.id, emoji)}
                       trigger={(
                         <button
-                          className="cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150"
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
                           type="button"
                         >
                           <SmilePlus className="w-4 h-4" />
@@ -401,9 +498,7 @@ export const DashboardView: React.FC = () => {
             return (
               <div
                 key={msg.id}
-                className="relative group pl-[52px] py-0.5 rounded-md hover:bg-white/5"
-                onMouseEnter={() => setHoveredMessageId(msg.id)}
-                onMouseLeave={() => setHoveredMessageId((current) => (current === msg.id ? null : current))}
+                className="relative group overflow-visible pl-[52px] py-0.5 rounded-md hover:bg-white/5"
               >
                 {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}
                 <TextContent content={msg.content} className="text-foreground" />
@@ -414,23 +509,32 @@ export const DashboardView: React.FC = () => {
                 {fileAttachments.map((attachment) => (
                   <FileAttachment key={attachment.id} attachment={attachment} />
                 ))}
-                {(msg.embeds ?? []).map((embed, index) => (
+                {(msg.embeds && msg.embeds.length > 0
+                  ? msg.embeds
+                  : (() => {
+                      const contentUrl = extractFirstUrl(msg.content)
+                      return contentUrl && autoEmbedsByUrl[contentUrl] ? [autoEmbedsByUrl[contentUrl]] : []
+                    })()
+                ).map((embed, index) => (
                   <LinkEmbed key={`${msg.id}-${embed.url}-${index}`} embed={embed} />
                 ))}
                 <ReactionBar
                   reactions={reactions}
                   onToggleReaction={(emoji) => toggleReaction(msg.id, emoji)}
-                  showAddReaction={hoveredMessageId === msg.id}
-                  onOpenEmojiPicker={() => setReactionPickerMessageId(msg.id)}
                 />
-                <div className="hidden group-hover:flex absolute right-2 top-0 bg-card border border-border rounded-md shadow-sm px-1 gap-0.5">
+                <div
+                  className={cn(
+                    'absolute right-2 top-0 z-20 overflow-visible bg-card border border-border rounded-md shadow-sm px-1 gap-0.5',
+                    reactionPickerMessageId === msg.id ? 'flex' : 'hidden group-hover:flex'
+                  )}
+                >
                   <EmojiPicker
                     open={reactionPickerMessageId === msg.id}
                     onOpenChange={(open) => setReactionPickerMessageId(open ? msg.id : null)}
                     onSelect={(emoji) => toggleReaction(msg.id, emoji)}
                     trigger={(
                       <button
-                        className="cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150"
+                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
                         type="button"
                       >
                         <SmilePlus className="w-4 h-4" />
