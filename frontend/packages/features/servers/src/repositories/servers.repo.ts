@@ -1,11 +1,15 @@
 import type { ServerDTO, CreateServerRequest } from '@goportal/types'
 import { apiClient } from '@goportal/services'
+import { shouldUseMockData } from '@goportal/config'
 import { mockServersData, simulateDelay } from '../mockData'
 
 /**
  * Servers Repository
- * Step 4: Mock implementation
- * Step 5: ✅ Real API calls to backend
+ * Supports Real API (default) and Mock Data (via VITE_USE_MOCK_DATA env)
+ * 
+ * Usage:
+ * - npm run dev:web (default, real API)
+ * - npm run dev:web:mock (mock data, no backend needed)
  */
 
 export const serversRepo = {
@@ -14,11 +18,18 @@ export const serversRepo = {
    * Endpoint: GET /api/v1/servers
    */
   async getServers(): Promise<ServerDTO[]> {
+    // Use mock if flag enabled
+    if (shouldUseMockData()) {
+      await simulateDelay()
+      return mockServersData
+    }
+
     try {
       const response = await apiClient.get('/api/v1/servers')
       return response.data.data || []
     } catch (error) {
       // Fallback to mock if backend not available
+      console.warn('[Servers] API error, falling back to mock:', error)
       await simulateDelay()
       return mockServersData
     }
@@ -29,6 +40,12 @@ export const serversRepo = {
    * Endpoint: GET /api/v1/servers/:id
    */
   async getServer(serverId: string): Promise<ServerDTO> {
+    if (shouldUseMockData()) {
+      const server = mockServersData.find(s => s.id === serverId)
+      if (!server) throw new Error('Server not found')
+      return server
+    }
+
     try {
       const response = await apiClient.get(`/api/v1/servers/${serverId}`)
       return response.data.data
@@ -44,11 +61,25 @@ export const serversRepo = {
    * Endpoint: POST /api/v1/servers
    */
   async createServer(body: CreateServerRequest): Promise<ServerDTO> {
+    if (shouldUseMockData()) {
+      await simulateDelay()
+      const newServer: ServerDTO = {
+        id: `s${Date.now()}`,
+        name: body.name,
+        owner_id: 'current-user-id',
+        is_public: body.is_public,
+        default_role_id: 'default-role',
+      }
+      mockServersData.push(newServer)
+      return newServer
+    }
+
     try {
       const response = await apiClient.post('/api/v1/servers', body)
       return response.data.data
     } catch (error) {
       // Fallback to mock
+      console.warn('[Servers] Create error, falling back to mock:', error)
       await simulateDelay()
       const newServer: ServerDTO = {
         id: `s${Date.now()}`,

@@ -1,11 +1,15 @@
 import type { ChannelDTO, CreateChannelRequest } from '@goportal/types'
 import { apiClient } from '@goportal/services'
+import { shouldUseMockData } from '@goportal/config'
 import { mockChannelsData, simulateDelay } from '../mockData'
 
 /**
  * Channels Repository
- * Step 4: Mock implementation
- * Step 5: ✅ Real API calls to backend
+ * Supports Real API (default) and Mock Data (via VITE_USE_MOCK_DATA env)
+ * 
+ * Usage:
+ * - npm run dev:web (default, real API)
+ * - npm run dev:web:mock (mock data, no backend needed)
  */
 
 export const channelsRepo = {
@@ -14,11 +18,17 @@ export const channelsRepo = {
    * Endpoint: GET /api/v1/servers/:serverId/channels
    */
   async getChannels(serverId: string): Promise<ChannelDTO[]> {
+    if (shouldUseMockData()) {
+      await simulateDelay()
+      return mockChannelsData.filter(c => c.server_id === serverId)
+    }
+
     try {
       const response = await apiClient.get(`/api/v1/servers/${serverId}/channels`)
       return response.data.data || []
     } catch (error) {
       // Fallback to mock
+      console.warn('[Channels] API error, falling back to mock:', error)
       await simulateDelay()
       return mockChannelsData.filter(c => c.server_id === serverId)
     }
@@ -29,6 +39,12 @@ export const channelsRepo = {
    * Endpoint: GET /api/v1/channels/:id
    */
   async getChannel(channelId: string): Promise<ChannelDTO> {
+    if (shouldUseMockData()) {
+      const channel = mockChannelsData.find(c => c.id === channelId)
+      if (!channel) throw new Error('Channel not found')
+      return channel
+    }
+
     try {
       const response = await apiClient.get(`/api/v1/channels/${channelId}`)
       return response.data.data
@@ -44,11 +60,27 @@ export const channelsRepo = {
    * Endpoint: POST /api/v1/servers/:serverId/channels
    */
   async createChannel(serverId: string, body: CreateChannelRequest): Promise<ChannelDTO> {
+    if (shouldUseMockData()) {
+      await simulateDelay()
+      const newChannel: ChannelDTO = {
+        id: `c${Date.now()}`,
+        server_id: serverId,
+        name: body.name,
+        type: body.type,
+        position: body.position ?? mockChannelsData.filter(c => c.server_id === serverId).length,
+        is_private: false,
+        parent_id: body.parent_id,
+      }
+      mockChannelsData.push(newChannel)
+      return newChannel
+    }
+
     try {
       const response = await apiClient.post(`/api/v1/servers/${serverId}/channels`, body)
       return response.data.data
     } catch (error) {
       // Fallback to mock
+      console.warn('[Channels] Create error, falling back to mock:', error)
       await simulateDelay()
       const newChannel: ChannelDTO = {
         id: `c${Date.now()}`,
