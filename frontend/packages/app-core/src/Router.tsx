@@ -13,7 +13,7 @@ import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
-import { DashboardView } from '@goportal/feature-dashboard'
+import { DashboardView, DMView } from '@goportal/feature-dashboard'
 
 export const Router: React.FC = () => {
   const handleAuthSuccess = () => {
@@ -35,15 +35,16 @@ export const Router: React.FC = () => {
 
         {/* Protected routes */}
         <Route
-          path="/app/*"
+          path="/app"
           element={
             <PrivateRoute>
-              <AppShell>
-                <DashboardView />
-              </AppShell>
+              <AppShell />
             </PrivateRoute>
           }
-        />
+        >
+          <Route index element={<DashboardView />} />
+          <Route path="@me" element={<DMView />} />
+        </Route>
 
         {/* Fallback */}
         <Route path="/" element={<Navigate to="/app" replace />} />

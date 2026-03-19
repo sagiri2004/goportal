@@ -32,13 +32,14 @@ export default defineConfig({
     renderer(),
   ],
   resolve: {
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'],
     alias: {
       '@goportal/ui/styles': path.resolve(__dirname, '../../packages/ui/src/styles/globals.css'),
-      '@goportal/ui':        path.resolve(__dirname, '../../packages/ui/src'),
-      '@goportal/app-core':  path.resolve(__dirname, '../../packages/app-core/src'),
-      '@goportal/types':     path.resolve(__dirname, '../../packages/types'),
-      '@goportal/config':    path.resolve(__dirname, '../../packages/config/src'),
-      '@goportal/services':  path.resolve(__dirname, '../../packages/services/src'),
+      '@goportal/ui':        path.resolve(__dirname, '../../packages/ui/src/index.ts'),
+      '@goportal/app-core':  path.resolve(__dirname, '../../packages/app-core/src/index.ts'),
+      '@goportal/types':     path.resolve(__dirname, '../../packages/types/index.ts'),
+      '@goportal/config':    path.resolve(__dirname, '../../packages/config/src/index.ts'),
+      '@goportal/services':  path.resolve(__dirname, '../../packages/services/src/index.ts'),
     },
   },
 })
