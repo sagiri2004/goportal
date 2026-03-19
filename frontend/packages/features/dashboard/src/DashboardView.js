@@ -1,28 +1,52 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useMemo, useState } from 'react';
-import { Button } from '@goportal/ui';
-import { ServerRail, CreateServerModal } from '@goportal/feature-servers';
-import { ChannelSidebar, ChannelHeader, CreateChannelModal } from '@goportal/feature-channels';
-import { useChannel } from '@goportal/feature-channels';
-import { mockCurrentUser, mockMessages, mockUsers } from './mockData';
-export const DashboardView = ({ onLogout }) => {
-    const [activeServerId, setActiveServerId] = useState('s1');
-    const [activeChannelId, setActiveChannelId] = useState('c1');
-    const [isCreateServerOpen, setIsCreateServerOpen] = useState(false);
-    const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
-    const { data: activeChannel } = useChannel(activeChannelId);
-    const activeMessages = useMemo(() => mockMessages.filter((m) => m.channelId === activeChannelId), [activeChannelId]);
-    const activeServerName = useMemo(() => {
-        const serverMap = {
-            s1: 'Discord Clone Devs',
-            s2: 'LiveKit Lab',
-            s3: 'Friends',
+import { useMemo } from 'react';
+import { Separator } from '@goportal/ui';
+import { ChannelHeader } from '@goportal/feature-channels';
+import { Edit, Gift, Hash, Image, MoreHorizontal, Plus, Reply, Smile, Trash2, } from 'lucide-react';
+import { useOutletContext } from 'react-router-dom';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
+import { mockMessages } from '@goportal/app-core';
+import { TextContent } from './components/TextContent';
+import { ReplyPreview } from './components/ReplyPreview';
+export const DashboardView = () => {
+    const { showMembers, setShowMembers, activeChannelId } = useOutletContext();
+    const activeChannel = useMemo(() => ({
+        id: activeChannelId,
+        name: activeChannelId,
+        type: 'TEXT',
+    }), [activeChannelId]);
+    const activeMessages = useMemo(() => mockMessages[activeChannelId] ?? mockMessages.general ?? [], [activeChannelId]);
+    const grouped = useMemo(() => {
+        const toMinutes = (t) => {
+            const [hh, mm] = t.split(':').map((n) => Number(n));
+            return (hh || 0) * 60 + (mm || 0);
         };
-        return serverMap[activeServerId] || 'Server';
-    }, [activeServerId]);
-    return (_jsxs("div", { className: "h-screen flex", children: [_jsx(ServerRail, { activeServerId: activeServerId, onSelectServer: setActiveServerId, onCreateServer: () => setIsCreateServerOpen(true) }), _jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServerName, activeChannelId: activeChannelId, onSelectChannel: setActiveChannelId, onCreateChannel: () => setIsCreateChannelOpen(true) }), _jsxs("main", { className: "flex-1 bg-background flex flex-col", children: [_jsx(ChannelHeader, { channel: activeChannel }), _jsx("section", { className: "flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm", children: activeMessages.map((msg) => {
-                            const author = mockUsers.find((u) => u.id === msg.authorId);
-                            return (_jsxs("div", { className: "flex items-start gap-3", children: [_jsx("div", { className: "w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5", style: { backgroundColor: author?.avatarColor ?? '#27272a' }, children: author?.username[0]?.toUpperCase() }), _jsxs("div", { className: "space-y-0.5", children: [_jsxs("div", { className: "flex items-baseline gap-2", children: [_jsx("span", { className: "font-semibold text-foreground text-sm", children: author?.username ?? 'unknown' }), _jsx("span", { className: "text-[11px] text-muted-foreground", children: msg.timestamp })] }), _jsx("p", { className: "text-foreground", children: msg.content })] })] }, msg.id));
-                        }) }), _jsx("footer", { className: "h-16 px-4 pb-4 flex items-end", children: _jsxs("div", { className: "w-full bg-card/80 rounded-md border border-border px-3 py-2 text-sm text-foreground flex items-center", children: [_jsx("span", { className: "text-muted-foreground mr-2", children: "Message" }), _jsx("span", { className: "text-muted-foreground text-xs", children: "(input disabled in mock)" })] }) })] }), _jsxs("aside", { className: "w-60 bg-[hsl(240,6%,10%)] border-l border-border flex flex-col", children: [_jsxs("div", { className: "h-12 border-b border-border px-3 flex items-center text-xs font-semibold text-muted-foreground", children: ["MEMBERS \u2014 ", mockUsers.length] }), _jsx("div", { className: "flex-1 overflow-y-auto px-3 py-3 space-y-2 text-xs", children: mockUsers.map((u) => (_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold", style: { backgroundColor: u.avatarColor }, children: u.username[0]?.toUpperCase() }), _jsxs("div", { className: "flex flex-col", children: [_jsx("span", { className: "text-foreground text-xs", children: u.username }), _jsx("span", { className: "text-muted-foreground text-[10px] capitalize", children: u.status })] })] }, u.id))) })] }), _jsx(CreateServerModal, { isOpen: isCreateServerOpen, onOpenChange: setIsCreateServerOpen }), _jsx(CreateChannelModal, { serverId: activeServerId, isOpen: isCreateChannelOpen, onOpenChange: setIsCreateChannelOpen }), _jsxs("div", { className: "absolute bottom-0 right-0 w-60 h-16 bg-[hsl(240,6%,10%)] border-t border-border border-l px-3 py-2 flex items-center justify-between", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold", style: { backgroundColor: mockCurrentUser.avatarColor }, children: mockCurrentUser.username[0]?.toUpperCase() }), _jsxs("div", { className: "flex flex-col", children: [_jsx("div", { className: "text-foreground text-xs truncate", children: mockCurrentUser.username }), _jsx("div", { className: "text-muted-foreground text-[10px]", children: "Online" })] })] }), _jsx(Button, { variant: "ghost", size: "sm", className: "text-xs", onClick: onLogout, children: "Log out" })] })] }));
+        return activeMessages.map((m, idx) => {
+            const prev = activeMessages[idx - 1];
+            const sameAuthor = prev && prev.authorId === m.authorId;
+            const within5 = prev && Math.abs(toMinutes(m.timestamp) - toMinutes(prev.timestamp)) <= 5;
+            const startsGroup = !(sameAuthor && within5);
+            return { ...m, startsGroup };
+        });
+    }, [activeMessages]);
+    const actionButtons = [
+        { icon: Smile, label: 'Add Reaction' },
+        { icon: Reply, label: 'Reply' },
+        { icon: Edit, label: 'Edit' },
+        { icon: Trash2, label: 'Delete' },
+        { icon: MoreHorizontal, label: 'More' },
+    ];
+    return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsx("div", { className: "flex-none", children: _jsx(ChannelHeader, { channel: activeChannel, topic: "Welcome to the channel", showMembers: showMembers, onToggleMembers: () => setShowMembers((v) => !v) }) }), _jsxs("section", { className: "flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "w-16 h-16 p-3 rounded-full bg-muted text-muted-foreground mb-4" }), _jsxs("h2", { className: "text-2xl font-bold text-foreground", children: ["Welcome to #", activeChannel?.name ?? 'general'] }), _jsxs("p", { className: "text-muted-foreground text-sm", children: ["This is the start of #", activeChannel?.name ?? 'general', " channel."] })] }), _jsxs("div", { className: "flex items-center gap-3 my-4", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "text-xs text-muted-foreground whitespace-nowrap", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
+                            const username = msg.author ?? 'unknown';
+                            const avatarLetter = msg.avatarInitials ?? username[0]?.toUpperCase() ?? '?';
+                            if (msg.startsGroup) {
+                                return (_jsxs("div", { className: "relative group", children: [msg.replyTo && _jsx(ReplyPreview, { replyTo: msg.replyTo }), _jsxs("div", { className: "flex gap-3 px-2 py-1 rounded-md hover:bg-white/5", children: [msg.avatarUrl ? (_jsx("img", { src: msg.avatarUrl, alt: username, className: "mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover" })) : (_jsx("div", { className: `mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${msg.avatarColor ?? 'bg-muted'}`, children: avatarLetter })), _jsxs("div", { className: "min-w-0", children: [_jsxs("div", { className: "flex items-baseline", children: [_jsx("span", { className: `text-sm font-semibold ${msg.authorColor ?? 'text-foreground'}`, children: username }), _jsx("span", { className: "text-xs text-muted-foreground ml-2", children: msg.timestamp })] }), _jsx(TextContent, { content: msg.content, className: "text-foreground" })] })] }), _jsx("div", { className: "hidden group-hover:flex absolute right-2 top-1 bg-card border border-border rounded-md shadow-sm px-1 gap-0.5", children: actionButtons.map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150", type: "button", children: _jsx(Icon, { className: "w-4 h-4" }) }) }), _jsx(TooltipContent, { children: label })] }, label))) })] }, msg.id));
+                            }
+                            return (_jsxs("div", { className: "relative group pl-[52px] py-0.5 rounded-md hover:bg-white/5", children: [msg.replyTo && _jsx(ReplyPreview, { replyTo: msg.replyTo }), _jsx(TextContent, { content: msg.content, className: "text-foreground" }), _jsx("div", { className: "hidden group-hover:flex absolute right-2 top-0 bg-card border border-border rounded-md shadow-sm px-1 gap-0.5", children: actionButtons.map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150", type: "button", children: _jsx(Icon, { className: "w-4 h-4" }) }) }), _jsx(TooltipContent, { children: label })] }, label))) })] }, msg.id));
+                        }) })] }), _jsx("footer", { className: "flex-none mx-4 mb-4", children: _jsxs("div", { className: "rounded-lg bg-[hsl(240,3.7%,18%)] flex items-center px-3 gap-2", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Plus, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("input", { className: "flex-1 bg-transparent text-[15px] py-[11px] outline-none placeholder:text-muted-foreground", placeholder: "Message" }), _jsx("div", { className: "flex gap-1 items-center", children: [
+                                { icon: Gift, label: 'Gift' },
+                                { icon: Image, label: 'GIF' },
+                                { icon: Smile, label: 'Emoji' },
+                            ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Icon, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: label })] }, label))) })] }) })] }));
 };
 //# sourceMappingURL=DashboardView.js.map

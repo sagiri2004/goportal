@@ -1,12 +1,22 @@
 import React from 'react';
 type ServerRailProps = {
     activeServerId?: string;
-    onSelectServer: (serverId: string) => void;
-    onCreateServer: () => void;
+    onSelectServer?: (serverId: string) => void;
+    onCreateServer?: () => void;
+    servers?: Array<{
+        id: string;
+        name: string;
+        initials?: string;
+        color?: string;
+    }>;
 };
 /**
- * ServerRail - Left sidebar with server list
- * Shows list of servers as circular buttons
+ * ServerRail - Left sidebar with server list (72px wide)
+ *
+ * Layout:
+ * - Top: Create server button + divider
+ * - Middle: Server icons (w-12 h-12, rounded-[24px], active has left accent bar + rounded-[16px])
+ * - Bottom: Compass + Download icons
  */
 export declare const ServerRail: React.FC<ServerRailProps>;
 export {};

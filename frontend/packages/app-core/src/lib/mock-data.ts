@@ -1,8 +1,13 @@
+import type { Message } from './message-types'
+
 export type MockServer = {
   id: string
   name: string
   initials: string
   color: string
+  bannerUrl?: string
+  iconUrl?: string
+  boostLevel?: number
 }
 
 export type MockChannel = {
@@ -10,6 +15,16 @@ export type MockChannel = {
   name: string
   type: 'text' | 'voice'
   unread: number
+  activeMembers?: Array<{
+    id: string
+    name?: string
+    avatarUrl?: string
+    initials: string
+    color: string
+    isStreaming?: boolean
+  }>
+  liveLabel?: string
+  isLive?: boolean
 }
 
 export type MockCategory = {
@@ -29,21 +44,43 @@ export type MockMember = {
   role: string
 }
 
-export type MockMessage = {
-  id: string
-  authorId: string
-  author: string
-  avatar: string
-  content: string
-  timestamp: string
-  date: string
-}
+export type MockMessage = Message
 
 export const mockServers: MockServer[] = [
-  { id: '1', name: 'Discord Clone Devs', initials: 'DC', color: 'bg-indigo-500' },
-  { id: '2', name: 'LiveKit Labs', initials: 'LL', color: 'bg-purple-500' },
-  { id: '3', name: 'Frontend Guild', initials: 'FG', color: 'bg-green-500' },
-  { id: '4', name: 'Design System', initials: 'DS', color: 'bg-orange-500' },
+  {
+    id: '1',
+    name: 'Discord Clone Devs',
+    initials: 'DC',
+    color: 'bg-indigo-500',
+    bannerUrl: 'https://picsum.photos/seed/dc/400/120',
+    iconUrl: undefined,
+    boostLevel: 3,
+  },
+  {
+    id: '2',
+    name: 'LiveKit Labs',
+    initials: 'LL',
+    color: 'bg-purple-500',
+    bannerUrl: undefined,
+    iconUrl: undefined,
+  },
+  {
+    id: '3',
+    name: 'Frontend Guild',
+    initials: 'FG',
+    color: 'bg-green-500',
+    bannerUrl: 'https://picsum.photos/seed/fg/400/120',
+    iconUrl: undefined,
+    boostLevel: 1,
+  },
+  {
+    id: '4',
+    name: 'Design System',
+    initials: 'DS',
+    color: 'bg-orange-500',
+    bannerUrl: undefined,
+    iconUrl: undefined,
+  },
 ]
 
 export const mockChannels: Record<
@@ -76,8 +113,30 @@ export const mockChannels: Record<
         id: 'voice',
         name: 'Kênh Thoại',
         channels: [
-          { id: 'vc1', name: 'Chill Lounge', type: 'voice', unread: 0 },
-          { id: 'vc2', name: 'Study Room', type: 'voice', unread: 0 },
+          {
+            id: 'vc1',
+            name: 'delta-force-1',
+            type: 'voice',
+            unread: 0,
+            isLive: true,
+            liveLabel: 'Chia Se Man Hinh',
+            activeMembers: [
+              { id: '1', name: 'alice', initials: 'A', color: 'bg-orange-500' },
+              { id: '2', name: 'bob', initials: 'B', color: 'bg-purple-500' },
+              { id: '3', name: 'charlie', initials: 'C', color: 'bg-green-500' },
+            ],
+          },
+          {
+            id: 'vc2',
+            name: 'Dog Guang T3, Trust Me',
+            type: 'voice',
+            unread: 0,
+            isLive: false,
+            liveLabel: '8:41:48',
+            activeMembers: [
+              { id: '4', name: 'diana', initials: 'D', color: 'bg-yellow-500' },
+            ],
+          },
           { id: 'vc3', name: 'Gaming', type: 'voice', unread: 0 },
         ],
       },
@@ -142,46 +201,95 @@ export const mockMessages: Record<string, MockMessage[]> = {
       id: '1',
       authorId: '2',
       author: 'alice',
-      avatar: 'bg-orange-500',
-      content: 'Welcome to the Discord clone!',
+      authorColor: 'text-orange-300',
+      avatarColor: 'bg-orange-500',
+      avatarInitials: 'A',
+      content: 'Welcome to the **Discord clone**! Join #general and say :tada:',
       timestamp: '10:01',
       date: 'Today',
+      reactions: [
+        { emoji: '🔥', count: 4, hasReacted: true, userIds: ['1', '2', '3', '4'] },
+        { emoji: '👍', count: 2, hasReacted: false, userIds: ['2', '5'] },
+      ],
     },
     {
       id: '2',
       authorId: '1',
       author: 'zutomayo',
-      avatar: 'bg-purple-500',
-      content: 'We are wiring LiveKit next.',
+      authorColor: 'text-violet-300',
+      avatarColor: 'bg-purple-500',
+      avatarInitials: 'Z',
+      content: 'We are wiring LiveKit next. Check https://livekit.io docs.',
       timestamp: '10:02',
       date: 'Today',
+      attachments: [
+        {
+          id: 'att-1',
+          type: 'image',
+          url: 'https://picsum.photos/seed/mock-image-1/640/360',
+          filename: 'architecture-board.png',
+          filesize: 182301,
+          width: 640,
+          height: 360,
+          mimeType: 'image/png',
+        },
+      ],
+      replyTo: {
+        messageId: '1',
+        authorName: 'alice',
+        authorColor: 'bg-orange-500',
+        content: 'Welcome to the Discord clone!',
+      },
     },
     {
       id: '3',
       authorId: '3',
       author: 'bob',
-      avatar: 'bg-green-500',
-      content: 'Tailwind dark mode looks great.',
+      authorColor: 'text-green-300',
+      avatarColor: 'bg-green-500',
+      avatarInitials: 'B',
+      content: 'Tailwind dark mode looks ~~great~~ *clean* now.',
       timestamp: '10:05',
       date: 'Today',
+      editedAt: '10:06',
     },
     {
       id: '4',
       authorId: '2',
       author: 'alice',
-      avatar: 'bg-orange-500',
-      content: 'Anyone tried the new components?',
+      authorColor: 'text-orange-300',
+      avatarColor: 'bg-orange-500',
+      avatarInitials: 'A',
+      content: 'Anyone tried the new components? ping @zutomayo',
       timestamp: '10:07',
       date: 'Today',
+      embeds: [
+        {
+          url: 'https://tailwindcss.com',
+          title: 'Tailwind CSS',
+          description: 'Rapidly build modern websites without ever leaving your HTML.',
+          siteName: 'tailwindcss.com',
+          color: '#38bdf8',
+        },
+      ],
     },
     {
       id: '5',
       authorId: '2',
       author: 'alice',
-      avatar: 'bg-orange-500',
-      content: 'The sidebar resize is so smooth!',
+      authorColor: 'text-orange-300',
+      avatarColor: 'bg-orange-500',
+      avatarInitials: 'A',
+      content: 'The sidebar resize is so smooth! Use `PanelGroup` + `Panel`.',
       timestamp: '10:08',
       date: 'Today',
+      replyTo: {
+        messageId: '2',
+        authorName: 'zutomayo',
+        authorColor: 'bg-purple-500',
+        content: '',
+        hasAttachment: true,
+      },
     },
   ],
   random: [
@@ -189,7 +297,9 @@ export const mockMessages: Record<string, MockMessage[]> = {
       id: '1',
       authorId: '3',
       author: 'bob',
-      avatar: 'bg-green-500',
+      authorColor: 'text-green-300',
+      avatarColor: 'bg-green-500',
+      avatarInitials: 'B',
       content: "What's everyone playing lately?",
       timestamp: '09:00',
       date: 'Today',
@@ -198,11 +308,12 @@ export const mockMessages: Record<string, MockMessage[]> = {
       id: '2',
       authorId: '4',
       author: 'charlie',
-      avatar: 'bg-red-500',
+      authorColor: 'text-rose-300',
+      avatarColor: 'bg-red-500',
+      avatarInitials: 'C',
       content: 'Hollow Knight is amazing.',
       timestamp: '09:15',
       date: 'Today',
     },
   ],
 }
-

@@ -126,6 +126,9 @@ export const AppShell: React.FC = () => {
                   serverName={activeServer?.name ?? 'Server'}
                   serverInitials={activeServer?.initials}
                   serverColor={activeServer?.color ?? 'bg-indigo-500'}
+                  serverBannerUrl={activeServer?.bannerUrl}
+                  serverIconUrl={activeServer?.iconUrl}
+                  serverBoostLevel={activeServer?.boostLevel}
                   categories={activeCategories}
                   activeChannelId={activeChannelId}
                   onSelectChannel={setActiveChannelId}
