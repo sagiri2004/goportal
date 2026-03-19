@@ -23,27 +23,27 @@ export const ServerRail: React.FC<ServerRailProps> = ({
 
   if (isLoading) {
     return (
-      <aside className="w-16 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-3 space-y-3">
-        <div className="text-xs text-slate-600">Loading...</div>
+      <aside className="w-16 bg-background border-r border-border flex flex-col items-center py-3 space-y-3">
+        <div className="text-xs text-muted-foreground">Loading...</div>
       </aside>
     )
   }
 
   return (
-    <aside className="w-16 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-3 space-y-3">
+    <aside className="w-16 bg-background border-r border-border flex flex-col items-center py-3 space-y-3">
       {/* Create server button */}
       <Button
         variant="ghost"
         size="icon"
         onClick={onCreateServer}
-        className="w-12 h-12 rounded-3xl bg-slate-800 hover:bg-slate-700 text-slate-300"
+        className="w-12 h-12 rounded-3xl bg-secondary hover:bg-secondary/80 text-foreground"
         title="Create Server"
       >
         <Plus className="h-5 w-5" />
       </Button>
 
       {/* Divider */}
-      <div className="w-8 h-0.5 bg-slate-700" />
+      <div className="w-8 h-0.5 bg-border" />
 
       {/* Server list */}
       {servers?.map((server) => {
@@ -54,8 +54,8 @@ export const ServerRail: React.FC<ServerRailProps> = ({
             onClick={() => onSelectServer(server.id)}
             className={`w-12 h-12 rounded-3xl flex items-center justify-center text-sm font-semibold transition-all ${
               isActive
-                ? 'bg-primary text-white rounded-2xl'
-                : 'bg-slate-800 text-slate-200 hover:bg-slate-700 hover:rounded-2xl'
+                ? 'bg-primary text-primary-foreground rounded-2xl'
+                : 'bg-secondary text-foreground hover:bg-secondary/80 hover:rounded-2xl'
             }`}
             title={server.name}
           >

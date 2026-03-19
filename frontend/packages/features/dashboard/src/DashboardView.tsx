@@ -47,7 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
         onCreateChannel={() => setIsCreateChannelOpen(true)}
       />
 
-      <main className="flex-1 bg-slate-800 flex flex-col">
+      <main className="flex-1 bg-background flex flex-col">
         <ChannelHeader channel={activeChannel} />
 
         <section className="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm">
@@ -57,20 +57,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
               <div key={msg.id} className="flex items-start gap-3">
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5"
-                  style={{ backgroundColor: author?.avatarColor ?? '#64748b' }}
+                  style={{ backgroundColor: author?.avatarColor ?? '#27272a' }}
                 >
                   {author?.username[0]?.toUpperCase()}
                 </div>
                 <div className="space-y-0.5">
                   <div className="flex items-baseline gap-2">
-                    <span className="font-semibold text-slate-100 text-sm">
+                    <span className="font-semibold text-foreground text-sm">
                       {author?.username ?? 'unknown'}
                     </span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-muted-foreground">
                       {msg.timestamp}
                     </span>
                   </div>
-                  <p className="text-slate-100">{msg.content}</p>
+                  <p className="text-foreground">{msg.content}</p>
                 </div>
               </div>
             )
@@ -78,15 +78,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
         </section>
 
         <footer className="h-16 px-4 pb-4 flex items-end">
-          <div className="w-full bg-slate-900/80 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-100 flex items-center">
-            <span className="text-slate-500 mr-2">Message</span>
-            <span className="text-slate-600 text-xs">(input disabled in mock)</span>
+          <div className="w-full bg-card/80 rounded-md border border-border px-3 py-2 text-sm text-foreground flex items-center">
+            <span className="text-muted-foreground mr-2">Message</span>
+            <span className="text-muted-foreground text-xs">(input disabled in mock)</span>
           </div>
         </footer>
       </main>
 
-      <aside className="w-60 bg-slate-900 border-l border-slate-800 flex flex-col">
-        <div className="h-12 border-b border-slate-800 px-3 flex items-center text-xs font-semibold text-slate-400">
+      <aside className="w-60 bg-card border-l border-border flex flex-col">
+        <div className="h-12 border-b border-border px-3 flex items-center text-xs font-semibold text-muted-foreground">
           MEMBERS — {mockUsers.length}
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-xs">
@@ -99,8 +99,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
                 {u.username[0]?.toUpperCase()}
               </div>
               <div className="flex flex-col">
-                <span className="text-slate-100 text-xs">{u.username}</span>
-                <span className="text-slate-500 text-[10px] capitalize">
+                <span className="text-foreground text-xs">{u.username}</span>
+                <span className="text-muted-foreground text-[10px] capitalize">
                   {u.status}
                 </span>
               </div>
@@ -119,7 +119,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
         onOpenChange={setIsCreateChannelOpen}
       />
 
-      <div className="absolute bottom-0 right-0 w-60 h-16 bg-slate-900 border-t border-slate-800 border-l px-3 py-2 flex items-center justify-between">
+      <div className="absolute bottom-0 right-0 w-60 h-16 bg-card border-t border-border border-l px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold"
@@ -128,10 +128,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onLogout }) => {
             {mockCurrentUser.username[0]?.toUpperCase()}
           </div>
           <div className="flex flex-col">
-            <div className="text-slate-100 text-xs truncate">
+            <div className="text-foreground text-xs truncate">
               {mockCurrentUser.username}
             </div>
-            <div className="text-slate-500 text-[10px]">Online</div>
+            <div className="text-muted-foreground text-[10px]">Online</div>
           </div>
         </div>
         <Button

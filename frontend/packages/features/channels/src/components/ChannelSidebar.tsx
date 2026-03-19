@@ -25,8 +25,8 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
   if (isLoading) {
     return (
-      <aside className="w-64 bg-slate-900 flex flex-col border-r border-slate-800">
-        <div className="text-xs text-slate-600 p-4">Loading...</div>
+      <aside className="w-64 bg-card flex flex-col border-r border-border">
+        <div className="text-xs text-muted-foreground p-4">Loading...</div>
       </aside>
     )
   }
@@ -35,17 +35,17 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   const voiceChannels = channels?.filter(c => c.type === 'VOICE') ?? []
 
   return (
-    <aside className="w-64 bg-slate-900 flex flex-col border-r border-slate-800">
+    <aside className="w-64 bg-card flex flex-col border-r border-border">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-        <span className="text-sm font-semibold text-slate-200 truncate">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <span className="text-sm font-semibold text-foreground truncate">
           {serverName}
         </span>
         <Button
           variant="ghost"
           size="icon"
           onClick={onCreateChannel}
-          className="h-6 w-6 text-slate-400 hover:text-slate-200"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
           title="Create Channel"
         >
           <Plus className="h-4 w-4" />
@@ -57,7 +57,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         {/* Text Channels */}
         {textChannels.length > 0 && (
           <div>
-            <p className="uppercase tracking-wide px-2 text-[10px] text-slate-500 font-semibold mb-2">
+            <p className="uppercase tracking-wide px-2 text-[10px] text-muted-foreground font-semibold mb-2">
               Text Channels
             </p>
             <div className="space-y-1">
@@ -69,11 +69,11 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                     onClick={() => onSelectChannel(channel.id)}
                     className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-left transition-colors ${
                       isActive
-                        ? 'bg-slate-700 text-slate-50'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                     }`}
                   >
-                    <span className="text-slate-500">#</span>
+                    <span className="text-muted-foreground">#</span>
                     <span className="truncate">{channel.name}</span>
                   </button>
                 )
@@ -85,7 +85,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         {/* Voice Channels */}
         {voiceChannels.length > 0 && (
           <div>
-            <p className="uppercase tracking-wide px-2 text-[10px] text-slate-500 font-semibold mb-2">
+            <p className="uppercase tracking-wide px-2 text-[10px] text-muted-foreground font-semibold mb-2">
               Voice Channels
             </p>
             <div className="space-y-1">
@@ -97,11 +97,11 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                     onClick={() => onSelectChannel(channel.id)}
                     className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-left transition-colors ${
                       isActive
-                        ? 'bg-slate-700 text-slate-50'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                     }`}
                   >
-                    <span className="text-slate-500">🔊</span>
+                    <span className="text-muted-foreground">🔊</span>
                     <span className="truncate">{channel.name}</span>
                   </button>
                 )

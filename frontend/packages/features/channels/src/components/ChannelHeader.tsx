@@ -11,23 +11,23 @@ type ChannelHeaderProps = {
 export const ChannelHeader: React.FC<ChannelHeaderProps> = ({ channel }) => {
   if (!channel) {
     return (
-      <header className="h-12 border-b border-slate-700 px-4 flex items-center justify-between text-sm bg-slate-800">
-        <span className="text-slate-400">No channel selected</span>
+      <header className="h-12 border-b border-border px-4 flex items-center justify-between text-sm bg-background">
+        <span className="text-muted-foreground">No channel selected</span>
       </header>
     )
   }
 
   return (
-    <header className="h-12 border-b border-slate-700 px-4 flex items-center justify-between text-sm">
+    <header className="h-12 border-b border-border px-4 flex items-center justify-between text-sm">
       <div className="flex items-center gap-2">
-        <span className="text-slate-500">
+        <span className="text-muted-foreground">
           {channel.type === 'TEXT' ? '#' : '🔊'}
         </span>
-        <span className="font-semibold text-slate-100">
+        <span className="font-semibold text-foreground">
           {channel.name}
         </span>
       </div>
-      <div className="text-xs text-slate-500">
+      <div className="text-xs text-muted-foreground">
         {channel.type === 'TEXT' ? 'Text Channel' : 'Voice Channel'}
       </div>
     </header>
