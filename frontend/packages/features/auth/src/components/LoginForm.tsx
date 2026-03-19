@@ -75,9 +75,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegis
           placeholder="Enter your username"
           autoComplete="username"
           disabled={login.isPending}
-          className={cn(fieldErrors.username && 'border-danger focus-visible:ring-danger')}
+          className={cn(fieldErrors.username && 'border-destructive focus-visible:ring-destructive')}
         />
-        {fieldErrors.username && <p className="text-xs text-danger">{fieldErrors.username}</p>}
+        {fieldErrors.username && <p className="text-xs text-destructive">{fieldErrors.username}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -95,16 +95,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegis
           placeholder="Enter your password"
           autoComplete="current-password"
           disabled={login.isPending}
-          className={cn(fieldErrors.password && 'border-danger focus-visible:ring-danger')}
+          className={cn(fieldErrors.password && 'border-destructive focus-visible:ring-destructive')}
         />
-        {fieldErrors.password && <p className="text-xs text-danger">{fieldErrors.password}</p>}
+        {fieldErrors.password && <p className="text-xs text-destructive">{fieldErrors.password}</p>}
       </div>
 
       <Button type="submit" className="w-full" disabled={login.isPending}>
         {login.isPending ? 'Logging in...' : 'Log In'}
       </Button>
 
-      <p className="text-xs text-muted text-center">
+      <p className="text-xs text-muted-foreground text-center">
         Need an account?{' '}
         <button
           type="button"

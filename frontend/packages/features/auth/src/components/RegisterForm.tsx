@@ -80,9 +80,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onSwitchT
           placeholder="Choose a username"
           autoComplete="username"
           disabled={register.isPending}
-          className={cn(fieldErrors.username && 'border-danger focus-visible:ring-danger')}
+          className={cn(fieldErrors.username && 'border-destructive focus-visible:ring-destructive')}
         />
-        {fieldErrors.username && <p className="text-xs text-danger">{fieldErrors.username}</p>}
+        {fieldErrors.username && <p className="text-xs text-destructive">{fieldErrors.username}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -100,16 +100,16 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onSwitchT
           placeholder="Create a password"
           autoComplete="new-password"
           disabled={register.isPending}
-          className={cn(fieldErrors.password && 'border-danger focus-visible:ring-danger')}
+          className={cn(fieldErrors.password && 'border-destructive focus-visible:ring-destructive')}
         />
-        {fieldErrors.password && <p className="text-xs text-danger">{fieldErrors.password}</p>}
+        {fieldErrors.password && <p className="text-xs text-destructive">{fieldErrors.password}</p>}
       </div>
 
       <Button type="submit" className="w-full" disabled={register.isPending}>
         {register.isPending ? 'Creating account...' : 'Create Account'}
       </Button>
 
-      <p className="text-xs text-muted text-center">
+      <p className="text-xs text-muted-foreground text-center">
         Already have an account?{' '}
         <button
           type="button"

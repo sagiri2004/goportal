@@ -80,12 +80,12 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
               <TabsTrigger value="VOICE">Voice Channel</TabsTrigger>
             </TabsList>
             <TabsContent value="TEXT" className="mt-4">
-              <p className="text-xs text-slate-400 mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 For text-based conversations
               </p>
             </TabsContent>
             <TabsContent value="VOICE" className="mt-4">
-              <p className="text-xs text-slate-400 mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 For voice conversations and streaming
               </p>
             </TabsContent>
@@ -94,7 +94,7 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
           {/* Channel Name */}
           <div className="space-y-1.5">
             <Label htmlFor="channel-name">
-              Channel Name {channelType === 'TEXT' && <span className="text-slate-500 ml-1">#</span>}
+              Channel Name {channelType === 'TEXT' && <span className="text-muted-foreground ml-1">#</span>}
             </Label>
             <Input
               id="channel-name"
@@ -107,7 +107,7 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
           </div>
 
           {error && (
-            <p className="text-xs text-danger">{error}</p>
+            <p className="text-xs text-destructive">{error}</p>
           )}
 
           <DialogFooter>

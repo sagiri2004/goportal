@@ -90,7 +90,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
           </div>
 
           {error && (
-            <p className="text-xs text-danger">{error}</p>
+            <p className="text-xs text-destructive">{error}</p>
           )}
 
           <DialogFooter>
