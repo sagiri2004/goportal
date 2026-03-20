@@ -18,6 +18,8 @@ export type AuthUser = {
   id:       string
   username: string
   is_admin: boolean
+  status?: 'online' | 'offline' | 'idle' | 'dnd'
+  avatar_url?: string | null
 }
 
 export type LoginResponseData = {
@@ -64,6 +66,8 @@ export type ServerDTO = {
   owner_id:        string
   is_public:       boolean
   default_role_id: string
+  icon_url?:       string | null
+  banner_url?:     string | null
 }
 
 export type CreateServerRequest = {

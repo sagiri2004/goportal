@@ -35,6 +35,13 @@
         "id": "17f17742-f28f-4cf8-8b8a-8a2c6772553b",
         "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
         "author_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+        "author": {
+          "id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+          "username": "john",
+          "is_admin": false,
+          "status": "offline",
+          "avatar_url": null
+        },
         "content": {
           "type": "text/plain",
           "payload": "hello world",
@@ -118,13 +125,24 @@
     "id": "17f17742-f28f-4cf8-8b8a-8a2c6772553b",
     "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
     "author_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+    "author": {
+      "id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+      "username": "john",
+      "is_admin": false,
+      "status": "offline",
+      "avatar_url": null
+    },
     "content": {
       "type": "text/plain",
       "payload": "Hello channel",
       "encoding": "utf-8"
     },
     "is_edited": false,
-    "is_pinned": false
+    "is_pinned": false,
+    "created_at": 1773733801,
+    "updated_at": 1773733801,
+    "attachments": [],
+    "reactions": []
   }
 }
 ```

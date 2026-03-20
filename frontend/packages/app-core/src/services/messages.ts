@@ -1,5 +1,5 @@
 import type { Message as UIMessage, Attachment, Reaction } from '../lib/message-types'
-import { IS_MOCK } from '../mock'
+import { IS_MOCK_MESSAGES } from '../mock'
 import { mockMessages } from '../mock/messages'
 import { simulateDelay } from '../mock/user'
 import { apiClient } from '../lib/api-client'
@@ -156,7 +156,7 @@ export const getMessages = async (
   const limit = opts.limit ?? 50
   const offset = opts.offset ?? 0
 
-  if (IS_MOCK) {
+  if (IS_MOCK_MESSAGES) {
     await simulateDelay()
     const channelMessages = mockMessages[channelId] ?? []
     const items = channelMessages.slice(offset, offset + limit)
@@ -185,7 +185,7 @@ export const sendMessage = async (
   channelId: string,
   content: string
 ): Promise<UIMessage> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_MESSAGES) {
     await simulateDelay(120)
 
     const now = new Date()

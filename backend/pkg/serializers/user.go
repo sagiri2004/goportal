@@ -33,16 +33,25 @@ type FriendBlockRequest struct {
 
 // UserResponse is the public representation of a user.
 type UserResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	IsAdmin  bool   `json:"is_admin"`
+	ID        string  `json:"id"`
+	Username  string  `json:"username"`
+	IsAdmin   bool    `json:"is_admin"`
+	Status    string  `json:"status"`
+	AvatarURL *string `json:"avatar_url"`
 }
 
 func NewUserResponse(u *models.User) UserResponse {
+	status := u.Status
+	if status == "" {
+		status = "offline"
+	}
+
 	return UserResponse{
-		ID:       u.ID,
-		Username: u.Username,
-		IsAdmin:  u.IsAdmin,
+		ID:        u.ID,
+		Username:  u.Username,
+		IsAdmin:   u.IsAdmin,
+		Status:    status,
+		AvatarURL: u.AvatarURL,
 	}
 }
 

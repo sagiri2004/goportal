@@ -31,6 +31,17 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*models.User,
 	return &u, nil
 }
 
+func (r *userRepository) FindByIDs(ctx context.Context, ids []string) ([]models.User, error) {
+	users := make([]models.User, 0, len(ids))
+	if len(ids) == 0 {
+		return users, nil
+	}
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return users, nil
+}
+
 func (r *userRepository) FindByUsername(ctx context.Context, username string) (*models.User, error) {
 	var u models.User
 	if err := r.db.WithContext(ctx).Where("username = ?", username).First(&u).Error; err != nil {

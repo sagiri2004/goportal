@@ -53,6 +53,8 @@ type ServerResponse struct {
 	OwnerID       string  `json:"owner_id"`
 	IsPublic      bool    `json:"is_public"`
 	DefaultRoleID *string `json:"default_role_id,omitempty"`
+	IconURL       *string `json:"icon_url"`
+	BannerURL     *string `json:"banner_url"`
 }
 
 func NewServerResponse(server *models.Server) ServerResponse {
@@ -62,6 +64,8 @@ func NewServerResponse(server *models.Server) ServerResponse {
 		OwnerID:       server.OwnerID,
 		IsPublic:      server.IsPublic,
 		DefaultRoleID: server.DefaultRoleID,
+		IconURL:       server.IconURL,
+		BannerURL:     server.BannerURL,
 	}
 }
 

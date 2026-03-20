@@ -1,4 +1,4 @@
-import { IS_MOCK } from '../mock';
+import { IS_MOCK_MESSAGES } from '../mock';
 import { mockMessages } from '../mock/messages';
 import { simulateDelay } from '../mock/user';
 import { apiClient } from '../lib/api-client';
@@ -95,7 +95,7 @@ const mapMessage = (item) => {
 export const getMessages = async (channelId, opts = {}) => {
     const limit = opts.limit ?? 50;
     const offset = opts.offset ?? 0;
-    if (IS_MOCK) {
+    if (IS_MOCK_MESSAGES) {
         await simulateDelay();
         const channelMessages = mockMessages[channelId] ?? [];
         const items = channelMessages.slice(offset, offset + limit);
@@ -113,7 +113,7 @@ export const getMessages = async (channelId, opts = {}) => {
     };
 };
 export const sendMessage = async (channelId, content) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_MESSAGES) {
         await simulateDelay(120);
         const now = new Date();
         const timestamp = now.toLocaleTimeString([], {

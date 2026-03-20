@@ -138,7 +138,7 @@ func (r *serverRepository) FindByID(ctx context.Context, id string) (*models.Ser
 func (r *serverRepository) ListByUserID(ctx context.Context, userID string) ([]models.Server, error) {
 	var servers []models.Server
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT s.id, s.created_at, s.updated_at, s.deleted_at, s.name, s.owner_id, s.is_public, s.default_role_id
+		SELECT s.id, s.created_at, s.updated_at, s.deleted_at, s.name, s.owner_id, s.is_public, s.default_role_id, s.icon_url, s.banner_url
 		FROM servers s
 		INNER JOIN server_members sm ON sm.server_id = s.id
 		WHERE sm.user_id = ? AND sm.deleted_at = 0 AND sm.status = 'active' AND s.deleted_at = 0
@@ -184,7 +184,7 @@ func (r *serverRepository) RemoveMember(ctx context.Context, serverID, userID st
 func (r *serverRepository) ListMembers(ctx context.Context, serverID string) ([]models.User, error) {
 	var users []models.User
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT u.id, u.created_at, u.updated_at, u.deleted_at, u.username, u.password, u.is_admin
+		SELECT u.id, u.created_at, u.updated_at, u.deleted_at, u.username, u.password, u.is_admin, u.status, u.avatar_url
 		FROM users u
 		INNER JOIN server_members sm ON sm.user_id = u.id
 		WHERE sm.server_id = ? AND sm.deleted_at = 0 AND u.deleted_at = 0
@@ -470,14 +470,16 @@ func (r *serverRepository) UpdateMemberRoles(ctx context.Context, serverID, user
 
 func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID string) ([]repositories.ServerMemberWithRoles, error) {
 	type memberRow struct {
-		MemberID string
-		ID       string
-		Username string
-		IsAdmin  bool
+		MemberID  string
+		ID        string
+		Username  string
+		IsAdmin   bool
+		Status    string
+		AvatarURL *string
 	}
 	var rows []memberRow
 	if err := r.db.WithContext(ctx).Raw(`
-		SELECT sm.id AS member_id, u.id, u.username, u.is_admin
+		SELECT sm.id AS member_id, u.id, u.username, u.is_admin, u.status, u.avatar_url
 		FROM server_members sm
 		INNER JOIN users u ON u.id = sm.user_id
 		WHERE sm.server_id = ? AND sm.deleted_at = 0 AND u.deleted_at = 0
@@ -500,9 +502,11 @@ func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID st
 		}
 		result = append(result, repositories.ServerMemberWithRoles{
 			User: models.User{
-				ID:       row.ID,
-				Username: row.Username,
-				IsAdmin:  row.IsAdmin,
+				ID:        row.ID,
+				Username:  row.Username,
+				IsAdmin:   row.IsAdmin,
+				Status:    row.Status,
+				AvatarURL: row.AvatarURL,
 			},
 			Roles: roles,
 		})

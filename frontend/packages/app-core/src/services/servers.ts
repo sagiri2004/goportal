@@ -1,6 +1,6 @@
 import type { CreateServerRequest, ServerDTO } from '@goportal/types'
 import { apiClient } from '../lib/api-client'
-import { IS_MOCK } from '../mock'
+import { IS_MOCK_SERVERS } from '../mock'
 import { mockServers, mockServersData, type MockServer } from '../mock/servers'
 import { simulateDelay } from '../mock/user'
 
@@ -34,13 +34,13 @@ const mapServer = (server: ServerDTO): MockServer => ({
   name: server.name,
   initials: deriveInitials(server.name),
   color: pickColor(server.id),
-  iconUrl: undefined,
-  bannerUrl: undefined,
+  iconUrl: server.icon_url ?? undefined,
+  bannerUrl: server.banner_url ?? undefined,
   boostLevel: undefined,
 })
 
 export const getServers = async (): Promise<MockServer[]> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_SERVERS) {
     await simulateDelay()
     return mockServers
   }
@@ -50,7 +50,7 @@ export const getServers = async (): Promise<MockServer[]> => {
 }
 
 export const getServerById = async (serverId: string): Promise<MockServer | null> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_SERVERS) {
     await simulateDelay(180)
     return mockServers.find((server) => server.id === serverId) ?? null
   }
@@ -64,7 +64,7 @@ export const getServerById = async (serverId: string): Promise<MockServer | null
 }
 
 export const createServer = async (body: CreateServerRequest): Promise<MockServer> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_SERVERS) {
     await simulateDelay()
     const server: MockServer = {
       id: `s-${Date.now()}`,
@@ -93,7 +93,7 @@ export const createServer = async (body: CreateServerRequest): Promise<MockServe
 }
 
 export const joinServer = async (serverId: string): Promise<void> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_SERVERS) {
     await simulateDelay(150)
     return
   }

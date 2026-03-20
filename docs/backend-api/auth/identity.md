@@ -34,7 +34,9 @@
   "data": {
     "id": "8d3f6506-6569-4b31-a74a-d9d43c359ee5",
     "username": "john",
-    "is_admin": false
+    "is_admin": false,
+    "status": "offline",
+    "avatar_url": null
   }
 }
 ```
@@ -108,7 +110,9 @@
     "user": {
       "id": "8d3f6506-6569-4b31-a74a-d9d43c359ee5",
       "username": "john",
-      "is_admin": false
+      "is_admin": false,
+      "status": "offline",
+      "avatar_url": null
     },
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI..."
   }

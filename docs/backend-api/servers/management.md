@@ -33,7 +33,9 @@
     "name": "Backend Team",
     "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
     "is_public": true,
-    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+    "icon_url": null,
+    "banner_url": null
   }
 }
 ```
@@ -165,6 +167,38 @@
 - Auth: `Bearer token`
 - Description: Return members with assigned roles (role includes `position` + `permissions` bitset).
 
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Server members fetched",
+  "data": [
+    {
+      "user": {
+        "id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+        "username": "john",
+        "is_admin": false,
+        "status": "offline",
+        "avatar_url": null
+      },
+      "roles": [
+        {
+          "id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+          "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
+          "name": "@everyone",
+          "position": 0,
+          "permissions": 1095
+        }
+      ]
+    }
+  ]
+}
+```
+
 ---
 
 ### SERVERS: Update Member Roles
@@ -240,7 +274,9 @@
       "name": "Backend Team",
       "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
       "is_public": true,
-      "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+      "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+      "icon_url": null,
+      "banner_url": null
     }
   ]
 }
@@ -276,7 +312,9 @@
     "name": "Backend Team",
     "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
     "is_public": true,
-    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+    "icon_url": null,
+    "banner_url": null
   }
 }
 ```

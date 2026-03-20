@@ -1,21 +1,37 @@
 import { useAuthStore } from '@goportal/store';
 import { apiClient } from '../lib/api-client';
-import { IS_MOCK } from '../mock';
+import { IS_MOCK_AUTH } from '../mock';
 import { mockCurrentUser, mockLoginResponse, simulateDelay } from '../mock/user';
+const AUTH_TOKEN_KEY = 'auth_token';
+const LEGACY_AUTH_TOKEN_KEY = 'auth-token';
+const AUTH_STORE_KEY = 'auth-store';
+const AUTH_CREDENTIALS_KEY = 'auth_credentials';
 const setPersistedToken = (token) => {
     if (typeof window === 'undefined') {
         return;
     }
     if (!token) {
-        window.localStorage.removeItem('auth-token');
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
         return;
     }
-    window.localStorage.setItem('auth-token', token);
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    window.localStorage.setItem(LEGACY_AUTH_TOKEN_KEY, token);
+};
+const setPersistedCredentials = (username, password) => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    window.localStorage.setItem(AUTH_CREDENTIALS_KEY, JSON.stringify({
+        username,
+        password,
+    }));
 };
 export const clearSession = () => {
     if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('auth-token');
-        window.localStorage.removeItem('auth-store');
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+        window.localStorage.removeItem(AUTH_STORE_KEY);
     }
     try {
         useAuthStore.getState().logout();
@@ -25,7 +41,7 @@ export const clearSession = () => {
     }
 };
 export const register = async (body) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_AUTH) {
         await simulateDelay();
         return {
             id: `user-${Date.now()}`,
@@ -36,19 +52,20 @@ export const register = async (body) => {
     return apiClient.post('/api/v1/auth/register', body);
 };
 export const login = async (body) => {
-    const data = IS_MOCK
+    const data = IS_MOCK_AUTH
         ? await (async () => {
             await simulateDelay();
             return mockLoginResponse;
         })()
         : await apiClient.post('/api/v1/auth/login', body);
     setPersistedToken(data.token);
+    setPersistedCredentials(body.username, body.password);
     useAuthStore.getState().setToken(data.token);
     useAuthStore.getState().setUser(data.user);
     return data;
 };
 export const getCurrentUser = async () => {
-    if (IS_MOCK) {
+    if (IS_MOCK_AUTH) {
         await simulateDelay(150);
         return {
             id: mockCurrentUser.id,
@@ -59,7 +76,10 @@ export const getCurrentUser = async () => {
     return apiClient.get('/api/v1/users/me');
 };
 export const hydrateSession = async () => {
-    const token = typeof window === 'undefined' ? null : window.localStorage.getItem('auth-token');
+    const token = typeof window === 'undefined'
+        ? null
+        : window.localStorage.getItem(AUTH_TOKEN_KEY) ??
+            window.localStorage.getItem(LEGACY_AUTH_TOKEN_KEY);
     if (!token) {
         return null;
     }

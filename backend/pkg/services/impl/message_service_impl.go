@@ -20,6 +20,7 @@ type messageService struct {
 	repo        repositories.MessageRepository
 	serverRepo  repositories.ServerRepository
 	channelRepo repositories.ChannelRepository
+	userRepo    repositories.UserRepository
 	publisher   message.Publisher
 }
 
@@ -27,12 +28,14 @@ func NewMessageService(
 	repo repositories.MessageRepository,
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
+	userRepo repositories.UserRepository,
 	publisher message.Publisher,
 ) services.MessageService {
 	return &messageService{
 		repo:        repo,
 		serverRepo:  serverRepo,
 		channelRepo: channelRepo,
+		userRepo:    userRepo,
 		publisher:   publisher,
 	}
 }
@@ -203,10 +206,26 @@ func (s *messageService) ListByChannel(
 	if err != nil {
 		return nil, err
 	}
+
+	authorIDsSet := make(map[string]struct{}, len(messages))
+	authorIDs := make([]string, 0, len(messages))
+	for i := range messages {
+		if _, exists := authorIDsSet[messages[i].AuthorID]; exists {
+			continue
+		}
+		authorIDsSet[messages[i].AuthorID] = struct{}{}
+		authorIDs = append(authorIDs, messages[i].AuthorID)
+	}
+	authors, err := s.userRepo.FindByIDs(ctx, authorIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &services.ListMessagesResult{
 		Messages:    messages,
 		Attachments: attachments,
 		Reactions:   reactions,
+		Authors:     authors,
 	}, nil
 }
 

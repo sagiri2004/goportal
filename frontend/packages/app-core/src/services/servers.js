@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api-client';
-import { IS_MOCK } from '../mock';
+import { IS_MOCK_SERVERS } from '../mock';
 import { mockServers, mockServersData } from '../mock/servers';
 import { simulateDelay } from '../mock/user';
 const deriveInitials = (name) => name
@@ -28,12 +28,12 @@ const mapServer = (server) => ({
     name: server.name,
     initials: deriveInitials(server.name),
     color: pickColor(server.id),
-    iconUrl: undefined,
-    bannerUrl: undefined,
+    iconUrl: server.icon_url ?? undefined,
+    bannerUrl: server.banner_url ?? undefined,
     boostLevel: undefined,
 });
 export const getServers = async () => {
-    if (IS_MOCK) {
+    if (IS_MOCK_SERVERS) {
         await simulateDelay();
         return mockServers;
     }
@@ -41,7 +41,7 @@ export const getServers = async () => {
     return servers.map(mapServer);
 };
 export const getServerById = async (serverId) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_SERVERS) {
         await simulateDelay(180);
         return mockServers.find((server) => server.id === serverId) ?? null;
     }
@@ -54,7 +54,7 @@ export const getServerById = async (serverId) => {
     }
 };
 export const createServer = async (body) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_SERVERS) {
         await simulateDelay();
         const server = {
             id: `s-${Date.now()}`,
@@ -79,7 +79,7 @@ export const createServer = async (body) => {
     return mapServer(server);
 };
 export const joinServer = async (serverId) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_SERVERS) {
         await simulateDelay(150);
         return;
     }

@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api-client';
-import { IS_MOCK } from '../mock';
+import { IS_MOCK_CHANNELS } from '../mock';
 import { mockChannels, mockChannelsData } from '../mock/servers';
 import { simulateDelay } from '../mock/user';
 const mapChannel = (channel) => ({
@@ -34,7 +34,7 @@ const toCategories = (channels) => {
     return categories;
 };
 export const getChannels = async (serverId) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_CHANNELS) {
         await simulateDelay();
         return {
             categories: mockChannels[serverId]?.categories ?? [],
@@ -46,7 +46,7 @@ export const getChannels = async (serverId) => {
     };
 };
 export const createChannel = async (serverId, body) => {
-    if (IS_MOCK) {
+    if (IS_MOCK_CHANNELS) {
         await simulateDelay();
         const newChannel = {
             id: `c-${Date.now()}`,

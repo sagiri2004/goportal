@@ -60,6 +60,7 @@ func MessageService() services.MessageService {
 			MessageRepository(),
 			ServerRepository(),
 			ChannelRepository(),
+			UserRepository(),
 			pkgglobal.Publisher,
 		)
 	})

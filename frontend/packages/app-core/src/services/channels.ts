@@ -1,6 +1,6 @@
 import type { ChannelDTO, CreateChannelRequest } from '@goportal/types'
 import { apiClient } from '../lib/api-client'
-import { IS_MOCK } from '../mock'
+import { IS_MOCK_CHANNELS } from '../mock'
 import { mockChannels, mockChannelsData, type MockCategory, type MockChannel } from '../mock/servers'
 import { simulateDelay } from '../mock/user'
 
@@ -47,7 +47,7 @@ const toCategories = (channels: ChannelDTO[]): MockCategory[] => {
 }
 
 export const getChannels = async (serverId: string): Promise<ChannelsResult> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_CHANNELS) {
     await simulateDelay()
     return {
       categories: mockChannels[serverId]?.categories ?? [],
@@ -65,7 +65,7 @@ export const createChannel = async (
   serverId: string,
   body: CreateChannelRequest
 ): Promise<MockChannel> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_CHANNELS) {
     await simulateDelay()
 
     const newChannel: ChannelDTO = {

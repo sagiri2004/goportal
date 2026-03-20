@@ -1,6 +1,6 @@
 import type { MockMember } from '../mock/members'
 import { mockMembers } from '../mock/members'
-import { IS_MOCK } from '../mock'
+import { IS_MOCK_MEMBERS } from '../mock'
 import { simulateDelay } from '../mock/user'
 import { apiClient } from '../lib/api-client'
 
@@ -10,6 +10,7 @@ type BackendMemberWithRoles = {
     username: string
     is_admin: boolean
     status?: 'online' | 'idle' | 'dnd' | 'offline'
+    avatar_url?: string | null
   }
   roles: Array<{
     id: string
@@ -47,12 +48,13 @@ const mapMember = (item: BackendMemberWithRoles): MockMember => ({
   name: item.user.username,
   initials: initialsFromName(item.user.username),
   color: colorFromId(item.user.id),
+  avatarUrl: item.user.avatar_url ?? undefined,
   status: item.user.status ?? 'offline', // TODO: remove when backend exposes realtime status consistently
   role: item.roles[0]?.name ?? 'Member',
 })
 
 export const getMembers = async (serverId: string): Promise<MockMember[]> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_MEMBERS) {
     await simulateDelay()
     return mockMembers
   }

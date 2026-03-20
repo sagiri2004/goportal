@@ -1,8 +1,13 @@
 import type { AuthUser, LoginRequest, LoginResponseData, RegisterRequest } from '@goportal/types'
 import { useAuthStore } from '@goportal/store'
 import { apiClient } from '../lib/api-client'
-import { IS_MOCK } from '../mock'
+import { IS_MOCK_AUTH } from '../mock'
 import { mockCurrentUser, mockLoginResponse, simulateDelay } from '../mock/user'
+
+const AUTH_TOKEN_KEY = 'auth_token'
+const LEGACY_AUTH_TOKEN_KEY = 'auth-token'
+const AUTH_STORE_KEY = 'auth-store'
+const AUTH_CREDENTIALS_KEY = 'auth_credentials'
 
 const setPersistedToken = (token: string | null) => {
   if (typeof window === 'undefined') {
@@ -10,17 +15,34 @@ const setPersistedToken = (token: string | null) => {
   }
 
   if (!token) {
-    window.localStorage.removeItem('auth-token')
+    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY)
     return
   }
 
-  window.localStorage.setItem('auth-token', token)
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
+  window.localStorage.setItem(LEGACY_AUTH_TOKEN_KEY, token)
+}
+
+const setPersistedCredentials = (username: string, password: string) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(
+    AUTH_CREDENTIALS_KEY,
+    JSON.stringify({
+      username,
+      password,
+    })
+  )
 }
 
 export const clearSession = () => {
   if (typeof window !== 'undefined') {
-    window.localStorage.removeItem('auth-token')
-    window.localStorage.removeItem('auth-store')
+    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY)
+    window.localStorage.removeItem(AUTH_STORE_KEY)
   }
 
   try {
@@ -31,7 +53,7 @@ export const clearSession = () => {
 }
 
 export const register = async (body: RegisterRequest): Promise<AuthUser> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_AUTH) {
     await simulateDelay()
     return {
       id: `user-${Date.now()}`,
@@ -44,7 +66,7 @@ export const register = async (body: RegisterRequest): Promise<AuthUser> => {
 }
 
 export const login = async (body: LoginRequest): Promise<LoginResponseData> => {
-  const data = IS_MOCK
+  const data = IS_MOCK_AUTH
     ? await (async () => {
         await simulateDelay()
         return mockLoginResponse
@@ -52,6 +74,7 @@ export const login = async (body: LoginRequest): Promise<LoginResponseData> => {
     : await apiClient.post<LoginResponseData>('/api/v1/auth/login', body)
 
   setPersistedToken(data.token)
+  setPersistedCredentials(body.username, body.password)
   useAuthStore.getState().setToken(data.token)
   useAuthStore.getState().setUser(data.user)
 
@@ -59,7 +82,7 @@ export const login = async (body: LoginRequest): Promise<LoginResponseData> => {
 }
 
 export const getCurrentUser = async (): Promise<AuthUser> => {
-  if (IS_MOCK) {
+  if (IS_MOCK_AUTH) {
     await simulateDelay(150)
     return {
       id: mockCurrentUser.id,
@@ -73,7 +96,10 @@ export const getCurrentUser = async (): Promise<AuthUser> => {
 
 export const hydrateSession = async (): Promise<AuthUser | null> => {
   const token =
-    typeof window === 'undefined' ? null : window.localStorage.getItem('auth-token')
+    typeof window === 'undefined'
+      ? null
+      : window.localStorage.getItem(AUTH_TOKEN_KEY) ??
+        window.localStorage.getItem(LEGACY_AUTH_TOKEN_KEY)
 
   if (!token) {
     return null

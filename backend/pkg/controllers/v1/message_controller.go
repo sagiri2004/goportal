@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sagiri2004/goportal/pkg/apperr"
 	"github.com/sagiri2004/goportal/pkg/containers"
+	"github.com/sagiri2004/goportal/pkg/models"
 	"github.com/sagiri2004/goportal/pkg/serializers"
 	"github.com/sagiri2004/goportal/pkg/services"
 )
@@ -60,11 +61,28 @@ func (ctrl *messageController) ListByChannel(c *gin.Context) {
 		})
 	}
 
+	authorByID := map[string]*models.User{}
+	for i := range result.Authors {
+		author := &result.Authors[i]
+		authorByID[author.ID] = author
+	}
+
 	items := make([]serializers.MessageResponse, 0, len(result.Messages))
 	for _, msg := range result.Messages {
-		resp := serializers.NewMessageResponse(&msg, nil, nil)
+		resp := serializers.NewMessageResponse(
+			&msg,
+			authorByID[msg.AuthorID],
+			nil,
+			nil,
+		)
 		resp.Attachments = attachmentByMsg[msg.ID]
+		if resp.Attachments == nil {
+			resp.Attachments = []serializers.AttachmentResponse{}
+		}
 		resp.Reactions = reactionByMsg[msg.ID]
+		if resp.Reactions == nil {
+			resp.Reactions = []serializers.ReactionResponse{}
+		}
 		items = append(items, resp)
 	}
 
@@ -108,7 +126,11 @@ func (ctrl *messageController) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, serializers.Success("OK", "Message created", serializers.NewMessageResponse(msg, nil, nil)))
+	author, _ := containers.UserService().GetByID(c.Request.Context(), userID)
+	c.JSON(
+		http.StatusCreated,
+		serializers.Success("OK", "Message created", serializers.NewMessageResponse(msg, author, nil, nil)),
+	)
 }
 
 func (ctrl *messageController) Update(c *gin.Context) {
@@ -143,7 +165,11 @@ func (ctrl *messageController) Update(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, serializers.Success("OK", "Message updated", serializers.NewMessageResponse(msg, nil, nil)))
+	author, _ := containers.UserService().GetByID(c.Request.Context(), userID)
+	c.JSON(
+		http.StatusOK,
+		serializers.Success("OK", "Message updated", serializers.NewMessageResponse(msg, author, nil, nil)),
+	)
 }
 
 func (ctrl *messageController) Delete(c *gin.Context) {
