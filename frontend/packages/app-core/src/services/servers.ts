@@ -1,8 +1,6 @@
 import type { CreateServerRequest, ServerDTO } from '@goportal/types'
 import { apiClient } from '../lib/api-client'
-import { IS_MOCK_SERVERS } from '../mock'
-import { mockServers, mockServersData, type MockServer } from '../mock/servers'
-import { simulateDelay } from '../mock/user'
+import type { MockServer } from '../mock/servers'
 
 const deriveInitials = (name: string): string =>
   name
@@ -40,21 +38,11 @@ const mapServer = (server: ServerDTO): MockServer => ({
 })
 
 export const getServers = async (): Promise<MockServer[]> => {
-  if (IS_MOCK_SERVERS) {
-    await simulateDelay()
-    return mockServers
-  }
-
   const servers = await apiClient.get<ServerDTO[]>('/api/v1/servers')
   return servers.map(mapServer)
 }
 
 export const getServerById = async (serverId: string): Promise<MockServer | null> => {
-  if (IS_MOCK_SERVERS) {
-    await simulateDelay(180)
-    return mockServers.find((server) => server.id === serverId) ?? null
-  }
-
   try {
     const server = await apiClient.get<ServerDTO>(`/api/v1/servers/${serverId}`)
     return mapServer(server)
@@ -64,39 +52,10 @@ export const getServerById = async (serverId: string): Promise<MockServer | null
 }
 
 export const createServer = async (body: CreateServerRequest): Promise<MockServer> => {
-  if (IS_MOCK_SERVERS) {
-    await simulateDelay()
-    const server: MockServer = {
-      id: `s-${Date.now()}`,
-      name: body.name,
-      initials: deriveInitials(body.name),
-      color: 'bg-indigo-500',
-      bannerUrl: undefined,
-      iconUrl: undefined,
-      boostLevel: undefined,
-    }
-
-    mockServers.push(server)
-    mockServersData.push({
-      id: server.id,
-      name: server.name,
-      owner_id: 'mock-owner',
-      is_public: body.is_public,
-      default_role_id: 'mock-default-role',
-    })
-
-    return server
-  }
-
   const server = await apiClient.post<ServerDTO>('/api/v1/servers', body)
   return mapServer(server)
 }
 
 export const joinServer = async (serverId: string): Promise<void> => {
-  if (IS_MOCK_SERVERS) {
-    await simulateDelay(150)
-    return
-  }
-
   await apiClient.post<void>(`/api/v1/servers/${serverId}/join`)
 }

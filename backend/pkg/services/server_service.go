@@ -28,6 +28,7 @@ type ReviewJoinRequestInput struct {
 
 type ServerService interface {
 	CreateServer(ctx context.Context, ownerID, name string, isPublic bool) (*models.Server, error)
+	UpdateServer(ctx context.Context, actorID, serverID string, name, iconURL, bannerURL *string) (*models.Server, error)
 	ListUserServers(ctx context.Context, userID string) ([]models.Server, error)
 	GetServerByID(ctx context.Context, actorID, serverID string) (*models.Server, error)
 	ListMembers(ctx context.Context, actorID, serverID string) ([]models.User, error)
@@ -35,8 +36,10 @@ type ServerService interface {
 	DeleteServer(ctx context.Context, actorID, serverID string) error
 	KickMember(ctx context.Context, actorID, serverID, memberUserID string) error
 	LeaveServer(ctx context.Context, actorID, serverID string) error
-	CreateRole(ctx context.Context, actorID, serverID, name string, permissionValues []int64, position int) (*models.Role, error)
-	UpdateRole(ctx context.Context, actorID, roleID string, name *string, permissionValues []int64, position *int) (*models.Role, error)
+	CreateRole(ctx context.Context, actorID, serverID, name, color string, permissionNames []string) (*models.Role, error)
+	UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, color *string, permissionNames []string) (*models.Role, error)
+	DeleteRole(ctx context.Context, actorID, serverID, roleID string) error
+	ListRoles(ctx context.Context, actorID, serverID string) ([]models.Role, error)
 	CreateInvite(ctx context.Context, actorID, serverID string, input CreateInviteInput) (*models.ServerInvite, error)
 	GetInvite(ctx context.Context, code string) (*models.ServerInvite, *models.Server, error)
 	JoinByInvite(ctx context.Context, actorID, code string) (*models.Server, error)

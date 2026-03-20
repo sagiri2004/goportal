@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,8 @@ type serverService struct {
 	userRepo   repositories.UserRepository
 	serverRepo repositories.ServerRepository
 }
+
+var roleColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 func NewServerService(userRepo repositories.UserRepository, serverRepo repositories.ServerRepository) services.ServerService {
 	return &serverService{
@@ -49,6 +52,33 @@ func (s *serverService) CreateServer(ctx context.Context, ownerID, name string, 
 		return nil, err
 	}
 	return server, nil
+}
+
+func (s *serverService) UpdateServer(ctx context.Context, actorID, serverID string, name, iconURL, bannerURL *string) (*models.Server, error) {
+	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
+	if actorID == "" || serverID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+
+	server, err := s.serverRepo.FindByID(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	if server.OwnerID != actorID {
+		return nil, apperr.E("SERVER_OWNER_REQUIRED", nil)
+	}
+
+	var normalizedName *string
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		if trimmed == "" {
+			return nil, apperr.E("MISSING_FIELDS", nil)
+		}
+		normalizedName = &trimmed
+	}
+
+	return s.serverRepo.UpdateServer(ctx, serverID, normalizedName, iconURL, bannerURL)
 }
 
 func (s *serverService) ListUserServers(ctx context.Context, userID string) ([]models.Server, error) {
@@ -185,11 +215,15 @@ func (s *serverService) LeaveServer(ctx context.Context, actorID, serverID strin
 	return s.serverRepo.RemoveMember(ctx, serverID, actorID)
 }
 
-func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name string, permissionValues []int64, position int) (*models.Role, error) {
+func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name, color string, permissionNames []string) (*models.Role, error) {
 	actorID = strings.TrimSpace(actorID)
 	serverID = strings.TrimSpace(serverID)
 	name = strings.TrimSpace(name)
-	if actorID == "" || serverID == "" || name == "" {
+	color = strings.TrimSpace(color)
+	if actorID == "" || serverID == "" || name == "" || color == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	if !roleColorPattern.MatchString(color) {
 		return nil, apperr.E("MISSING_FIELDS", nil)
 	}
 	if _, err := s.serverRepo.FindByID(ctx, serverID); err != nil {
@@ -209,10 +243,12 @@ func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name 
 	if actorMaxPos <= 0 {
 		return nil, apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
 	}
-	if position >= actorMaxPos {
-		return nil, apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
+
+	permissionValues, err := normalizePermissionNames(permissionNames)
+	if err != nil {
+		return nil, err
 	}
-	permissionValues = normalizePermissionValues(permissionValues)
+
 	actorPerms, err := s.serverRepo.GetMemberPermissions(ctx, serverID, actorID)
 	if err != nil {
 		return nil, err
@@ -225,24 +261,38 @@ func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name 
 	role := &models.Role{
 		ServerID:    serverID,
 		Name:        name,
-		Position:    position,
+		Color:       color,
+		Position:    0,
 		Permissions: sumPermissions(permissionValues),
 	}
+	maxPos, err := s.serverRepo.GetMaxRolePositionBelow(ctx, serverID, actorMaxPos)
+	if err != nil {
+		return nil, err
+	}
+	role.Position = maxPos + 1
+	if role.Position >= actorMaxPos {
+		role.Position = actorMaxPos - 1
+	}
+
 	if err := s.serverRepo.CreateRole(ctx, role, permissionValues); err != nil {
 		return nil, err
 	}
 	return role, nil
 }
 
-func (s *serverService) UpdateRole(ctx context.Context, actorID, roleID string, name *string, permissionValues []int64, position *int) (*models.Role, error) {
+func (s *serverService) UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, color *string, permissionNames []string) (*models.Role, error) {
 	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
 	roleID = strings.TrimSpace(roleID)
-	if actorID == "" || roleID == "" {
+	if actorID == "" || roleID == "" || serverID == "" {
 		return nil, apperr.E("MISSING_FIELDS", nil)
 	}
 	role, err := s.serverRepo.FindRoleByID(ctx, roleID)
 	if err != nil {
 		return nil, err
+	}
+	if role.ServerID != serverID {
+		return nil, apperr.E("ROLE_NOT_FOUND", nil)
 	}
 	ok, err := s.serverRepo.HasPermission(ctx, role.ServerID, actorID, models.PermissionManageRoles)
 	if err != nil {
@@ -258,17 +308,31 @@ func (s *serverService) UpdateRole(ctx context.Context, actorID, roleID string, 
 	if actorMaxPos <= role.Position {
 		return nil, apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
 	}
-	if position != nil && *position >= actorMaxPos {
-		return nil, apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
-	}
 
 	var normalizedName *string
 	if name != nil {
 		trimmed := strings.TrimSpace(*name)
+		if trimmed == "" {
+			return nil, apperr.E("MISSING_FIELDS", nil)
+		}
 		normalizedName = &trimmed
 	}
-	if permissionValues != nil {
-		permissionValues = normalizePermissionValues(permissionValues)
+
+	var normalizedColor *string
+	if color != nil {
+		trimmed := strings.TrimSpace(*color)
+		if !roleColorPattern.MatchString(trimmed) {
+			return nil, apperr.E("MISSING_FIELDS", nil)
+		}
+		normalizedColor = &trimmed
+	}
+
+	var permissionValues []int64
+	if permissionNames != nil {
+		permissionValues, err = normalizePermissionNames(permissionNames)
+		if err != nil {
+			return nil, err
+		}
 		actorPerms, err := s.serverRepo.GetMemberPermissions(ctx, role.ServerID, actorID)
 		if err != nil {
 			return nil, err
@@ -279,7 +343,67 @@ func (s *serverService) UpdateRole(ctx context.Context, actorID, roleID string, 
 			}
 		}
 	}
-	return s.serverRepo.UpdateRole(ctx, roleID, normalizedName, permissionValues, position)
+	return s.serverRepo.UpdateRole(ctx, roleID, normalizedName, normalizedColor, permissionValues)
+}
+
+func (s *serverService) DeleteRole(ctx context.Context, actorID, serverID, roleID string) error {
+	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
+	roleID = strings.TrimSpace(roleID)
+	if actorID == "" || serverID == "" || roleID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+
+	server, err := s.serverRepo.FindByID(ctx, serverID)
+	if err != nil {
+		return err
+	}
+
+	role, err := s.serverRepo.FindRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role.ServerID != serverID {
+		return apperr.E("ROLE_NOT_FOUND", nil)
+	}
+	if server.DefaultRoleID != nil && *server.DefaultRoleID == roleID {
+		return apperr.E("DEFAULT_ROLE_DELETE_FORBIDDEN", nil)
+	}
+
+	ok, err := s.serverRepo.HasPermission(ctx, serverID, actorID, models.PermissionManageRoles)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+
+	actorMaxPos, err := s.serverRepo.GetMemberHighestRolePosition(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorMaxPos <= role.Position {
+		return apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
+	}
+
+	return s.serverRepo.DeleteRole(ctx, roleID)
+}
+
+func (s *serverService) ListRoles(ctx context.Context, actorID, serverID string) ([]models.Role, error) {
+	actorID = strings.TrimSpace(actorID)
+	serverID = strings.TrimSpace(serverID)
+	if actorID == "" || serverID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+
+	if _, err := s.serverRepo.FindByID(ctx, serverID); err != nil {
+		return nil, err
+	}
+	if _, err := s.serverRepo.FindMember(ctx, serverID, actorID); err != nil {
+		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+
+	return s.serverRepo.ListRolesByServerID(ctx, serverID)
 }
 
 func (s *serverService) CreateInvite(ctx context.Context, actorID, serverID string, input services.CreateInviteInput) (*models.ServerInvite, error) {
@@ -522,6 +646,27 @@ func normalizePermissionValues(values []int64) []int64 {
 		result = append(result, value)
 	}
 	return result
+}
+
+func normalizePermissionNames(names []string) ([]int64, error) {
+	seen := make(map[int64]struct{}, len(names))
+	values := make([]int64, 0, len(names))
+	for _, raw := range names {
+		name := strings.ToUpper(strings.TrimSpace(raw))
+		if name == "" {
+			continue
+		}
+		value, ok := models.PermissionValueByName(name)
+		if !ok {
+			return nil, apperr.E("PERMISSION_INVALID", nil)
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	return values, nil
 }
 
 func generateInviteCode() (string, error) {

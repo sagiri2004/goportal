@@ -58,6 +58,8 @@ type ChannelSidebarProps = {
   onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void
   onCreateChannel?: () => void
   onInviteMember?: () => void
+  onOpenServerSettings?: () => void
+  onOpenServerMembers?: () => void
   isInVoiceChannel?: boolean
   activeVoiceChannelName?: string
 }
@@ -332,6 +334,8 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onSelectChannel = () => {},
   onCreateChannel = () => {},
   onInviteMember = () => {},
+  onOpenServerSettings = () => {},
+  onOpenServerMembers = () => {},
   isInVoiceChannel = false,
   activeVoiceChannelName = 'afk-base',
 }) => {
@@ -454,13 +458,13 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
           </DropdownMenuTrigger>
         )}
         <DropdownMenuContent className="w-56" align="start" side="bottom">
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={onInviteMember}>
             <UserPlus className="mr-2 h-4 w-4" /> Invite People
           </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenServerSettings}>
             <Settings className="mr-2 h-4 w-4" /> Server Settings
           </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenServerMembers}>
             <Users className="mr-2 h-4 w-4" /> Members
           </DropdownMenuItem>
           <DropdownMenuSeparator />

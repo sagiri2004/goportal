@@ -165,7 +165,7 @@
 - Method: `GET`
 - Path: `/api/v1/servers/:id/members`
 - Auth: `Bearer token`
-- Description: Return members with assigned roles (role includes `position` + `permissions` bitset).
+- Description: Return members with assigned roles (role includes `color`, `position`, `is_everyone`, `permissions[]`).
 
 #### Success Response
 
@@ -190,8 +190,10 @@
           "id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
           "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
           "name": "@everyone",
+          "color": "#99AAB5",
           "position": 0,
-          "permissions": 1095
+          "is_everyone": true,
+          "permissions": ["READ_MESSAGES", "SEND_MESSAGES", "VIEW_CHANNEL"]
         }
       ]
     }
@@ -316,6 +318,66 @@
     "icon_url": null,
     "banner_url": null
   }
+}
+```
+
+---
+
+### SERVERS: Update Server Profile
+
+- Method: `PATCH`
+- Path: `/api/v1/servers/:id`
+- Auth: `Bearer token`
+- Description: Update server name/icon/banner. Owner only.
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - Server UUID.
+- Body JSON (all fields optional):
+
+```json
+{
+  "name": "Verify Updated",
+  "icon_url": "https://example.com/icon.png",
+  "banner_url": "https://example.com/banner.png"
+}
+```
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Server updated",
+  "data": {
+    "id": "d65bdaa2-0805-4067-b101-059ea536a422",
+    "name": "Verify Updated",
+    "owner_id": "951cd6d3-3968-422c-800a-07c06158b09e",
+    "is_public": false,
+    "default_role_id": "47645438-f4f1-4fd6-a83b-09de8a4a095a",
+    "icon_url": "https://example.com/icon.png",
+    "banner_url": "https://example.com/banner.png"
+  }
+}
+```
+
+#### Error Responses
+
+- Status: `403`
+- Meaning: Caller is not server owner.
+
+```json
+{
+  "success": false,
+  "code": "SERVER_OWNER_REQUIRED",
+  "message": "Only server owner can perform this action"
 }
 ```
 

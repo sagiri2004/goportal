@@ -1,8 +1,10 @@
 import React from 'react';
+import type { CreateServerRequest } from '@goportal/types';
 type CreateServerModalProps = {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    onSuccess?: () => void;
+    defaultServerName: string;
+    onCreate: (payload: CreateServerRequest) => Promise<void>;
 };
 export declare const CreateServerModal: React.FC<CreateServerModalProps>;
 export {};

@@ -19,6 +19,7 @@ type ServerMemberWithRoles struct {
 type ServerRepository interface {
 	CreateWithOwnerMember(ctx context.Context, server *models.Server, ownerMember *models.ServerMember) error
 	FindByID(ctx context.Context, id string) (*models.Server, error)
+	UpdateServer(ctx context.Context, id string, name, iconURL, bannerURL *string) (*models.Server, error)
 	ListByUserID(ctx context.Context, userID string) ([]models.Server, error)
 	DeleteByID(ctx context.Context, id string) error
 	FindMember(ctx context.Context, serverID, userID string) (*models.ServerMember, error)
@@ -26,9 +27,12 @@ type ServerRepository interface {
 	ListMembers(ctx context.Context, serverID string) ([]models.User, error)
 	GetMemberPermissions(ctx context.Context, serverID, userID string) (int64, error)
 	GetMemberHighestRolePosition(ctx context.Context, serverID, userID string) (int, error)
+	GetMaxRolePosition(ctx context.Context, serverID string) (int, error)
+	GetMaxRolePositionBelow(ctx context.Context, serverID string, maxExclusive int) (int, error)
 	HasPermission(ctx context.Context, serverID, userID string, permission int64) (bool, error)
 	CreateRole(ctx context.Context, role *models.Role, permissionValues []int64) error
-	UpdateRole(ctx context.Context, roleID string, name *string, permissionValues []int64, position *int) (*models.Role, error)
+	UpdateRole(ctx context.Context, roleID string, name, color *string, permissionValues []int64) (*models.Role, error)
+	DeleteRole(ctx context.Context, roleID string) error
 	FindRoleByID(ctx context.Context, roleID string) (*models.Role, error)
 	ListRolesByServerID(ctx context.Context, serverID string) ([]models.Role, error)
 	ListMemberRoles(ctx context.Context, serverID, userID string) ([]models.Role, error)

@@ -1,7 +1,4 @@
 import { apiClient } from '../lib/api-client';
-import { IS_MOCK_SERVERS } from '../mock';
-import { mockServers, mockServersData } from '../mock/servers';
-import { simulateDelay } from '../mock/user';
 const deriveInitials = (name) => name
     .split(' ')
     .filter(Boolean)
@@ -33,18 +30,10 @@ const mapServer = (server) => ({
     boostLevel: undefined,
 });
 export const getServers = async () => {
-    if (IS_MOCK_SERVERS) {
-        await simulateDelay();
-        return mockServers;
-    }
     const servers = await apiClient.get('/api/v1/servers');
     return servers.map(mapServer);
 };
 export const getServerById = async (serverId) => {
-    if (IS_MOCK_SERVERS) {
-        await simulateDelay(180);
-        return mockServers.find((server) => server.id === serverId) ?? null;
-    }
     try {
         const server = await apiClient.get(`/api/v1/servers/${serverId}`);
         return mapServer(server);
@@ -54,35 +43,10 @@ export const getServerById = async (serverId) => {
     }
 };
 export const createServer = async (body) => {
-    if (IS_MOCK_SERVERS) {
-        await simulateDelay();
-        const server = {
-            id: `s-${Date.now()}`,
-            name: body.name,
-            initials: deriveInitials(body.name),
-            color: 'bg-indigo-500',
-            bannerUrl: undefined,
-            iconUrl: undefined,
-            boostLevel: undefined,
-        };
-        mockServers.push(server);
-        mockServersData.push({
-            id: server.id,
-            name: server.name,
-            owner_id: 'mock-owner',
-            is_public: body.is_public,
-            default_role_id: 'mock-default-role',
-        });
-        return server;
-    }
     const server = await apiClient.post('/api/v1/servers', body);
     return mapServer(server);
 };
 export const joinServer = async (serverId) => {
-    if (IS_MOCK_SERVERS) {
-        await simulateDelay(150);
-        return;
-    }
     await apiClient.post(`/api/v1/servers/${serverId}/join`);
 };
 //# sourceMappingURL=servers.js.map

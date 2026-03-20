@@ -36,10 +36,19 @@ type ShellContext = {
   setShowMembers: React.Dispatch<React.SetStateAction<boolean>>
   activeChannelId: string
   setActiveChannelId: React.Dispatch<React.SetStateAction<string>>
+  activeCategories: Array<{
+    id: string
+    name: string
+    channels: Array<{
+      id: string
+      name: string
+      type: 'text' | 'voice'
+    }>
+  }>
 }
 
 export const DashboardView: React.FC = () => {
-  const { showMembers, setShowMembers, activeChannelId } = useOutletContext<ShellContext>()
+  const { showMembers, setShowMembers, activeChannelId, activeCategories } = useOutletContext<ShellContext>()
   const [messagesByChannel, setMessagesByChannel] = useState<Record<string, ChatMessage[]>>({})
   const [pagingByChannel, setPagingByChannel] = useState<
     Record<string, { offset: number; hasMore: boolean; isLoadingMore: boolean }>
@@ -54,13 +63,22 @@ export const DashboardView: React.FC = () => {
   const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
 
   const activeChannel = useMemo(
-    () =>
-      ({
-        id: activeChannelId,
-        name: activeChannelId,
-        type: 'TEXT',
-      }) as unknown as ChannelDTO,
-    [activeChannelId]
+    () => {
+      const channels = activeCategories.flatMap((category) => category.channels)
+      const match = channels.find((channel) => channel.id === activeChannelId)
+      if (!match) {
+        return undefined
+      }
+      return {
+        id: match.id,
+        name: match.name,
+        type: match.type === 'voice' ? 'VOICE' : 'TEXT',
+        server_id: '',
+        position: 0,
+        is_private: false,
+      } as ChannelDTO
+    },
+    [activeCategories, activeChannelId]
   )
 
   const activeChannelKey = activeChannelId

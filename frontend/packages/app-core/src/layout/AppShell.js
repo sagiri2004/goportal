@@ -16,10 +16,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, } from 'react-resizable-panels';
 import { TooltipProvider } from '@goportal/ui';
-import { ServerRail } from '@goportal/feature-servers';
+import { CreateServerModal, ServerRail } from '@goportal/feature-servers';
 import { ChannelSidebar } from '@goportal/feature-channels';
 import { DirectMessagesSidebar } from '@goportal/feature-dashboard';
+import { useAuthStore } from '@goportal/store';
 import { MemberListPanel } from './MemberListPanel';
+import { ServerSettingsOverlay } from './ServerSettingsOverlay';
 import { createChannel, createServer, getChannels, getMembers, getServerById, getServers, } from '../services';
 // ─── Panel size constants (% of PanelGroup width, must sum ≤ 100) ────────────
 const SIZE = {
@@ -37,21 +39,57 @@ export const AppShell = () => {
     const params = useParams();
     const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname]);
     const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname]);
-    const [activeServerId, setActiveServerId] = useState('1');
-    const [activeChannelId, setActiveChannelId] = useState('general');
+    const [activeServerId, setActiveServerId] = useState('');
+    const [activeChannelId, setActiveChannelId] = useState('');
     const [showMembers, setShowMembers] = useState(false);
     const [servers, setServers] = useState([]);
+    const [isCreateServerModalOpen, setIsCreateServerModalOpen] = useState(false);
+    const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
+    const [serverSettingsTab, setServerSettingsTab] = useState('profile');
+    const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
+        if (typeof window === 'undefined') {
+            return true;
+        }
+        return window.localStorage.getItem('has_seen_onboarding') === 'true';
+    });
+    const [toastMessage, setToastMessage] = useState(null);
     const [serverDetails, setServerDetails] = useState({});
     const [channelsByServer, setChannelsByServer] = useState({});
     const [membersByServer, setMembersByServer] = useState({});
+    const currentUsername = useAuthStore((state) => state.user?.username);
     // Imperative handle — resize main panel when member list toggles
     const mainRef = useRef(null);
+    const toastTimerRef = useRef(null);
+    const markOnboardingSeen = useCallback(() => {
+        setHasSeenOnboarding(true);
+        localStorage.setItem('has_seen_onboarding', 'true');
+    }, []);
+    const pushToast = useCallback((message) => {
+        setToastMessage(message);
+        if (toastTimerRef.current) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+        toastTimerRef.current = window.setTimeout(() => {
+            setToastMessage(null);
+            toastTimerRef.current = null;
+        }, 2500);
+    }, []);
+    const showDevelopingToast = useCallback(() => {
+        pushToast('Tính năng đang phát triển');
+    }, [pushToast]);
     // After showMembers flips, imperatively resize main panel.
     // useEffect runs after render so mainRef is guaranteed to be attached.
     useEffect(() => {
         const target = showMembers ? SIZE.mainWithMembers : SIZE.mainAlone;
         mainRef.current?.resize(target);
     }, [showMembers]);
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                window.clearTimeout(toastTimerRef.current);
+            }
+        };
+    }, []);
     useEffect(() => {
         if (params.serverId) {
             setActiveServerId(params.serverId);
@@ -62,6 +100,13 @@ export const AppShell = () => {
             setActiveChannelId(params.channelId);
         }
     }, [params.channelId]);
+    useEffect(() => {
+        const isTextChannelRoute = location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/');
+        if (!isTextChannelRoute || !params.serverId || !params.channelId) {
+            return;
+        }
+        localStorage.setItem('last_visited', JSON.stringify({ serverId: params.serverId, channelId: params.channelId }));
+    }, [location.pathname, params.channelId, params.serverId]);
     useEffect(() => {
         if (isVoiceMode) {
             setShowMembers(false);
@@ -76,6 +121,7 @@ export const AppShell = () => {
             }
             setServers(data);
             if (data.length === 0) {
+                navigate('/app/@me', { replace: true });
                 return;
             }
             const paramServerId = params.serverId;
@@ -83,15 +129,37 @@ export const AppShell = () => {
                 ? paramServerId
                 : data[0].id;
             setActiveServerId(nextServerId);
-            if (!paramServerId || paramServerId !== nextServerId || location.pathname === '/app') {
-                navigate(`/app/servers/${nextServerId}/channels/general`, { replace: true });
+            if (location.pathname === '/app') {
+                return;
+            }
+            if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode) {
+                try {
+                    const channelData = await getChannels(nextServerId);
+                    if (isCancelled) {
+                        return;
+                    }
+                    const availableChannels = channelData.categories.flatMap((category) => category.channels);
+                    const firstText = availableChannels.find((channel) => channel.type === 'text') ?? availableChannels[0];
+                    if (!firstText) {
+                        navigate('/app/@me', { replace: true });
+                        return;
+                    }
+                    navigate(`/app/servers/${nextServerId}/channels/${firstText.id}`, { replace: true });
+                }
+                catch {
+                    navigate('/app/@me', { replace: true });
+                }
             }
         };
-        void loadServers();
+        void loadServers().catch(() => {
+            if (!isCancelled) {
+                navigate('/app/@me', { replace: true });
+            }
+        });
         return () => {
             isCancelled = true;
         };
-    }, [location.pathname, navigate, params.serverId]);
+    }, [isDmMode, location.pathname, navigate, params.serverId]);
     useEffect(() => {
         let isCancelled = false;
         const loadServerDetail = async () => {
@@ -160,6 +228,53 @@ export const AppShell = () => {
         };
     }, [activeServerId]);
     const toggleMembers = useCallback(() => setShowMembers((v) => !v), []);
+    const getFirstNavigableChannelId = useCallback(async (serverId) => {
+        const data = await getChannels(serverId);
+        const availableChannels = data.categories.flatMap((category) => category.channels);
+        const firstText = availableChannels.find((channel) => channel.type === 'text') ?? availableChannels[0];
+        return firstText?.id ?? null;
+    }, []);
+    const navigateToServerFirstChannel = useCallback(async (serverId, replace = false) => {
+        const firstChannelId = await getFirstNavigableChannelId(serverId);
+        if (!firstChannelId) {
+            navigate('/app/@me', replace ? { replace: true } : undefined);
+            return;
+        }
+        setActiveServerId(serverId);
+        setActiveChannelId(firstChannelId);
+        navigate(`/app/servers/${serverId}/channels/${firstChannelId}`, replace ? { replace: true } : undefined);
+    }, [getFirstNavigableChannelId, navigate]);
+    const handleCreateServer = useCallback(async (payload) => {
+        const created = await createServer(payload);
+        markOnboardingSeen();
+        const refreshedServers = await getServers();
+        setServers(refreshedServers);
+        const firstChannelId = await getFirstNavigableChannelId(created.id);
+        if (firstChannelId) {
+            setActiveServerId(created.id);
+            setActiveChannelId(firstChannelId);
+            navigate(`/app/servers/${created.id}/channels/${firstChannelId}`);
+            return;
+        }
+        const createdChannel = await createChannel(created.id, {
+            name: 'general',
+            type: 'TEXT',
+        });
+        setActiveServerId(created.id);
+        setActiveChannelId(createdChannel.id);
+        navigate(`/app/servers/${created.id}/channels/${createdChannel.id}`);
+    }, [getFirstNavigableChannelId, markOnboardingSeen, navigate]);
+    const refreshActiveServer = useCallback(async (serverId) => {
+        const list = await getServers();
+        setServers(list);
+        const detail = await getServerById(serverId);
+        if (detail) {
+            setServerDetails((prev) => ({
+                ...prev,
+                [serverId]: detail,
+            }));
+        }
+    }, []);
     const activeServer = useMemo(() => serverDetails[activeServerId] ??
         servers.find((server) => server.id === activeServerId) ??
         servers[0], [activeServerId, serverDetails, servers]);
@@ -174,25 +289,31 @@ export const AppShell = () => {
         setActiveServerId,
         activeChannelId,
         setActiveChannelId,
-    }), [showMembers, toggleMembers, activeServerId, activeChannelId]);
-    return (_jsx(TooltipProvider, { delayDuration: 500, children: _jsxs("div", { className: "flex h-screen w-screen overflow-hidden bg-background text-foreground", children: [_jsx("div", { className: "w-[72px] flex-none overflow-hidden", children: _jsx(ServerRail, { servers: servers, activeServerId: activeServerId, onSelectServer: (serverId) => {
-                            setActiveServerId(serverId);
-                            setActiveChannelId('general');
-                            navigate(`/app/servers/${serverId}/channels/general`);
-                        }, onCreateServer: async () => {
-                            const name = window.prompt('Server name');
-                            if (!name || !name.trim()) {
-                                return;
+        activeCategories,
+        serverCount: servers.length,
+        shouldShowOnboarding: servers.length === 0 && !hasSeenOnboarding,
+        dismissOnboarding: markOnboardingSeen,
+        openCreateServerModal: () => setIsCreateServerModalOpen(true),
+        showDevelopingToast,
+    }), [
+        showMembers,
+        toggleMembers,
+        activeServerId,
+        activeChannelId,
+        activeCategories,
+        servers.length,
+        hasSeenOnboarding,
+        markOnboardingSeen,
+        showDevelopingToast,
+    ]);
+    return (_jsx(TooltipProvider, { delayDuration: 500, children: _jsxs("div", { className: "flex h-screen w-screen overflow-hidden bg-background text-foreground", children: [_jsx("div", { className: "w-[72px] flex-none overflow-hidden", children: _jsx(ServerRail, { servers: servers, activeServerId: activeServerId, onSelectServer: async (serverId) => {
+                            try {
+                                await navigateToServerFirstChannel(serverId);
                             }
-                            const created = await createServer({
-                                name: name.trim(),
-                                is_public: true,
-                            });
-                            setServers((prev) => [...prev, created]);
-                            setActiveServerId(created.id);
-                            setActiveChannelId('general');
-                            navigate(`/app/servers/${created.id}/channels/general`);
-                        } }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: activeCategories, activeChannelId: activeChannelId, onSelectChannel: (channelId, type) => {
+                            catch {
+                                navigate('/app/@me');
+                            }
+                        }, onCreateServer: () => setIsCreateServerModalOpen(true) }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: activeCategories, activeChannelId: activeChannelId, onSelectChannel: (channelId, type) => {
                                         setActiveChannelId(channelId);
                                         if (type === 'voice') {
                                             navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
@@ -216,6 +337,12 @@ export const AppShell = () => {
                                             ...prev,
                                             [activeServerId]: refreshed.categories,
                                         }));
-                                    }, isInVoiceChannel: isVoiceMode, activeVoiceChannelName: activeChannelId })) }) }), _jsx(ResizeHandle, {}), _jsx(Panel, { id: "main", panelRef: mainRef, defaultSize: showMembers ? SIZE.mainWithMembers : SIZE.mainAlone, minSize: 35, maxSize: 120, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background", children: _jsx(Outlet, { context: outletContext }) }) }), showMembers && !isVoiceMode && (_jsxs(_Fragment, { children: [_jsx(ResizeHandle, {}), _jsx(Panel, { id: "members", defaultSize: SIZE.members.default, minSize: SIZE.members.min, maxSize: SIZE.members.max, className: "overflow-hidden", children: _jsx("div", { className: "h-full overflow-hidden border-l border-border bg-[hsl(240,6%,10%)]", children: _jsx(MemberListPanel, { members: activeMembers }) }) })] }))] })] }) }));
+                                    }, onOpenServerSettings: () => {
+                                        setServerSettingsTab('profile');
+                                        setIsServerSettingsOpen(true);
+                                    }, onOpenServerMembers: () => {
+                                        setServerSettingsTab('members');
+                                        setIsServerSettingsOpen(true);
+                                    }, isInVoiceChannel: isVoiceMode, activeVoiceChannelName: activeChannelId })) }) }), _jsx(ResizeHandle, {}), _jsx(Panel, { id: "main", panelRef: mainRef, defaultSize: showMembers ? SIZE.mainWithMembers : SIZE.mainAlone, minSize: 35, maxSize: 120, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background", children: _jsx(Outlet, { context: outletContext }) }) }), showMembers && !isVoiceMode && (_jsxs(_Fragment, { children: [_jsx(ResizeHandle, {}), _jsx(Panel, { id: "members", defaultSize: SIZE.members.default, minSize: SIZE.members.min, maxSize: SIZE.members.max, className: "overflow-hidden", children: _jsx("div", { className: "h-full overflow-hidden border-l border-border bg-[hsl(240,6%,10%)]", children: _jsx(MemberListPanel, { members: activeMembers }) }) })] }))] }), _jsx(CreateServerModal, { isOpen: isCreateServerModalOpen, onOpenChange: setIsCreateServerModalOpen, defaultServerName: `Server của ${currentUsername ?? 'bạn'}`, onCreate: handleCreateServer }), toastMessage && (_jsx("div", { className: "fixed bottom-4 right-4 z-[100] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-lg", children: toastMessage })), activeServer && isServerSettingsOpen && (_jsx(ServerSettingsOverlay, { open: isServerSettingsOpen, initialTab: serverSettingsTab, serverId: activeServerId, server: activeServer, onClose: () => setIsServerSettingsOpen(false), onServerUpdated: refreshActiveServer, onToast: pushToast }))] }) }));
 };
 //# sourceMappingURL=AppShell.js.map

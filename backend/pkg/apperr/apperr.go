@@ -45,6 +45,7 @@ var registry = map[string]errDef{
 	},
 	"ROLE_NOT_FOUND":                {http.StatusNotFound, "Role not found"},
 	"PERMISSION_INVALID":            {http.StatusBadRequest, "Invalid permission value"},
+	"DEFAULT_ROLE_DELETE_FORBIDDEN": {http.StatusBadRequest, "Cannot delete @everyone role"},
 	"ROLE_ASSIGN_FORBIDDEN":         {http.StatusForbidden, "You are not allowed to update member roles"},
 	"INSUFFICIENT_PERMISSION":       {http.StatusForbidden, "Insufficient server permissions"},
 	"INVITE_NOT_FOUND":              {http.StatusNotFound, "Invite not found"},

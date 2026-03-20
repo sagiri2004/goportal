@@ -7,6 +7,12 @@ type CreateServerRequest struct {
 	IsPublic bool   `json:"is_public"`
 }
 
+type UpdateServerRequest struct {
+	Name      *string `json:"name,omitempty"`
+	IconURL   *string `json:"icon_url,omitempty"`
+	BannerURL *string `json:"banner_url,omitempty"`
+}
+
 type CreateChannelRequest struct {
 	Name     string  `json:"name" binding:"required,min=1,max=255"`
 	Type     string  `json:"type" binding:"required"`
