@@ -87,6 +87,34 @@ func (ctrl *serverController) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, serializers.Success("OK", "Server fetched", serializers.NewServerResponse(server)))
 }
 
+func (ctrl *serverController) Update(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	serverID := c.Param("id")
+	var req serializers.UpdateServerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+
+	server, err := containers.ServerService().UpdateServer(c.Request.Context(), userID, serverID, req.Name, req.IconURL, req.BannerURL)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, serializers.Success("OK", "Server updated", serializers.NewServerResponse(server)))
+}
+
 func (ctrl *serverController) ListMembers(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {
@@ -96,6 +124,15 @@ func (ctrl *serverController) ListMembers(c *gin.Context) {
 	}
 
 	serverID := c.Param("id")
+	server, err := containers.ServerService().GetServerByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
 	members, err := containers.ServerService().ListMembersWithRoles(c.Request.Context(), userID, serverID)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
@@ -111,7 +148,8 @@ func (ctrl *serverController) ListMembers(c *gin.Context) {
 		member := members[i]
 		roleResp := make([]serializers.RoleResponse, 0, len(member.Roles))
 		for _, role := range member.Roles {
-			roleResp = append(roleResp, serializers.NewRoleResponse(&role))
+			isEveryone := server.DefaultRoleID != nil && *server.DefaultRoleID == role.ID
+			roleResp = append(roleResp, serializers.NewRoleResponse(&role, isEveryone))
 		}
 		resp = append(resp, serializers.MemberWithRolesResponse{
 			User:  serializers.NewUserResponse(&member.User),
@@ -178,7 +216,7 @@ func (ctrl *serverController) CreateRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
 		return
 	}
-	role, err := containers.ServerService().CreateRole(c.Request.Context(), userID, serverID, req.Name, req.Permissions, req.Position)
+	role, err := containers.ServerService().CreateRole(c.Request.Context(), userID, serverID, req.Name, req.Color, req.Permissions)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
@@ -187,7 +225,17 @@ func (ctrl *serverController) CreateRole(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
 		return
 	}
-	c.JSON(http.StatusCreated, serializers.Success("OK", "Role created", serializers.NewRoleResponse(role)))
+	server, err := containers.ServerService().GetServerByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	isEveryone := server.DefaultRoleID != nil && *server.DefaultRoleID == role.ID
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Role created", serializers.NewRoleResponse(role, isEveryone)))
 }
 
 func (ctrl *serverController) UpdateRole(c *gin.Context) {
@@ -197,13 +245,14 @@ func (ctrl *serverController) UpdateRole(c *gin.Context) {
 		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
 		return
 	}
-	roleID := c.Param("id")
+	serverID := c.Param("id")
+	roleID := c.Param("roleId")
 	var req serializers.UpdateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
 		return
 	}
-	role, err := containers.ServerService().UpdateRole(c.Request.Context(), userID, roleID, req.Name, req.Permissions, req.Position)
+	role, err := containers.ServerService().UpdateRole(c.Request.Context(), userID, serverID, roleID, req.Name, req.Color, req.Permissions)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
@@ -212,7 +261,73 @@ func (ctrl *serverController) UpdateRole(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
 		return
 	}
-	c.JSON(http.StatusOK, serializers.Success("OK", "Role updated", serializers.NewRoleResponse(role)))
+	server, err := containers.ServerService().GetServerByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	isEveryone := server.DefaultRoleID != nil && *server.DefaultRoleID == role.ID
+	c.JSON(http.StatusOK, serializers.Success("OK", "Role updated", serializers.NewRoleResponse(role, isEveryone)))
+}
+
+func (ctrl *serverController) DeleteRole(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	serverID := c.Param("id")
+	roleID := c.Param("roleId")
+	if err := containers.ServerService().DeleteRole(c.Request.Context(), userID, serverID, roleID); err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Role deleted", nil))
+}
+
+func (ctrl *serverController) ListRoles(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	serverID := c.Param("id")
+	server, err := containers.ServerService().GetServerByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	roles, err := containers.ServerService().ListRoles(c.Request.Context(), userID, serverID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	resp := make([]serializers.RoleResponse, 0, len(roles))
+	for i := range roles {
+		isEveryone := server.DefaultRoleID != nil && *server.DefaultRoleID == roles[i].ID
+		resp = append(resp, serializers.NewRoleResponse(&roles[i], isEveryone))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Roles fetched", resp))
 }
 
 func (ctrl *serverController) CreateInvite(c *gin.Context) {

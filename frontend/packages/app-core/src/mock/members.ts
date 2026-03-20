@@ -5,6 +5,7 @@ export type MockMember = {
   name: string
   initials: string
   color: string
+  avatarUrl?: string
   status: MockMemberStatus
   role: string
 }

@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useServers } from '../hooks/useServers'
 import {
   Button,
   Separator,
@@ -31,8 +30,7 @@ export const ServerRail: React.FC<ServerRailProps> = ({
   onCreateServer = () => {},
   servers: serversProp,
 }) => {
-  const { data: serversHook = [], isLoading } = useServers()
-  const servers = serversProp ?? serversHook
+  const servers = serversProp ?? []
   const [hoveredServerId, setHoveredServerId] = useState<string | null>(null)
 
   return (
@@ -59,44 +57,43 @@ export const ServerRail: React.FC<ServerRailProps> = ({
 
       <div className="flex-1 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         <div className="flex flex-col items-center gap-2">
-          {!isLoading &&
-            servers.map((server) => {
-              const isActive = server.id === activeServerId
-              const isHovered = server.id === hoveredServerId
+          {servers.map((server) => {
+            const isActive = server.id === activeServerId
+            const isHovered = server.id === hoveredServerId
 
-              return (
+            return (
+              <div
+                key={server.id}
+                className="relative w-12 group"
+                onMouseEnter={() => setHoveredServerId(server.id)}
+                onMouseLeave={() => setHoveredServerId(null)}
+              >
                 <div
-                  key={server.id}
-                  className="relative w-12 group"
-                  onMouseEnter={() => setHoveredServerId(server.id)}
-                  onMouseLeave={() => setHoveredServerId(null)}
-                >
-                  <div
-                    className={[
-                      'absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-white transition-all duration-200',
-                      isActive ? 'h-8' : 'h-2 group-hover:h-5',
-                    ].join(' ')}
-                  />
+                  className={[
+                    'absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-white transition-all duration-200',
+                    isActive ? 'h-8' : 'h-2 group-hover:h-5',
+                  ].join(' ')}
+                />
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => onSelectServer(server.id)}
-                        className={`cursor-pointer w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all duration-200 ${
-                          isActive || isHovered
-                            ? 'rounded-[16px] bg-indigo-500 text-white'
-                            : 'rounded-[24px] bg-secondary text-foreground hover:bg-indigo-500 hover:text-white hover:rounded-[16px]'
-                        }`}
-                        type="button"
-                      >
-                        {('initials' in server ? server.initials : undefined) ?? getServerInitials(server.name)}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{server.name}</TooltipContent>
-                  </Tooltip>
-                </div>
-              )
-            })}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onSelectServer(server.id)}
+                      className={`cursor-pointer w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all duration-200 ${
+                        isActive || isHovered
+                          ? 'rounded-[16px] bg-indigo-500 text-white'
+                          : 'rounded-[24px] bg-secondary text-foreground hover:bg-indigo-500 hover:text-white hover:rounded-[16px]'
+                      }`}
+                      type="button"
+                    >
+                      {('initials' in server ? server.initials : undefined) ?? getServerInitials(server.name)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{server.name}</TooltipContent>
+                </Tooltip>
+              </div>
+            )
+          })}
         </div>
       </div>
 

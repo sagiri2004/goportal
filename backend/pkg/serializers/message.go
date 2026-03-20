@@ -37,13 +37,14 @@ type MessageResponse struct {
 	ID          string                        `json:"id"`
 	ChannelID   string                        `json:"channel_id"`
 	AuthorID    string                        `json:"author_id"`
+	Author      *UserResponse                 `json:"author,omitempty"`
 	Content     models.MessageContentEnvelope `json:"content"`
 	IsEdited    bool                          `json:"is_edited"`
 	IsPinned    bool                          `json:"is_pinned"`
 	CreatedAt   int64                         `json:"created_at"`
 	UpdatedAt   int64                         `json:"updated_at"`
-	Attachments []AttachmentResponse          `json:"attachments,omitempty"`
-	Reactions   []ReactionResponse            `json:"reactions,omitempty"`
+	Attachments []AttachmentResponse          `json:"attachments"`
+	Reactions   []ReactionResponse            `json:"reactions"`
 }
 
 type AttachmentResponse struct {
@@ -63,6 +64,7 @@ type ReactionResponse struct {
 
 func NewMessageResponse(
 	m *models.Message,
+	author *models.User,
 	attachments []models.MessageAttachment,
 	reactions []models.Reaction,
 ) MessageResponse {
@@ -90,10 +92,17 @@ func NewMessageResponse(
 		})
 	}
 
+	var authorResp *UserResponse
+	if author != nil {
+		mapped := NewUserResponse(author)
+		authorResp = &mapped
+	}
+
 	return MessageResponse{
 		ID:          m.ID,
 		ChannelID:   m.ChannelID,
 		AuthorID:    m.AuthorID,
+		Author:      authorResp,
 		Content:     content,
 		IsEdited:    m.IsEdited,
 		IsPinned:    m.IsPinned,

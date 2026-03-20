@@ -16,7 +16,7 @@ import { LinkEmbed } from './components/LinkEmbed';
 import { VideoAttachment } from './components/VideoAttachment';
 import { EmojiPicker } from './components/EmojiPicker';
 export const DashboardView = () => {
-    const { showMembers, setShowMembers, activeChannelId } = useOutletContext();
+    const { showMembers, setShowMembers, activeChannelId, activeCategories } = useOutletContext();
     const [messagesByChannel, setMessagesByChannel] = useState({});
     const [pagingByChannel, setPagingByChannel] = useState({});
     const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
@@ -27,11 +27,21 @@ export const DashboardView = () => {
     const embedCacheRef = useRef({});
     const embedInFlightRef = useRef({});
     const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState({});
-    const activeChannel = useMemo(() => ({
-        id: activeChannelId,
-        name: activeChannelId,
-        type: 'TEXT',
-    }), [activeChannelId]);
+    const activeChannel = useMemo(() => {
+        const channels = activeCategories.flatMap((category) => category.channels);
+        const match = channels.find((channel) => channel.id === activeChannelId);
+        if (!match) {
+            return undefined;
+        }
+        return {
+            id: match.id,
+            name: match.name,
+            type: match.type === 'voice' ? 'VOICE' : 'TEXT',
+            server_id: '',
+            position: 0,
+            is_private: false,
+        };
+    }, [activeCategories, activeChannelId]);
     const activeChannelKey = activeChannelId;
     const activeMessages = useMemo(() => messagesByChannel[activeChannelKey] ?? [], [activeChannelKey, messagesByChannel]);
     const grouped = useMemo(() => {

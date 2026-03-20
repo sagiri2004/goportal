@@ -35,6 +35,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	{
 		servers.GET("", v1.Server.ListMine)
 		servers.GET("/:id", v1.Server.GetByID)
+		servers.PATCH("/:id", v1.Server.Update)
 		servers.POST("", v1.Server.Create)
 		servers.POST("/:id/join", v1.Server.JoinPublic)
 		servers.POST("/:id/join-requests", v1.Server.CreateJoinRequest)
@@ -44,17 +45,14 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		servers.POST("/:id/members", middlewares.RequireServerPermission(models.PermissionManageServer, "id"), v1.Server.AddMember)
 		servers.PATCH("/:id/members/:userId/roles", v1.Server.UpdateMemberRoles)
 		servers.POST("/:id/roles", middlewares.RequireServerPermission(models.PermissionManageRoles, "id"), v1.Server.CreateRole)
+		servers.GET("/:id/roles", v1.Server.ListRoles)
+		servers.PATCH("/:id/roles/:roleId", middlewares.RequireServerPermission(models.PermissionManageRoles, "id"), v1.Server.UpdateRole)
+		servers.DELETE("/:id/roles/:roleId", middlewares.RequireServerPermission(models.PermissionManageRoles, "id"), v1.Server.DeleteRole)
 		servers.POST("/:id/invites", middlewares.RequireServerPermission(models.PermissionCreateInvite, "id"), v1.Server.CreateInvite)
 		servers.DELETE("/:id", v1.Server.Delete)
 		servers.DELETE("/:id/members/:userId", v1.Server.KickMember)
 		servers.POST("/:id/channels", middlewares.RequireServerPermission(models.PermissionManageChannels, "id"), v1.Channel.Create)
 		servers.GET("/:id/channels", v1.Channel.ListByServer)
-	}
-
-	roles := api.Group("/roles")
-	roles.Use(middlewares.AuthMiddleware())
-	{
-		roles.PATCH("/:id", v1.Server.UpdateRole)
 	}
 
 	invites := api.Group("/invites")

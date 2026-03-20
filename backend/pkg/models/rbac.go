@@ -49,6 +49,7 @@ type Role struct {
 	DeletedAt   int64  `gorm:"not null;default:0;index" json:"deleted_at"`
 	ServerID    string `gorm:"type:char(36);not null;index" json:"server_id"`
 	Name        string `gorm:"type:varchar(100);not null" json:"name"`
+	Color       string `gorm:"type:char(7);not null;default:'#99AAB5'" json:"color"`
 	Position    int    `gorm:"not null;default:0" json:"position"`
 	Permissions int64  `gorm:"type:bigint;not null;default:0" json:"permissions"`
 }

@@ -8,12 +8,180 @@
  */
 
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useOutletContext } from 'react-router-dom'
 import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
-import { DashboardView, DMView, VoiceChannelView } from '@goportal/feature-dashboard'
+import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
+import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react'
+import { getChannels, getServers } from './services'
+import { APP_NAME } from '@goportal/config'
+
+type LastVisited = {
+  serverId: string
+  channelId: string
+}
+
+const readLastVisited = (): LastVisited | null => {
+  try {
+    const raw = localStorage.getItem('last_visited')
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw) as Partial<LastVisited>
+    if (!parsed.serverId || !parsed.channelId) {
+      return null
+    }
+    return {
+      serverId: parsed.serverId,
+      channelId: parsed.channelId,
+    }
+  } catch {
+    return null
+  }
+}
+
+const AppIndexRedirect: React.FC = () => {
+  const navigate = useNavigate()
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    const resolveRedirect = async () => {
+      try {
+        const servers = await getServers()
+
+        if (cancelled) {
+          return
+        }
+
+        if (servers.length === 0) {
+          navigate('/app/@me', { replace: true })
+          return
+        }
+
+        const last = readLastVisited()
+        const validLast = last && servers.find((server) => server.id === last.serverId)
+
+        if (validLast && last) {
+          navigate(`/app/servers/${last.serverId}/channels/${last.channelId}`, { replace: true })
+          return
+        }
+
+        const first = servers[0]
+        const channels = await getChannels(first.id)
+
+        if (cancelled) {
+          return
+        }
+
+        const flatChannels = channels.categories.flatMap((category) => category.channels)
+        const firstText = flatChannels.find((channel) => channel.type === 'text') ?? flatChannels[0]
+
+        if (!firstText) {
+          navigate('/app/@me', { replace: true })
+          return
+        }
+
+        navigate(`/app/servers/${first.id}/channels/${firstText.id}`, { replace: true })
+      } catch {
+        navigate('/app/@me', { replace: true })
+      }
+    }
+
+    void resolveRedirect()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+    </div>
+  )
+}
+
+type DmOutletContext = {
+  serverCount: number
+  shouldShowOnboarding: boolean
+  dismissOnboarding: () => void
+  openCreateServerModal: () => void
+  showDevelopingToast: () => void
+}
+
+const DMHomePage: React.FC = () => {
+  const {
+    serverCount,
+    shouldShowOnboarding,
+    dismissOnboarding,
+    openCreateServerModal,
+    showDevelopingToast,
+  } = useOutletContext<DmOutletContext>()
+
+  if (serverCount === 0 && shouldShowOnboarding) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-8">
+        <div className="w-full max-w-xl rounded-xl border border-border bg-background px-8 py-10 text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
+            <MessageCircle className="w-8 h-8 text-foreground" />
+          </div>
+
+          <h2 className="text-2xl font-bold text-foreground">Chào mừng đến với {APP_NAME}!</h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Nơi để chat, call và kết nối cùng bạn bè và cộng đồng.
+          </p>
+
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={openCreateServerModal}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" />
+              Tạo Server
+            </button>
+            <button
+              type="button"
+              onClick={showDevelopingToast}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
+            >
+              <Search className="w-4 h-4" />
+              Khám phá Server
+            </button>
+          </div>
+
+          <div className="mt-6 flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+            <div className="h-px flex-1 bg-border" />
+            <span>Hoặc</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <button
+            type="button"
+            onClick={dismissOnboarding}
+            className="mt-5 inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <MessagesSquare className="w-4 h-4" />
+            Nhắn tin trực tiếp với bạn bè
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+      <MessageCircle className="w-12 h-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold text-foreground">Tin nhắn trực tiếp</h2>
+      <p className="text-sm text-muted-foreground">
+        Chọn một cuộc trò chuyện hoặc tìm bạn bè để bắt đầu.
+      </p>
+    </div>
+  )
+}
 
 export const Router: React.FC = () => {
   const handleAuthSuccess = () => {
@@ -42,8 +210,8 @@ export const Router: React.FC = () => {
             </PrivateRoute>
           }
         >
-          <Route index element={<Navigate to="/app/servers/1/channels/general" replace />} />
-          <Route path="@me" element={<DMView />} />
+          <Route index element={<AppIndexRedirect />} />
+          <Route path="@me" element={<DMHomePage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<DashboardView />} />
           <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
         </Route>

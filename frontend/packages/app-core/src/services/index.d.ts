@@ -3,4 +3,5 @@ export * from './servers';
 export * from './channels';
 export * from './messages';
 export * from './members';
+export * from './server-settings';
 //# sourceMappingURL=index.d.ts.map

@@ -32,6 +32,7 @@ func (r *serverRepository) CreateWithOwnerMember(ctx context.Context, server *mo
 		defaultRole := &models.Role{
 			ServerID:    server.ID,
 			Name:        "@everyone",
+			Color:       "#99AAB5",
 			Position:    0,
 			Permissions: models.PermissionViewChannel | models.PermissionReadMessages | models.PermissionReadMessageHistory | models.PermissionSendMessages | models.PermissionAddReactions,
 		}
@@ -51,6 +52,7 @@ func (r *serverRepository) CreateWithOwnerMember(ctx context.Context, server *mo
 		moderatorRole := &models.Role{
 			ServerID: server.ID,
 			Name:     "moderator",
+			Color:    "#57F287",
 			Position: 50,
 			Permissions: models.PermissionViewChannel |
 				models.PermissionReadMessages |
@@ -80,6 +82,7 @@ func (r *serverRepository) CreateWithOwnerMember(ctx context.Context, server *mo
 		adminRole := &models.Role{
 			ServerID:    server.ID,
 			Name:        "admin",
+			Color:       "#FEE75C",
 			Position:    80,
 			Permissions: models.PermissionAdministrator,
 		}
@@ -93,6 +96,7 @@ func (r *serverRepository) CreateWithOwnerMember(ctx context.Context, server *mo
 		ownerRole := &models.Role{
 			ServerID:    server.ID,
 			Name:        "owner",
+			Color:       "#ED4245",
 			Position:    100,
 			Permissions: models.PermissionAdministrator,
 		}
@@ -135,10 +139,32 @@ func (r *serverRepository) FindByID(ctx context.Context, id string) (*models.Ser
 	return &server, nil
 }
 
+func (r *serverRepository) UpdateServer(ctx context.Context, id string, name, iconURL, bannerURL *string) (*models.Server, error) {
+	updates := map[string]any{}
+	if name != nil {
+		updates["name"] = *name
+	}
+	if iconURL != nil {
+		updates["icon_url"] = *iconURL
+	}
+	if bannerURL != nil {
+		updates["banner_url"] = *bannerURL
+	}
+	if len(updates) == 0 {
+		return r.FindByID(ctx, id)
+	}
+
+	if err := r.db.WithContext(ctx).Model(&models.Server{}).Where("id = ? AND deleted_at = 0", id).Updates(updates).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+
+	return r.FindByID(ctx, id)
+}
+
 func (r *serverRepository) ListByUserID(ctx context.Context, userID string) ([]models.Server, error) {
 	var servers []models.Server
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT s.id, s.created_at, s.updated_at, s.deleted_at, s.name, s.owner_id, s.is_public, s.default_role_id
+		SELECT s.id, s.created_at, s.updated_at, s.deleted_at, s.name, s.owner_id, s.is_public, s.default_role_id, s.icon_url, s.banner_url
 		FROM servers s
 		INNER JOIN server_members sm ON sm.server_id = s.id
 		WHERE sm.user_id = ? AND sm.deleted_at = 0 AND sm.status = 'active' AND s.deleted_at = 0
@@ -184,7 +210,7 @@ func (r *serverRepository) RemoveMember(ctx context.Context, serverID, userID st
 func (r *serverRepository) ListMembers(ctx context.Context, serverID string) ([]models.User, error) {
 	var users []models.User
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT u.id, u.created_at, u.updated_at, u.deleted_at, u.username, u.password, u.is_admin
+		SELECT u.id, u.created_at, u.updated_at, u.deleted_at, u.username, u.password, u.is_admin, u.status, u.avatar_url
 		FROM users u
 		INNER JOIN server_members sm ON sm.user_id = u.id
 		WHERE sm.server_id = ? AND sm.deleted_at = 0 AND u.deleted_at = 0
@@ -226,6 +252,32 @@ func (r *serverRepository) GetMemberHighestRolePosition(ctx context.Context, ser
 	return highest, nil
 }
 
+func (r *serverRepository) GetMaxRolePosition(ctx context.Context, serverID string) (int, error) {
+	var highest int
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(MAX(position), 0) AS highest
+		FROM roles
+		WHERE server_id = ? AND deleted_at = 0
+	`, serverID).Scan(&highest).Error
+	if err != nil {
+		return 0, apperr.E("DB_ERROR", err)
+	}
+	return highest, nil
+}
+
+func (r *serverRepository) GetMaxRolePositionBelow(ctx context.Context, serverID string, maxExclusive int) (int, error) {
+	var highest int
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(MAX(position), 0) AS highest
+		FROM roles
+		WHERE server_id = ? AND deleted_at = 0 AND position < ?
+	`, serverID, maxExclusive).Scan(&highest).Error
+	if err != nil {
+		return 0, apperr.E("DB_ERROR", err)
+	}
+	return highest, nil
+}
+
 func (r *serverRepository) HasPermission(ctx context.Context, serverID, userID string, permission int64) (bool, error) {
 	total, err := r.GetMemberPermissions(ctx, serverID, userID)
 	if err != nil {
@@ -252,7 +304,7 @@ func (r *serverRepository) CreateRole(ctx context.Context, role *models.Role, pe
 	})
 }
 
-func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name *string, permissionValues []int64, position *int) (*models.Role, error) {
+func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name, color *string, permissionValues []int64) (*models.Role, error) {
 	var role models.Role
 	if err := r.db.WithContext(ctx).Where("id = ? AND deleted_at = 0", roleID).First(&role).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -266,11 +318,11 @@ func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name *
 		if name != nil {
 			updates["name"] = *name
 		}
+		if color != nil {
+			updates["color"] = *color
+		}
 		if permissionValues != nil {
 			updates["permissions"] = sumPermissionValues(permissionValues)
-		}
-		if position != nil {
-			updates["position"] = *position
 		}
 		if len(updates) > 0 {
 			if err := tx.Model(&models.Role{}).Where("id = ?", roleID).Updates(updates).Error; err != nil {
@@ -302,11 +354,26 @@ func (r *serverRepository) FindRoleByID(ctx context.Context, roleID string) (*mo
 	return &role, nil
 }
 
+func (r *serverRepository) DeleteRole(ctx context.Context, roleID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", roleID).Delete(&models.ServerMemberRole{}).Error; err != nil {
+			return apperr.E("DB_ERROR", err)
+		}
+		if err := tx.Where("role_id = ?", roleID).Delete(&models.RolePermission{}).Error; err != nil {
+			return apperr.E("DB_ERROR", err)
+		}
+		if err := tx.Where("id = ?", roleID).Delete(&models.Role{}).Error; err != nil {
+			return apperr.E("DB_ERROR", err)
+		}
+		return nil
+	})
+}
+
 func (r *serverRepository) ListRolesByServerID(ctx context.Context, serverID string) ([]models.Role, error) {
 	var roles []models.Role
 	if err := r.db.WithContext(ctx).
 		Where("server_id = ? AND deleted_at = 0", serverID).
-		Order("name ASC").
+		Order("position DESC, name ASC").
 		Find(&roles).Error; err != nil {
 		return nil, apperr.E("DB_ERROR", err)
 	}
@@ -316,7 +383,7 @@ func (r *serverRepository) ListRolesByServerID(ctx context.Context, serverID str
 func (r *serverRepository) ListMemberRoles(ctx context.Context, serverID, userID string) ([]models.Role, error) {
 	var roles []models.Role
 	if err := r.db.WithContext(ctx).Raw(`
-		SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.position, r.permissions
+		SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.color, r.position, r.permissions
 		FROM server_members sm
 		INNER JOIN server_member_role smr ON smr.server_member_id = sm.id AND smr.deleted_at = 0
 		INNER JOIN roles r ON r.id = smr.role_id AND r.deleted_at = 0
@@ -470,14 +537,16 @@ func (r *serverRepository) UpdateMemberRoles(ctx context.Context, serverID, user
 
 func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID string) ([]repositories.ServerMemberWithRoles, error) {
 	type memberRow struct {
-		MemberID string
-		ID       string
-		Username string
-		IsAdmin  bool
+		MemberID  string
+		ID        string
+		Username  string
+		IsAdmin   bool
+		Status    string
+		AvatarURL *string
 	}
 	var rows []memberRow
 	if err := r.db.WithContext(ctx).Raw(`
-		SELECT sm.id AS member_id, u.id, u.username, u.is_admin
+		SELECT sm.id AS member_id, u.id, u.username, u.is_admin, u.status, u.avatar_url
 		FROM server_members sm
 		INNER JOIN users u ON u.id = sm.user_id
 		WHERE sm.server_id = ? AND sm.deleted_at = 0 AND u.deleted_at = 0
@@ -490,7 +559,7 @@ func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID st
 	for _, row := range rows {
 		var roles []models.Role
 		if err := r.db.WithContext(ctx).Raw(`
-			SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.position, r.permissions
+			SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.color, r.position, r.permissions
 			FROM roles r
 			INNER JOIN server_member_role smr ON smr.role_id = r.id
 			WHERE smr.server_member_id = ? AND smr.deleted_at = 0 AND r.deleted_at = 0
@@ -500,9 +569,11 @@ func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID st
 		}
 		result = append(result, repositories.ServerMemberWithRoles{
 			User: models.User{
-				ID:       row.ID,
-				Username: row.Username,
-				IsAdmin:  row.IsAdmin,
+				ID:        row.ID,
+				Username:  row.Username,
+				IsAdmin:   row.IsAdmin,
+				Status:    row.Status,
+				AvatarURL: row.AvatarURL,
 			},
 			Roles: roles,
 		})

@@ -29,6 +29,7 @@ type ListMessagesResult struct {
 	Messages    []models.Message
 	Attachments []models.MessageAttachment
 	Reactions   []models.Reaction
+	Authors     []models.User
 }
 
 type MessageService interface {

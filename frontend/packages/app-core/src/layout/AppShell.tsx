@@ -21,10 +21,12 @@ import {
   type PanelImperativeHandle,
 } from 'react-resizable-panels'
 import { TooltipProvider } from '@goportal/ui'
-import { ServerRail } from '@goportal/feature-servers'
+import { CreateServerModal, ServerRail } from '@goportal/feature-servers'
 import { ChannelSidebar } from '@goportal/feature-channels'
 import { DirectMessagesSidebar } from '@goportal/feature-dashboard'
+import { useAuthStore } from '@goportal/store'
 import { MemberListPanel } from './MemberListPanel'
+import { ServerSettingsOverlay } from './ServerSettingsOverlay'
 import type { MockCategory, MockServer } from '../mock/servers'
 import type { MockMember } from '../mock/members'
 import {
@@ -59,16 +61,48 @@ export const AppShell: React.FC = () => {
   const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
   const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname])
 
-  const [activeServerId, setActiveServerId] = useState('1')
-  const [activeChannelId, setActiveChannelId] = useState('general')
+  const [activeServerId, setActiveServerId] = useState('')
+  const [activeChannelId, setActiveChannelId] = useState('')
   const [showMembers, setShowMembers] = useState(false)
   const [servers, setServers] = useState<MockServer[]>([])
+  const [isCreateServerModalOpen, setIsCreateServerModalOpen] = useState(false)
+  const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false)
+  const [serverSettingsTab, setServerSettingsTab] = useState<'profile' | 'members'>('profile')
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true
+    }
+    return window.localStorage.getItem('has_seen_onboarding') === 'true'
+  })
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [serverDetails, setServerDetails] = useState<Record<string, MockServer>>({})
   const [channelsByServer, setChannelsByServer] = useState<Record<string, MockCategory[]>>({})
   const [membersByServer, setMembersByServer] = useState<Record<string, MockMember[]>>({})
+  const currentUsername = useAuthStore((state) => state.user?.username)
 
   // Imperative handle — resize main panel when member list toggles
   const mainRef = useRef<PanelImperativeHandle>(null)
+  const toastTimerRef = useRef<number | null>(null)
+
+  const markOnboardingSeen = useCallback(() => {
+    setHasSeenOnboarding(true)
+    localStorage.setItem('has_seen_onboarding', 'true')
+  }, [])
+
+  const pushToast = useCallback((message: string) => {
+    setToastMessage(message)
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null)
+      toastTimerRef.current = null
+    }, 2500)
+  }, [])
+
+  const showDevelopingToast = useCallback(() => {
+    pushToast('Tính năng đang phát triển')
+  }, [pushToast])
 
   // After showMembers flips, imperatively resize main panel.
   // useEffect runs after render so mainRef is guaranteed to be attached.
@@ -76,6 +110,14 @@ export const AppShell: React.FC = () => {
     const target = showMembers ? SIZE.mainWithMembers : SIZE.mainAlone
     mainRef.current?.resize(target)
   }, [showMembers])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (params.serverId) {
@@ -88,6 +130,18 @@ export const AppShell: React.FC = () => {
       setActiveChannelId(params.channelId)
     }
   }, [params.channelId])
+
+  useEffect(() => {
+    const isTextChannelRoute =
+      location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/')
+    if (!isTextChannelRoute || !params.serverId || !params.channelId) {
+      return
+    }
+    localStorage.setItem(
+      'last_visited',
+      JSON.stringify({ serverId: params.serverId, channelId: params.channelId }),
+    )
+  }, [location.pathname, params.channelId, params.serverId])
 
   useEffect(() => {
     if (isVoiceMode) {
@@ -107,6 +161,7 @@ export const AppShell: React.FC = () => {
       setServers(data)
 
       if (data.length === 0) {
+        navigate('/app/@me', { replace: true })
         return
       }
 
@@ -117,17 +172,40 @@ export const AppShell: React.FC = () => {
           : data[0].id
       setActiveServerId(nextServerId)
 
-      if (!paramServerId || paramServerId !== nextServerId || location.pathname === '/app') {
-        navigate(`/app/servers/${nextServerId}/channels/general`, { replace: true })
+      if (location.pathname === '/app') {
+        return
+      }
+
+      if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode) {
+        try {
+          const channelData = await getChannels(nextServerId)
+          if (isCancelled) {
+            return
+          }
+
+          const availableChannels = channelData.categories.flatMap((category) => category.channels)
+          const firstText = availableChannels.find((channel) => channel.type === 'text') ?? availableChannels[0]
+          if (!firstText) {
+            navigate('/app/@me', { replace: true })
+            return
+          }
+          navigate(`/app/servers/${nextServerId}/channels/${firstText.id}`, { replace: true })
+        } catch {
+          navigate('/app/@me', { replace: true })
+        }
       }
     }
 
-    void loadServers()
+    void loadServers().catch(() => {
+      if (!isCancelled) {
+        navigate('/app/@me', { replace: true })
+      }
+    })
 
     return () => {
       isCancelled = true
     }
-  }, [location.pathname, navigate, params.serverId])
+  }, [isDmMode, location.pathname, navigate, params.serverId])
 
   useEffect(() => {
     let isCancelled = false
@@ -218,6 +296,61 @@ export const AppShell: React.FC = () => {
 
   const toggleMembers = useCallback(() => setShowMembers((v) => !v), [])
 
+  const getFirstNavigableChannelId = useCallback(async (serverId: string): Promise<string | null> => {
+    const data = await getChannels(serverId)
+    const availableChannels = data.categories.flatMap((category) => category.channels)
+    const firstText = availableChannels.find((channel) => channel.type === 'text') ?? availableChannels[0]
+    return firstText?.id ?? null
+  }, [])
+
+  const navigateToServerFirstChannel = useCallback(
+    async (serverId: string, replace = false) => {
+      const firstChannelId = await getFirstNavigableChannelId(serverId)
+      if (!firstChannelId) {
+        navigate('/app/@me', replace ? { replace: true } : undefined)
+        return
+      }
+      setActiveServerId(serverId)
+      setActiveChannelId(firstChannelId)
+      navigate(`/app/servers/${serverId}/channels/${firstChannelId}`, replace ? { replace: true } : undefined)
+    },
+    [getFirstNavigableChannelId, navigate],
+  )
+
+  const handleCreateServer = useCallback(async (payload: { name: string; is_public: boolean }) => {
+    const created = await createServer(payload)
+    markOnboardingSeen()
+    const refreshedServers = await getServers()
+    setServers(refreshedServers)
+    const firstChannelId = await getFirstNavigableChannelId(created.id)
+    if (firstChannelId) {
+      setActiveServerId(created.id)
+      setActiveChannelId(firstChannelId)
+      navigate(`/app/servers/${created.id}/channels/${firstChannelId}`)
+      return
+    }
+
+    const createdChannel = await createChannel(created.id, {
+      name: 'general',
+      type: 'TEXT',
+    })
+    setActiveServerId(created.id)
+    setActiveChannelId(createdChannel.id)
+    navigate(`/app/servers/${created.id}/channels/${createdChannel.id}`)
+  }, [getFirstNavigableChannelId, markOnboardingSeen, navigate])
+
+  const refreshActiveServer = useCallback(async (serverId: string) => {
+    const list = await getServers()
+    setServers(list)
+    const detail = await getServerById(serverId)
+    if (detail) {
+      setServerDetails((prev) => ({
+        ...prev,
+        [serverId]: detail,
+      }))
+    }
+  }, [])
+
   const activeServer = useMemo(
     () =>
       serverDetails[activeServerId] ??
@@ -244,8 +377,24 @@ export const AppShell: React.FC = () => {
       setActiveServerId,
       activeChannelId,
       setActiveChannelId,
+      activeCategories,
+      serverCount: servers.length,
+      shouldShowOnboarding: servers.length === 0 && !hasSeenOnboarding,
+      dismissOnboarding: markOnboardingSeen,
+      openCreateServerModal: () => setIsCreateServerModalOpen(true),
+      showDevelopingToast,
     }),
-    [showMembers, toggleMembers, activeServerId, activeChannelId],
+    [
+      showMembers,
+      toggleMembers,
+      activeServerId,
+      activeChannelId,
+      activeCategories,
+      servers.length,
+      hasSeenOnboarding,
+      markOnboardingSeen,
+      showDevelopingToast,
+    ],
   )
 
   return (
@@ -258,27 +407,14 @@ export const AppShell: React.FC = () => {
           <ServerRail
             servers={servers}
             activeServerId={activeServerId}
-            onSelectServer={(serverId) => {
-              setActiveServerId(serverId)
-              setActiveChannelId('general')
-              navigate(`/app/servers/${serverId}/channels/general`)
-            }}
-            onCreateServer={async () => {
-              const name = window.prompt('Server name')
-              if (!name || !name.trim()) {
-                return
+            onSelectServer={async (serverId) => {
+              try {
+                await navigateToServerFirstChannel(serverId)
+              } catch {
+                navigate('/app/@me')
               }
-
-              const created = await createServer({
-                name: name.trim(),
-                is_public: true,
-              })
-
-              setServers((prev) => [...prev, created])
-              setActiveServerId(created.id)
-              setActiveChannelId('general')
-              navigate(`/app/servers/${created.id}/channels/general`)
             }}
+            onCreateServer={() => setIsCreateServerModalOpen(true)}
           />
         </div>
 
@@ -339,6 +475,14 @@ export const AppShell: React.FC = () => {
                       [activeServerId]: refreshed.categories,
                     }))
                   }}
+                  onOpenServerSettings={() => {
+                    setServerSettingsTab('profile')
+                    setIsServerSettingsOpen(true)
+                  }}
+                  onOpenServerMembers={() => {
+                    setServerSettingsTab('members')
+                    setIsServerSettingsOpen(true)
+                  }}
                   isInVoiceChannel={isVoiceMode}
                   activeVoiceChannelName={activeChannelId}
                 />
@@ -385,7 +529,31 @@ export const AppShell: React.FC = () => {
             </>
           )}
         </PanelGroup>
-        
+
+        <CreateServerModal
+          isOpen={isCreateServerModalOpen}
+          onOpenChange={setIsCreateServerModalOpen}
+          defaultServerName={`Server của ${currentUsername ?? 'bạn'}`}
+          onCreate={handleCreateServer}
+        />
+
+        {toastMessage && (
+          <div className="fixed bottom-4 right-4 z-[100] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-lg">
+            {toastMessage}
+          </div>
+        )}
+
+        {activeServer && isServerSettingsOpen && (
+          <ServerSettingsOverlay
+            open={isServerSettingsOpen}
+            initialTab={serverSettingsTab}
+            serverId={activeServerId}
+            server={activeServer}
+            onClose={() => setIsServerSettingsOpen(false)}
+            onServerUpdated={refreshActiveServer}
+            onToast={pushToast}
+          />
+        )}
       </div>
     </TooltipProvider>
   )

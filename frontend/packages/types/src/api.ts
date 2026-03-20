@@ -18,6 +18,8 @@ export type AuthUser = {
   id:       string
   username: string
   is_admin: boolean
+  status?: 'online' | 'offline' | 'idle' | 'dnd'
+  avatar_url?: string | null
 }
 
 export type LoginResponseData = {
@@ -64,6 +66,8 @@ export type ServerDTO = {
   owner_id:        string
   is_public:       boolean
   default_role_id: string
+  icon_url?:       string | null
+  banner_url?:     string | null
 }
 
 export type CreateServerRequest = {
@@ -222,35 +226,42 @@ export type RoleDTO = {
   id:          string
   server_id:   string
   name:        string
+  color:       string
   position:    number
-  permissions: number   // summed bitset
+  is_everyone: boolean
+  permissions: string[]
 }
 
 export type CreateRoleRequest = {
   name:        string
-  position:    number
-  permissions: number[]   // array of bit values summed server-side
+  color:       string
+  permissions: string[]
 }
 
 export type UpdateRoleRequest = {
   name?:       string
-  position?:   number
-  permissions?: number[]
+  color?:      string
+  permissions?: string[]
 }
 
-// Permission bit constants
+// Permission enum values
 export const ROLE_PERMISSIONS = {
-  VIEW_CHANNEL:       1,
-  SEND_MESSAGES:      2,
-  READ_MESSAGES:      4,
-  ADMINISTRATOR:      8,
-  MANAGE_SERVER:      16,
-  CREATE_INVITE:      32,
-  READ_MESSAGE_HISTORY: 64,
-  MANAGE_MESSAGES:    128,
-  MANAGE_CHANNELS:    2048,
-  MANAGE_ROLES:       4096,
-  APPROVE_MEMBERS:    32768,
+  VIEW_CHANNEL: 'VIEW_CHANNEL',
+  SEND_MESSAGES: 'SEND_MESSAGES',
+  READ_MESSAGES: 'READ_MESSAGES',
+  ADMINISTRATOR: 'ADMINISTRATOR',
+  MANAGE_SERVER: 'MANAGE_SERVER',
+  CREATE_INVITE: 'CREATE_INVITE',
+  READ_MESSAGE_HISTORY: 'READ_MESSAGE_HISTORY',
+  MANAGE_MESSAGES: 'MANAGE_MESSAGES',
+  ATTACH_FILES: 'ATTACH_FILES',
+  EMBED_LINKS: 'EMBED_LINKS',
+  ADD_REACTIONS: 'ADD_REACTIONS',
+  MANAGE_CHANNELS: 'MANAGE_CHANNELS',
+  MANAGE_ROLES: 'MANAGE_ROLES',
+  KICK_MEMBERS: 'KICK_MEMBERS',
+  BAN_MEMBERS: 'BAN_MEMBERS',
+  APPROVE_MEMBERS: 'APPROVE_MEMBERS',
 } as const
 
 export const ROLE_ERROR_CODES = {

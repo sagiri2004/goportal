@@ -14,6 +14,8 @@ type Server struct {
 	OwnerID       string  `gorm:"type:char(36);not null;index" json:"owner_id"`
 	IsPublic      bool    `gorm:"not null;default:false" json:"is_public"`
 	DefaultRoleID *string `gorm:"type:char(36)" json:"default_role_id,omitempty"`
+	IconURL       *string `gorm:"type:text" json:"icon_url,omitempty"`
+	BannerURL     *string `gorm:"type:text" json:"banner_url,omitempty"`
 }
 
 func (Server) TableName() string {
