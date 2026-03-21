@@ -29,6 +29,11 @@ func LoadConfig(configPath string) error {
 		RabbitMQ: setting.RabbitMQConfig{
 			URL: "amqp://guest:guest@localhost:5672/",
 		},
+		LiveKit: setting.LiveKitConfig{
+			URL:       "ws://localhost:7880",
+			APIKey:    "devkey",
+			APISecret: "livekit-dev-secret-change-me-32chars",
+		},
 		Cron: setting.CronSetting{
 			Enabled: true,
 			Spec:    "0 1 * * *",
@@ -85,6 +90,35 @@ func LoadConfig(configPath string) error {
 	}
 	if v := os.Getenv("RABBITMQ_URL"); v != "" {
 		cfg.RabbitMQ.URL = v
+	}
+	if v := os.Getenv("LIVEKIT_URL"); v != "" {
+		cfg.LiveKit.URL = v
+	}
+	if v := os.Getenv("LIVEKIT_API_KEY"); v != "" {
+		cfg.LiveKit.APIKey = v
+	}
+	if v := os.Getenv("LIVEKIT_API_SECRET"); v != "" {
+		cfg.LiveKit.APISecret = v
+	}
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+		cfg.Redis.Address = v
+	}
+	if v := os.Getenv("REDIS_ADDRESS"); v != "" {
+		cfg.Redis.Address = v
+		cfg.Redis.Addr = v
+	}
+	if v := os.Getenv("CLOUDINARY_CLOUD_NAME"); v != "" {
+		cfg.Cloudinary.CloudName = v
+	}
+	if v := os.Getenv("CLOUDINARY_API_KEY"); v != "" {
+		cfg.Cloudinary.APIKey = v
+	}
+	if v := os.Getenv("CLOUDINARY_API_SECRET"); v != "" {
+		cfg.Cloudinary.APISecret = v
+	}
+	if v := os.Getenv("CLOUDINARY_FOLDER"); v != "" {
+		cfg.Cloudinary.Folder = v
 	}
 
 	global.Config = cfg

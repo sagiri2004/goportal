@@ -21,6 +21,8 @@ var (
 	messageRepo          repositories.MessageRepository
 	notificationRepoOnce sync.Once
 	notificationRepo     repositories.NotificationRepository
+	recordingRepoOnce    sync.Once
+	recordingRepo        repositories.RecordingRepository
 )
 
 // UserRepository returns the singleton UserRepository instance.
@@ -64,4 +66,11 @@ func NotificationRepository() repositories.NotificationRepository {
 		notificationRepo = repoimpl.NewNotificationRepository(global.DB)
 	})
 	return notificationRepo
+}
+
+func RecordingRepository() repositories.RecordingRepository {
+	recordingRepoOnce.Do(func() {
+		recordingRepo = repoimpl.NewRecordingRepository(global.DB)
+	})
+	return recordingRepo
 }

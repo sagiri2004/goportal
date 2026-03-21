@@ -26,11 +26,12 @@ type ToggleReactionRequest struct {
 }
 
 type UploadResponse struct {
-	AttachmentID string `json:"attachment_id"`
-	URL          string `json:"url"`
-	FileName     string `json:"file_name"`
-	FileType     string `json:"file_type"`
-	FileSize     int64  `json:"file_size"`
+	AttachmentID *string `json:"attachment_id,omitempty"`
+	MediaType    string  `json:"media_type"`
+	URL          string  `json:"url"`
+	FileName     string  `json:"file_name"`
+	FileType     string  `json:"file_type"`
+	FileSize     int64   `json:"file_size"`
 }
 
 type MessageResponse struct {

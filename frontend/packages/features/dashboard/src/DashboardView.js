@@ -2,10 +2,10 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Separator, cn } from '@goportal/ui';
 import { ChannelHeader } from '@goportal/feature-channels';
-import { Edit, FileText, Gift, Hash, Image, MoreHorizontal, Plus, Reply, Smile, SmilePlus, Trash2, X, } from 'lucide-react';
+import { Edit, FileText, Gift, Hash, Image, Loader2, MoreHorizontal, Plus, Reply, Smile, SmilePlus, Trash2, X, } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
-import { getMessages, sendMessage } from '@goportal/app-core';
+import { getMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core';
 import { useDropzone } from 'react-dropzone';
 import { TextContent } from './components/TextContent';
 import { ReplyPreview } from './components/ReplyPreview';
@@ -24,6 +24,9 @@ export const DashboardView = () => {
     const inputRef = useRef(null);
     const [pendingFiles, setPendingFiles] = useState([]);
     const [composerHasContent, setComposerHasContent] = useState(false);
+    const [uploadProgressByFile, setUploadProgressByFile] = useState({});
+    const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+    const [composerError, setComposerError] = useState(null);
     const embedCacheRef = useRef({});
     const embedInFlightRef = useRef({});
     const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState({});
@@ -271,38 +274,40 @@ export const DashboardView = () => {
     }, []);
     const onSend = useCallback(async ({ content, files }) => {
         if (!activeChannelId) {
-            return;
+            return false;
         }
-        const message = await sendMessage(activeChannelId, content);
-        setMessagesByChannel((prev) => {
-            const currentMessages = prev[activeChannelKey] ?? [];
-            return {
-                ...prev,
-                [activeChannelKey]: [
-                    ...currentMessages,
-                    {
-                        ...message,
-                        // TODO: remove when backend attachment upload flow is integrated with composer
-                        attachments: files.length > 0
-                            ? files.map((file, index) => ({
-                                id: `upload-${Date.now()}-${index}`,
-                                type: file.type.startsWith('image/')
-                                    ? 'image'
-                                    : file.type.startsWith('video/')
-                                        ? 'video'
-                                        : file.type.startsWith('audio/')
-                                            ? 'audio'
-                                            : 'file',
-                                url: URL.createObjectURL(file),
-                                filename: file.name,
-                                filesize: file.size,
-                                mimeType: file.type || 'application/octet-stream',
-                            }))
-                            : message.attachments,
-                    },
-                ],
-            };
-        });
+        try {
+            setComposerError(null);
+            const attachmentIds = [];
+            if (files.length > 0) {
+                setIsUploadingFiles(true);
+                const uploaded = await Promise.all(files.map(async (file, index) => {
+                    const uploadKey = `${file.name}-${file.size}-${index}`;
+                    const result = await uploadMessageAttachment(file, (progress) => {
+                        setUploadProgressByFile((prev) => ({ ...prev, [uploadKey]: progress }));
+                    });
+                    return result.attachmentId;
+                }));
+                attachmentIds.push(...uploaded);
+            }
+            const message = await sendMessage(activeChannelId, content, attachmentIds);
+            setMessagesByChannel((prev) => {
+                const currentMessages = prev[activeChannelKey] ?? [];
+                return {
+                    ...prev,
+                    [activeChannelKey]: [...currentMessages, message],
+                };
+            });
+            return true;
+        }
+        catch (error) {
+            setComposerError(error instanceof Error ? error.message : 'Failed to send message.');
+            return false;
+        }
+        finally {
+            setIsUploadingFiles(false);
+            setUploadProgressByFile({});
+        }
     }, [activeChannelId, activeChannelKey]);
     const handleKeyDown = useCallback(async (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -311,12 +316,14 @@ export const DashboardView = () => {
             if (!content && pendingFiles.length === 0) {
                 return;
             }
-            await onSend({ content, files: pendingFiles });
-            if (inputRef.current) {
-                inputRef.current.innerText = '';
+            const sent = await onSend({ content, files: pendingFiles });
+            if (sent) {
+                if (inputRef.current) {
+                    inputRef.current.innerText = '';
+                }
+                setPendingFiles([]);
+                setComposerHasContent(false);
             }
-            setPendingFiles([]);
-            setComposerHasContent(false);
         }
     }, [onSend, pendingFiles]);
     const handlePaste = useCallback((event) => {
@@ -346,7 +353,7 @@ export const DashboardView = () => {
         noClick: true,
         noKeyboard: true,
     });
-    const canSend = composerHasContent || pendingFiles.length > 0;
+    const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles;
     const composerPlaceholder = `Message #${activeChannel?.name ?? 'general'}`;
     const removePendingFile = (index) => {
         setPendingFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
@@ -372,7 +379,11 @@ export const DashboardView = () => {
                                             const contentUrl = extractFirstUrl(msg.content);
                                             return contentUrl && autoEmbedsByUrl[contentUrl] ? [autoEmbedsByUrl[contentUrl]] : [];
                                         })()).map((embed, index) => (_jsx(LinkEmbed, { embed: embed }, `${msg.id}-${embed.url}-${index}`))), _jsx(ReactionBar, { reactions: reactions, onToggleReaction: (emoji) => toggleReaction(msg.id, emoji) }), _jsxs("div", { className: cn('absolute right-2 top-0 z-20 overflow-visible bg-card border border-border rounded-md shadow-sm px-1 gap-0.5', reactionPickerMessageId === msg.id ? 'flex' : 'hidden group-hover:flex'), children: [_jsx(EmojiPicker, { open: reactionPickerMessageId === msg.id, onOpenChange: (open) => setReactionPickerMessageId(open ? msg.id : null), onSelect: (emoji) => toggleReaction(msg.id, emoji), trigger: (_jsx("button", { className: "flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground", type: "button", children: _jsx(SmilePlus, { className: "w-4 h-4" }) })) }), actionButtons.map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150", type: "button", children: _jsx(Icon, { className: "w-4 h-4" }) }) }), _jsx(TooltipContent, { children: label })] }, label)))] })] }, msg.id));
-                        }) })] }), _jsx("footer", { className: "flex-none mx-4 mb-4", children: _jsxs("div", { ...getRootProps(), className: `relative rounded-lg bg-[hsl(240,3.7%,18%)] ${canSend ? 'ring-1 ring-indigo-500/30' : ''}`, children: [isDragActive && (_jsx("div", { className: "absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-indigo-500/50 bg-indigo-500/10", children: _jsx("p", { className: "font-semibold text-indigo-400", children: "Drop files to upload" }) })), _jsx("input", { ...getInputProps() }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-16 w-16 rounded-md border border-border object-cover" })) : (_jsxs("div", { className: "flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: [_jsx(FileText, { className: "h-5 w-5 text-muted-foreground" }), _jsx("span", { className: "w-12 truncate text-center text-[9px] text-muted-foreground", children: file.name })] })), _jsx("button", { type: "button", onClick: () => removePendingFile(index), className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground", type: "button", onClick: open, children: _jsx(Plus, { className: "h-5 w-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onPaste: handlePaste, onInput: updateComposerState, className: "min-h-[44px] max-h-[300px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": composerPlaceholder }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
+                        }) })] }), _jsx("footer", { className: "flex-none mx-4 mb-4", children: _jsxs("div", { ...getRootProps(), className: `relative rounded-lg bg-[hsl(240,3.7%,18%)] ${canSend ? 'ring-1 ring-indigo-500/30' : ''}`, children: [isDragActive && (_jsx("div", { className: "absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-indigo-500/50 bg-indigo-500/10", children: _jsx("p", { className: "font-semibold text-indigo-400", children: "Drop files to upload" }) })), _jsx("input", { ...getInputProps() }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-16 w-16 rounded-md border border-border object-cover" })) : (_jsxs("div", { className: "flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: [_jsx(FileText, { className: "h-5 w-5 text-muted-foreground" }), _jsx("span", { className: "w-12 truncate text-center text-[9px] text-muted-foreground", children: file.name })] })), _jsx("button", { type: "button", onClick: () => removePendingFile(index), disabled: isUploadingFiles, className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), isUploadingFiles && (_jsxs("div", { className: "px-3 pb-2 text-xs text-muted-foreground", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Loader2, { className: "h-3.5 w-3.5 animate-spin" }), _jsx("span", { children: "Uploading attachments..." })] }), pendingFiles.map((file, index) => {
+                                    const key = `${file.name}-${file.size}-${index}`;
+                                    const progress = uploadProgressByFile[key] ?? 0;
+                                    return (_jsxs("p", { className: "truncate", children: [file.name, ": ", progress, "%"] }, key));
+                                })] })), composerError && (_jsx("p", { className: "px-3 pb-2 text-xs text-red-400", children: composerError })), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground", type: "button", onClick: open, disabled: isUploadingFiles, children: _jsx(Plus, { className: "h-5 w-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onPaste: handlePaste, onInput: updateComposerState, className: "min-h-[44px] max-h-[300px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": composerPlaceholder }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
                                             { icon: Gift, label: 'Gift' },
                                             { icon: Image, label: 'GIF' },
                                         ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Icon, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsx(EmojiPicker, { align: "end", onSelect: insertEmoji, trigger: (_jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Smile, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) })) })] })] })] }) })] }));

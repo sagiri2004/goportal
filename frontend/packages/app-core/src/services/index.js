@@ -4,4 +4,6 @@ export * from './channels';
 export * from './messages';
 export * from './members';
 export * from './server-settings';
+export * from './upload';
+export * from './users';
 //# sourceMappingURL=index.js.map

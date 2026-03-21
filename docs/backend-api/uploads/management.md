@@ -1,9 +1,9 @@
-### UPLOADS: Upload Attachment
+### UPLOADS: Upload Media
 
 - Method: `POST`
 - Path: `/api/v1/upload`
 - Auth: `Bearer token`
-- Description: Upload a file and create a reusable message attachment record.
+- Description: Generic media upload endpoint used by avatars, server images, role icons, and message attachments.
 
 #### Request
 
@@ -16,6 +16,7 @@
   - None
 - Body form-data:
   - `file`: binary file
+  - `media_type`: `avatar | server_icon | server_banner | role_icon | message_attachment` (optional, default `message_attachment`)
 
 #### Success Response
 
@@ -28,7 +29,8 @@
   "message": "File uploaded",
   "data": {
     "attachment_id": "9dd2151d-a31f-4f33-b9f3-7a46a8092222",
-    "url": "/uploads/1742165419200-06f3395f.png",
+    "media_type": "message_attachment",
+    "url": "https://res.cloudinary.com/<cloud>/image/upload/v1742165419/goportal/messages/06f3395f.png",
     "file_name": "image.png",
     "file_type": "image/png",
     "file_size": 120482
@@ -39,17 +41,18 @@
 #### Error Responses
 
 - Status: `400`
-- Meaning: File missing, too large (>10MB), or unsupported file type.
+- Meaning: File missing, unsupported media type, too large, or unsupported MIME type.
 
 ```json
 {
   "success": false,
-  "code": "FILE_TYPE_NOT_ALLOWED",
-  "message": "File type is not allowed"
+  "code": "INVALID_MEDIA_TYPE",
+  "message": "Invalid media type"
 }
 ```
 
 #### Frontend Notes
 
-- Allowed types: image/*, pdf, zip.
-- Use returned `attachment_id` in `POST /api/v1/messages`.
+- `message_attachment`: allows `image/*`, `video/*`, `audio/*`, `application/pdf`, `application/zip` (max 25MB).
+- `avatar`, `server_icon`, `server_banner`, `role_icon`: image-only (max 5MB).
+- Only `message_attachment` returns `attachment_id`; pass that ID into `POST /api/v1/messages`.

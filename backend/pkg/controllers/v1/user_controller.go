@@ -58,7 +58,7 @@ func (ctrl *userController) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	u, err := containers.UserService().UpdateProfile(c.Request.Context(), userID, req.Username)
+	u, err := containers.UserService().UpdateProfile(c.Request.Context(), userID, req.Username, req.AvatarURL)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))

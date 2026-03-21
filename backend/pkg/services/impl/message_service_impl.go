@@ -21,6 +21,7 @@ type messageService struct {
 	serverRepo  repositories.ServerRepository
 	channelRepo repositories.ChannelRepository
 	userRepo    repositories.UserRepository
+	storage     services.StorageService
 	publisher   message.Publisher
 }
 
@@ -29,6 +30,7 @@ func NewMessageService(
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
 	userRepo repositories.UserRepository,
+	storage services.StorageService,
 	publisher message.Publisher,
 ) services.MessageService {
 	return &messageService{
@@ -36,6 +38,7 @@ func NewMessageService(
 		serverRepo:  serverRepo,
 		channelRepo: channelRepo,
 		userRepo:    userRepo,
+		storage:     storage,
 		publisher:   publisher,
 	}
 }
@@ -278,7 +281,24 @@ func (s *messageService) DeleteMessage(ctx context.Context, actorID, messageID s
 	if msg.AuthorID != actorID {
 		return apperr.E("MESSAGE_FORBIDDEN", nil)
 	}
-	return s.repo.SoftDelete(ctx, messageID)
+
+	attachments, err := s.repo.ListAttachmentsByMessageID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.SoftDelete(ctx, messageID); err != nil {
+		return err
+	}
+	if err := s.repo.SoftDeleteAttachmentsByMessageID(ctx, messageID); err != nil {
+		return err
+	}
+
+	for i := range attachments {
+		_ = s.storage.DeleteByURL(ctx, attachments[i].FileURL)
+	}
+
+	return nil
 }
 
 func (s *messageService) ToggleReaction(ctx context.Context, actorID, messageID, emoji string) (bool, error) {

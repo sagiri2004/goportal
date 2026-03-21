@@ -13,12 +13,13 @@ import (
 )
 
 type userService struct {
-	repo repositories.UserRepository
+	repo    repositories.UserRepository
+	storage services.StorageService
 }
 
 // NewUserService creates a new UserService implementation.
-func NewUserService(repo repositories.UserRepository) services.UserService {
-	return &userService{repo: repo}
+func NewUserService(repo repositories.UserRepository, storage services.StorageService) services.UserService {
+	return &userService{repo: repo, storage: storage}
 }
 
 func (s *userService) Register(ctx context.Context, username, password string, isAdmin bool) (*models.User, error) {
@@ -78,31 +79,66 @@ func (s *userService) GetByID(ctx context.Context, id string) (*models.User, err
 	return s.repo.FindByID(ctx, id)
 }
 
-func (s *userService) UpdateProfile(ctx context.Context, id, username string) (*models.User, error) {
+func (s *userService) UpdateProfile(ctx context.Context, id string, username, avatarURL *string) (*models.User, error) {
 	id = strings.TrimSpace(id)
-	username = strings.TrimSpace(username)
-	if id == "" || username == "" {
+	if id == "" {
 		return nil, apperr.E("MISSING_FIELDS", nil)
-	}
-
-	existing, err := s.repo.FindByUsername(ctx, username)
-	if err == nil && existing != nil && existing.ID != id {
-		return nil, apperr.E("USERNAME_EXISTS", nil)
-	}
-	if err != nil {
-		if ae, ok := apperr.From(err); !ok || ae.Code != "USER_NOT_FOUND" {
-			return nil, err
-		}
 	}
 
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	user.Username = username
+
+	if username == nil && avatarURL == nil {
+		return user, nil
+	}
+
+	if username != nil {
+		trimmed := strings.TrimSpace(*username)
+		if trimmed == "" {
+			return nil, apperr.E("MISSING_FIELDS", nil)
+		}
+
+		existing, err := s.repo.FindByUsername(ctx, trimmed)
+		if err == nil && existing != nil && existing.ID != id {
+			return nil, apperr.E("USERNAME_EXISTS", nil)
+		}
+		if err != nil {
+			if ae, ok := apperr.From(err); !ok || ae.Code != "USER_NOT_FOUND" {
+				return nil, err
+			}
+		}
+		user.Username = trimmed
+	}
+
+	var previousAvatar string
+	if user.AvatarURL != nil {
+		previousAvatar = *user.AvatarURL
+	}
+
+	if avatarURL != nil {
+		trimmed := strings.TrimSpace(*avatarURL)
+		if trimmed == "" {
+			user.AvatarURL = nil
+		} else {
+			user.AvatarURL = &trimmed
+		}
+	}
 
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
 	}
+
+	if avatarURL != nil && previousAvatar != "" {
+		current := ""
+		if user.AvatarURL != nil {
+			current = *user.AvatarURL
+		}
+		if previousAvatar != current {
+			_ = s.storage.DeleteByURL(ctx, previousAvatar)
+		}
+	}
+
 	return user, nil
 }

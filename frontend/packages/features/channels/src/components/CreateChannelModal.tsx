@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -9,121 +9,168 @@ import {
   Button,
   Input,
   Label,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
 } from '@goportal/ui'
-import { useCreateChannel } from '../hooks/useChannels'
+import { Hash, Volume2 } from 'lucide-react'
 import type { CreateChannelRequest } from '@goportal/types'
 
 type CreateChannelModalProps = {
-  serverId: string
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess?: () => void
+  onCreate: (payload: CreateChannelRequest) => Promise<void>
 }
 
 export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
-  serverId,
   isOpen,
   onOpenChange,
-  onSuccess,
+  onCreate,
 }) => {
   const [channelType, setChannelType] = useState<'TEXT' | 'VOICE'>('TEXT')
   const [name, setName] = useState('')
-  const [error, setError] = useState<string>()
-  const createChannel = useCreateChannel(serverId)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const placeholder = useMemo(
+    () => (channelType === 'TEXT' ? 'text-channel' : 'voice-channel'),
+    [channelType],
+  )
+
+  const normalizeName = (value: string) => value.toLowerCase().trim().replace(/\s+/g, '-')
+
+  const resetState = () => {
+    setName('')
+    setChannelType('TEXT')
+    setNameError(null)
+    setSubmitError(null)
+    setIsSubmitting(false)
+  }
+
+  const validate = (value: string): string | null => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return 'Tên kênh là bắt buộc.'
+    }
+    if (trimmed.length < 2) {
+      return 'Tên kênh phải có ít nhất 2 ký tự.'
+    }
+    if (trimmed.length > 100) {
+      return 'Tên kênh không được vượt quá 100 ký tự.'
+    }
+    return null
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    onOpenChange(open)
+    if (!open) {
+      resetState()
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(undefined)
+    setSubmitError(null)
 
-    if (!name.trim()) {
-      setError('Channel name is required')
+    const normalized = normalizeName(name)
+    const validationError = validate(normalized)
+    if (validationError) {
+      setNameError(validationError)
       return
     }
+    setNameError(null)
 
     const body: CreateChannelRequest = {
-      name: name.trim(),
+      name: normalized.trim(),
       type: channelType,
     }
 
-    createChannel.mutate(body, {
-      onSuccess: () => {
-        setName('')
-        setChannelType('TEXT')
-        onOpenChange(false)
-        onSuccess?.()
-      },
-      onError: (err: any) => {
-        setError(err?.message || 'Failed to create channel')
-      },
-    })
+    setIsSubmitting(true)
+    try {
+      await onCreate(body)
+      handleOpenChange(false)
+    } catch (error: any) {
+      setSubmitError(error?.message ?? 'Không thể tạo kênh. Vui lòng thử lại.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Channel</DialogTitle>
+          <DialogTitle>Tạo Kênh</DialogTitle>
           <DialogDescription>
-            Create a new text or voice channel for this server
+            Tạo kênh văn bản hoặc thoại cho server này.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Channel Type Tabs */}
-          <Tabs value={channelType} onValueChange={(v) => setChannelType(v as 'TEXT' | 'VOICE')}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="TEXT">Text Channel</TabsTrigger>
-              <TabsTrigger value="VOICE">Voice Channel</TabsTrigger>
-            </TabsList>
-            <TabsContent value="TEXT" className="mt-4">
-              <p className="text-xs text-muted-foreground mb-2">
-                For text-based conversations
-              </p>
-            </TabsContent>
-            <TabsContent value="VOICE" className="mt-4">
-              <p className="text-xs text-muted-foreground mb-2">
-                For voice conversations and streaming
-              </p>
-            </TabsContent>
-          </Tabs>
-
-          {/* Channel Name */}
           <div className="space-y-1.5">
             <Label htmlFor="channel-name">
-              Channel Name {channelType === 'TEXT' && <span className="text-muted-foreground ml-1">#</span>}
+              Loại Kênh
             </Label>
-            <Input
-              id="channel-name"
-              placeholder={channelType === 'TEXT' ? 'channel-name' : 'voice-channel'}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={createChannel.isPending}
-              autoFocus
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setChannelType('TEXT')}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                  channelType === 'TEXT'
+                    ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Hash className="h-4 w-4" />
+                <span className="text-sm font-medium">Text Channel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannelType('VOICE')}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                  channelType === 'VOICE'
+                    ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Volume2 className="h-4 w-4" />
+                <span className="text-sm font-medium">Voice Channel</span>
+              </button>
+            </div>
           </div>
 
-          {error && (
-            <p className="text-xs text-destructive">{error}</p>
-          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="channel-name">Tên Kênh</Label>
+            <Input
+              id="channel-name"
+              placeholder={placeholder}
+              value={name}
+              onChange={(e) => {
+                const next = normalizeName(e.target.value).slice(0, 100)
+                setName(next)
+                setNameError(validate(next))
+              }}
+              disabled={isSubmitting}
+              maxLength={100}
+              autoFocus
+            />
+            {nameError && <p className="text-xs text-red-400">{nameError}</p>}
+          </div>
+
+          {submitError && <p className="text-xs text-red-400">{submitError}</p>}
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={createChannel.isPending}
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="submit"
-              disabled={createChannel.isPending}
+              disabled={isSubmitting}
             >
-              {createChannel.isPending ? 'Creating...' : 'Create'}
+              {isSubmitting ? 'Đang tạo...' : 'Tạo kênh'}
             </Button>
           </DialogFooter>
         </form>

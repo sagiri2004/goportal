@@ -1,9 +1,9 @@
 import React from 'react';
+import type { CreateChannelRequest } from '@goportal/types';
 type CreateChannelModalProps = {
-    serverId: string;
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    onSuccess?: () => void;
+    onCreate: (payload: CreateChannelRequest) => Promise<void>;
 };
 export declare const CreateChannelModal: React.FC<CreateChannelModalProps>;
 export {};

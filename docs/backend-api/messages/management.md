@@ -163,7 +163,7 @@
 #### Frontend Notes
 
 - `content` is stored in envelope format: `type`, `payload`, `encoding`.
-- `attachment_ids` must come from `POST /api/v1/upload`.
+- `attachment_ids` must come from `POST /api/v1/upload` with `media_type=message_attachment`.
 
 ---
 

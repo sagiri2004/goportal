@@ -15,7 +15,8 @@ type LoginRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	Username string `json:"username" binding:"required,min=3"`
+	Username  *string `json:"username,omitempty"`
+	AvatarURL *string `json:"avatar_url,omitempty"`
 }
 
 type FriendRequestCreateRequest struct {

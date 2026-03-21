@@ -13,7 +13,7 @@ type ServerRailProps = {
   activeServerId?: string
   onSelectServer?: (serverId: string) => void
   onCreateServer?: () => void
-  servers?: Array<{ id: string; name: string; initials?: string; color?: string }>
+  servers?: Array<{ id: string; name: string; initials?: string; color?: string; iconUrl?: string }>
 }
 
 /**
@@ -22,7 +22,7 @@ type ServerRailProps = {
  * Layout:
  * - Top: Create server button + divider
  * - Middle: Server icons (w-12 h-12, rounded-[24px], active has left accent bar + rounded-[16px])
- * - Bottom: Compass + Download icons
+ * - Bottom: Utility actions (no user card; handled by ChannelSidebar UserPanel)
  */
 export const ServerRail: React.FC<ServerRailProps> = ({
   activeServerId,
@@ -86,7 +86,15 @@ export const ServerRail: React.FC<ServerRailProps> = ({
                       }`}
                       type="button"
                     >
-                      {('initials' in server ? server.initials : undefined) ?? getServerInitials(server.name)}
+                      {server.iconUrl ? (
+                        <img
+                          src={server.iconUrl}
+                          alt={server.name}
+                          className="h-full w-full rounded-[inherit] object-cover"
+                        />
+                      ) : (
+                        ('initials' in server ? server.initials : undefined) ?? getServerInitials(server.name)
+                      )}
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{server.name}</TooltipContent>
@@ -124,19 +132,6 @@ export const ServerRail: React.FC<ServerRailProps> = ({
             </Button>
           </TooltipTrigger>
           <TooltipContent>Download</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="cursor-pointer relative w-12 h-12 rounded-[24px] hover:rounded-[16px] transition-all duration-200 bg-secondary hover:bg-indigo-500 hover:text-white text-foreground flex items-center justify-center text-sm font-semibold"
-            >
-              Y
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-[hsl(240,10%,6%)]" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>You</TooltipContent>
         </Tooltip>
       </div>
     </aside>

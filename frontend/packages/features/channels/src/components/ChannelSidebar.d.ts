@@ -26,8 +26,14 @@ type ChannelSidebarProps = {
     onInviteMember?: () => void;
     onOpenServerSettings?: () => void;
     onOpenServerMembers?: () => void;
-    isInVoiceChannel?: boolean;
-    activeVoiceChannelName?: string;
+    onOpenUserSettings?: () => void;
+    voiceState?: {
+        channelId: string;
+        channelName: string;
+        serverId: string;
+        serverName: string;
+    } | null;
+    onLeaveVoiceChannel?: () => void;
 };
 type ChannelMember = {
     id: string;

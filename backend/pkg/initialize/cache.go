@@ -9,12 +9,16 @@ import (
 )
 
 func InitCache() {
-	if global.Config.Redis.Addr == "" {
+	addr := global.Config.Redis.Addr
+	if addr == "" {
+		addr = global.Config.Redis.Address
+	}
+	if addr == "" {
 		return
 	}
 
 	global.RedisClient = redis.NewClient(&redis.Options{
-		Addr:     global.Config.Redis.Addr,
+		Addr:     addr,
 		Password: global.Config.Redis.Password,
 		DB:       global.Config.Redis.DB,
 	})

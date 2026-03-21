@@ -36,8 +36,8 @@ type ServerService interface {
 	DeleteServer(ctx context.Context, actorID, serverID string) error
 	KickMember(ctx context.Context, actorID, serverID, memberUserID string) error
 	LeaveServer(ctx context.Context, actorID, serverID string) error
-	CreateRole(ctx context.Context, actorID, serverID, name, color string, permissionNames []string) (*models.Role, error)
-	UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, color *string, permissionNames []string) (*models.Role, error)
+	CreateRole(ctx context.Context, actorID, serverID, name string, iconURL *string, color string, permissionNames []string) (*models.Role, error)
+	UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, iconURL, color *string, permissionNames []string) (*models.Role, error)
 	DeleteRole(ctx context.Context, actorID, serverID, roleID string) error
 	ListRoles(ctx context.Context, actorID, serverID string) ([]models.Role, error)
 	CreateInvite(ctx context.Context, actorID, serverID string, input CreateInviteInput) (*models.ServerInvite, error)

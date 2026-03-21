@@ -10,6 +10,7 @@ export const CreateServerModal = ({ isOpen, onOpenChange, defaultServerName, onC
         is_public: true,
     });
     const [iconPreviewUrl, setIconPreviewUrl] = useState(null);
+    const [iconFile, setIconFile] = useState(null);
     const [nameError, setNameError] = useState();
     const [submitError, setSubmitError] = useState();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,6 +26,7 @@ export const CreateServerModal = ({ isOpen, onOpenChange, defaultServerName, onC
             is_public: true,
         });
         setIconPreviewUrl(null);
+        setIconFile(null);
         setNameError(undefined);
         setSubmitError(undefined);
         setIsSubmitting(false);
@@ -68,6 +70,7 @@ export const CreateServerModal = ({ isOpen, onOpenChange, defaultServerName, onC
         if (iconPreviewUrl) {
             URL.revokeObjectURL(iconPreviewUrl);
         }
+        setIconFile(file);
         setIconPreviewUrl(URL.createObjectURL(file));
     };
     const handleSubmit = async (event) => {
@@ -83,7 +86,7 @@ export const CreateServerModal = ({ isOpen, onOpenChange, defaultServerName, onC
             await onCreate({
                 name: form.name.trim(),
                 is_public: form.is_public,
-            });
+            }, iconFile);
             onOpenChange(false);
         }
         catch (error) {

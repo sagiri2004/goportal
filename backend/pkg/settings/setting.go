@@ -8,8 +8,15 @@ type ServerConfig struct {
 
 type RedisConfig struct {
 	Addr     string `mapstructure:"addr" yaml:"addr"`
+	Address  string `mapstructure:"address" yaml:"address"`
 	Password string `mapstructure:"password" yaml:"password"`
 	DB       int    `mapstructure:"db" yaml:"db"`
+}
+
+type LiveKitConfig struct {
+	URL       string `mapstructure:"url" yaml:"url"`
+	APIKey    string `mapstructure:"api_key" yaml:"api_key"`
+	APISecret string `mapstructure:"api_secret" yaml:"api_secret"`
 }
 
 type RabbitMQConfig struct {
@@ -36,14 +43,23 @@ type SlackSetting struct {
 	WebhookURL string `mapstructure:"webhook_url" yaml:"webhook_url"`
 }
 
+type CloudinaryConfig struct {
+	CloudName string `mapstructure:"cloud_name" yaml:"cloud_name"`
+	APIKey    string `mapstructure:"api_key" yaml:"api_key"`
+	APISecret string `mapstructure:"api_secret" yaml:"api_secret"`
+	Folder    string `mapstructure:"folder" yaml:"folder"`
+}
+
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server" yaml:"server"`
-	Redis    RedisConfig    `mapstructure:"redis" yaml:"redis"`
-	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq" yaml:"rabbitmq"`
-	Logger   LoggerSetting  `mapstructure:"logger" yaml:"logger"`
-	Database DatabaseConfig `mapstructure:"database" yaml:"database"`
-	Cron     CronSetting    `mapstructure:"cron" yaml:"cron"`
-	Slack    SlackSetting   `mapstructure:"slack" yaml:"slack"`
+	Server     ServerConfig     `mapstructure:"server" yaml:"server"`
+	Redis      RedisConfig      `mapstructure:"redis" yaml:"redis"`
+	RabbitMQ   RabbitMQConfig   `mapstructure:"rabbitmq" yaml:"rabbitmq"`
+	LiveKit    LiveKitConfig    `mapstructure:"livekit" yaml:"livekit"`
+	Logger     LoggerSetting    `mapstructure:"logger" yaml:"logger"`
+	Database   DatabaseConfig   `mapstructure:"database" yaml:"database"`
+	Cron       CronSetting      `mapstructure:"cron" yaml:"cron"`
+	Slack      SlackSetting     `mapstructure:"slack" yaml:"slack"`
+	Cloudinary CloudinaryConfig `mapstructure:"cloudinary" yaml:"cloudinary"`
 }
 
 var AppConfig Config

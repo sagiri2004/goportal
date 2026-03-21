@@ -90,6 +90,27 @@ func (r *messageRepository) ListAttachmentsByMessageIDs(ctx context.Context, mes
 	return attachments, nil
 }
 
+func (r *messageRepository) ListAttachmentsByMessageID(ctx context.Context, messageID string) ([]models.MessageAttachment, error) {
+	return r.ListAttachmentsByMessageIDs(ctx, []string{messageID})
+}
+
+func (r *messageRepository) ListAttachmentsByServerID(ctx context.Context, serverID string) ([]models.MessageAttachment, error) {
+	var attachments []models.MessageAttachment
+	if serverID == "" {
+		return attachments, nil
+	}
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT ma.id, ma.created_at, ma.updated_at, ma.deleted_at, ma.message_id, ma.file_url, ma.file_type, ma.file_size, ma.file_name
+		FROM message_attachments ma
+		INNER JOIN messages m ON m.id = ma.message_id
+		INNER JOIN channels c ON c.id = m.channel_id
+		WHERE c.server_id = ? AND ma.deleted_at = 0
+	`, serverID).Scan(&attachments).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return attachments, nil
+}
+
 func (r *messageRepository) FindAttachmentsByIDs(ctx context.Context, attachmentIDs []string) ([]models.MessageAttachment, error) {
 	var attachments []models.MessageAttachment
 	if len(attachmentIDs) == 0 {
@@ -118,6 +139,29 @@ func (r *messageRepository) AttachToMessage(ctx context.Context, messageID strin
 		Model(&models.MessageAttachment{}).
 		Where("id IN ? AND deleted_at = 0", attachmentIDs).
 		Update("message_id", messageID).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) SoftDeleteAttachmentsByMessageID(ctx context.Context, messageID string) error {
+	if err := r.db.WithContext(ctx).
+		Model(&models.MessageAttachment{}).
+		Where("message_id = ? AND deleted_at = 0", messageID).
+		Update("deleted_at", gorm.Expr("UNIX_TIMESTAMP()")).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) SoftDeleteAttachmentsByIDs(ctx context.Context, attachmentIDs []string) error {
+	if len(attachmentIDs) == 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&models.MessageAttachment{}).
+		Where("id IN ? AND deleted_at = 0", attachmentIDs).
+		Update("deleted_at", gorm.Expr("UNIX_TIMESTAMP()")).Error; err != nil {
 		return apperr.E("DB_ERROR", err)
 	}
 	return nil

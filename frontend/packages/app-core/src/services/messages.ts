@@ -4,6 +4,7 @@ import { mockMessages } from '../mock/messages'
 import { simulateDelay } from '../mock/user'
 import { apiClient } from '../lib/api-client'
 import { useAuthStore } from '@goportal/store'
+import { uploadMedia } from './upload'
 
 type BackendMessage = {
   id: string
@@ -183,7 +184,8 @@ export const getMessages = async (
 
 export const sendMessage = async (
   channelId: string,
-  content: string
+  content: string,
+  attachmentIds: string[] = []
 ): Promise<UIMessage> => {
   if (IS_MOCK_MESSAGES) {
     await simulateDelay(120)
@@ -212,7 +214,22 @@ export const sendMessage = async (
     content_type: 'text/plain',
     content,
     encoding: 'utf-8',
+    attachment_ids: attachmentIds,
   })
 
   return mapMessage(item)
+}
+
+export const uploadMessageAttachment = async (
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<{ attachmentId: string; url: string }> => {
+  const uploaded = await uploadMedia(file, 'message_attachment', { onProgress })
+  if (!uploaded.attachment_id) {
+    throw new Error('Upload failed: attachment id is missing.')
+  }
+  return {
+    attachmentId: uploaded.attachment_id,
+    url: uploaded.url,
+  }
 }

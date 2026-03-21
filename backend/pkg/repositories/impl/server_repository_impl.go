@@ -304,7 +304,7 @@ func (r *serverRepository) CreateRole(ctx context.Context, role *models.Role, pe
 	})
 }
 
-func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name, color *string, permissionValues []int64) (*models.Role, error) {
+func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name, iconURL, color *string, permissionValues []int64) (*models.Role, error) {
 	var role models.Role
 	if err := r.db.WithContext(ctx).Where("id = ? AND deleted_at = 0", roleID).First(&role).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -317,6 +317,9 @@ func (r *serverRepository) UpdateRole(ctx context.Context, roleID string, name, 
 		updates := map[string]any{}
 		if name != nil {
 			updates["name"] = *name
+		}
+		if iconURL != nil {
+			updates["icon_url"] = *iconURL
 		}
 		if color != nil {
 			updates["color"] = *color
@@ -383,7 +386,7 @@ func (r *serverRepository) ListRolesByServerID(ctx context.Context, serverID str
 func (r *serverRepository) ListMemberRoles(ctx context.Context, serverID, userID string) ([]models.Role, error) {
 	var roles []models.Role
 	if err := r.db.WithContext(ctx).Raw(`
-		SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.color, r.position, r.permissions
+		SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.icon_url, r.color, r.position, r.permissions
 		FROM server_members sm
 		INNER JOIN server_member_role smr ON smr.server_member_id = sm.id AND smr.deleted_at = 0
 		INNER JOIN roles r ON r.id = smr.role_id AND r.deleted_at = 0
@@ -559,7 +562,7 @@ func (r *serverRepository) ListMembersWithRoles(ctx context.Context, serverID st
 	for _, row := range rows {
 		var roles []models.Role
 		if err := r.db.WithContext(ctx).Raw(`
-			SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.color, r.position, r.permissions
+			SELECT r.id, r.created_at, r.updated_at, r.deleted_at, r.server_id, r.name, r.icon_url, r.color, r.position, r.permissions
 			FROM roles r
 			INNER JOIN server_member_role smr ON smr.role_id = r.id
 			WHERE smr.server_member_id = ? AND smr.deleted_at = 0 AND r.deleted_at = 0

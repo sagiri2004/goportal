@@ -31,7 +31,7 @@ type ServerRepository interface {
 	GetMaxRolePositionBelow(ctx context.Context, serverID string, maxExclusive int) (int, error)
 	HasPermission(ctx context.Context, serverID, userID string, permission int64) (bool, error)
 	CreateRole(ctx context.Context, role *models.Role, permissionValues []int64) error
-	UpdateRole(ctx context.Context, roleID string, name, color *string, permissionValues []int64) (*models.Role, error)
+	UpdateRole(ctx context.Context, roleID string, name, iconURL, color *string, permissionValues []int64) (*models.Role, error)
 	DeleteRole(ctx context.Context, roleID string) error
 	FindRoleByID(ctx context.Context, roleID string) (*models.Role, error)
 	ListRolesByServerID(ctx context.Context, serverID string) ([]models.Role, error)

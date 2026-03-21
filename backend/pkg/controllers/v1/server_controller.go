@@ -216,7 +216,7 @@ func (ctrl *serverController) CreateRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
 		return
 	}
-	role, err := containers.ServerService().CreateRole(c.Request.Context(), userID, serverID, req.Name, req.Color, req.Permissions)
+	role, err := containers.ServerService().CreateRole(c.Request.Context(), userID, serverID, req.Name, req.IconURL, req.Color, req.Permissions)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
@@ -252,7 +252,7 @@ func (ctrl *serverController) UpdateRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
 		return
 	}
-	role, err := containers.ServerService().UpdateRole(c.Request.Context(), userID, serverID, roleID, req.Name, req.Color, req.Permissions)
+	role, err := containers.ServerService().UpdateRole(c.Request.Context(), userID, serverID, roleID, req.Name, req.IconURL, req.Color, req.Permissions)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))

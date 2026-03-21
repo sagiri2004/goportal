@@ -14,9 +14,13 @@ type MessageRepository interface {
 	SoftDelete(ctx context.Context, messageID string) error
 
 	ListAttachmentsByMessageIDs(ctx context.Context, messageIDs []string) ([]models.MessageAttachment, error)
+	ListAttachmentsByMessageID(ctx context.Context, messageID string) ([]models.MessageAttachment, error)
+	ListAttachmentsByServerID(ctx context.Context, serverID string) ([]models.MessageAttachment, error)
 	FindAttachmentsByIDs(ctx context.Context, attachmentIDs []string) ([]models.MessageAttachment, error)
 	CreateAttachment(ctx context.Context, attachment *models.MessageAttachment) error
 	AttachToMessage(ctx context.Context, messageID string, attachmentIDs []string) error
+	SoftDeleteAttachmentsByMessageID(ctx context.Context, messageID string) error
+	SoftDeleteAttachmentsByIDs(ctx context.Context, attachmentIDs []string) error
 
 	FindReaction(ctx context.Context, messageID, userID, emoji string) (*models.Reaction, error)
 	CreateReaction(ctx context.Context, reaction *models.Reaction) error
