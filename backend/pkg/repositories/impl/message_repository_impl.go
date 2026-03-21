@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/sagiri2004/goportal/pkg/apperr"
 	"github.com/sagiri2004/goportal/pkg/models"
@@ -72,6 +73,90 @@ func (r *messageRepository) SoftDelete(ctx context.Context, messageID string) er
 		Model(&models.Message{}).
 		Where("id = ? AND deleted_at = 0", messageID).
 		Update("deleted_at", gorm.Expr("UNIX_TIMESTAMP()")).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) UpsertUserChannelRead(ctx context.Context, read *models.UserChannelRead) error {
+	if read == nil {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Save(read).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) MarkChannelRead(ctx context.Context, userID, channelID string, readAt int64) error {
+	if err := r.db.WithContext(ctx).Exec(`
+		INSERT INTO user_channel_reads (user_id, channel_id, last_read_at, unread_count)
+		VALUES (?, ?, ?, 0)
+		ON DUPLICATE KEY UPDATE
+			last_read_at = VALUES(last_read_at),
+			unread_count = 0
+	`, userID, channelID, readAt).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) IncrementUnreadCounts(ctx context.Context, channelID string, excludeUserIDs []string) error {
+	var memberIDs []string
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT sm.user_id
+		FROM channels c
+		INNER JOIN server_members sm ON sm.server_id = c.server_id
+		WHERE c.id = ? AND sm.deleted_at = 0
+	`, channelID).Scan(&memberIDs).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	excluded := make(map[string]struct{}, len(excludeUserIDs))
+	for i := range excludeUserIDs {
+		excluded[excludeUserIDs[i]] = struct{}{}
+	}
+	for _, userID := range memberIDs {
+		if _, skip := excluded[userID]; skip {
+			continue
+		}
+		if err := r.db.WithContext(ctx).Exec(`
+			INSERT INTO user_channel_reads (user_id, channel_id, last_read_at, unread_count)
+			VALUES (?, ?, 0, 1)
+			ON DUPLICATE KEY UPDATE unread_count = unread_count + 1
+		`, userID, channelID).Error; err != nil {
+			return apperr.E("DB_ERROR", err)
+		}
+	}
+	return nil
+}
+
+func (r *messageRepository) ListUserChannelReads(ctx context.Context, userID string, channelIDs []string) ([]models.UserChannelRead, error) {
+	reads := make([]models.UserChannelRead, 0, len(channelIDs))
+	if len(channelIDs) == 0 {
+		return reads, nil
+	}
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND channel_id IN ?", userID, channelIDs).
+		Find(&reads).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return reads, nil
+}
+
+func (r *messageRepository) SaveMentions(ctx context.Context, mentions []models.MessageMention) error {
+	if len(mentions) == 0 {
+		return nil
+	}
+	now := time.Now().Unix()
+	for i := range mentions {
+		if mentions[i].CreatedAt == 0 {
+			mentions[i].CreatedAt = now
+		}
+		if mentions[i].UpdatedAt == 0 {
+			mentions[i].UpdatedAt = now
+		}
+	}
+	if err := r.db.WithContext(ctx).Create(&mentions).Error; err != nil {
 		return apperr.E("DB_ERROR", err)
 	}
 	return nil

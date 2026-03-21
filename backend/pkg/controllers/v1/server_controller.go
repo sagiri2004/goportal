@@ -1,7 +1,10 @@
 package v1
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sagiri2004/goportal/pkg/apperr"
@@ -339,9 +342,13 @@ func (ctrl *serverController) CreateInvite(c *gin.Context) {
 	}
 	serverID := c.Param("id")
 	var req serializers.CreateInviteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
-		return
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			if err != io.EOF {
+				c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+				return
+			}
+		}
 	}
 	invite, err := containers.ServerService().CreateInvite(c.Request.Context(), userID, serverID, services.CreateInviteInput{
 		MaxUses:   req.MaxUses,
@@ -355,12 +362,18 @@ func (ctrl *serverController) CreateInvite(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
 		return
 	}
-	c.JSON(http.StatusCreated, serializers.Success("OK", "Invite created", serializers.NewInviteResponse(invite)))
+
+	scheme := "http"
+	if strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") || c.Request.TLS != nil {
+		scheme = "https"
+	}
+	inviteURL := fmt.Sprintf("%s://%s/invite/%s", scheme, c.Request.Host, invite.Code)
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Invite created", serializers.NewInviteCreateResponse(invite.Code, inviteURL, invite.ExpiresAt)))
 }
 
 func (ctrl *serverController) GetInvite(c *gin.Context) {
 	code := c.Param("code")
-	invite, server, err := containers.ServerService().GetInvite(c.Request.Context(), code)
+	invite, server, memberCount, err := containers.ServerService().GetInvite(c.Request.Context(), code)
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
@@ -369,10 +382,7 @@ func (ctrl *serverController) GetInvite(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
 		return
 	}
-	c.JSON(http.StatusOK, serializers.Success("OK", "Invite fetched", gin.H{
-		"invite": serializers.NewInviteResponse(invite),
-		"server": serializers.NewServerResponse(server),
-	}))
+	c.JSON(http.StatusOK, serializers.Success("OK", "Invite fetched", serializers.NewInvitePreviewResponse(invite, server, memberCount)))
 }
 
 func (ctrl *serverController) JoinByInvite(c *gin.Context) {

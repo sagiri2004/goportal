@@ -517,16 +517,20 @@ func (s *serverService) CreateInvite(ctx context.Context, actorID, serverID stri
 	return invite, nil
 }
 
-func (s *serverService) GetInvite(ctx context.Context, code string) (*models.ServerInvite, *models.Server, error) {
+func (s *serverService) GetInvite(ctx context.Context, code string) (*models.ServerInvite, *models.Server, int64, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
-		return nil, nil, apperr.E("MISSING_FIELDS", nil)
+		return nil, nil, 0, apperr.E("MISSING_FIELDS", nil)
 	}
 	result, err := s.serverRepo.FindInviteWithServer(ctx, code)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	return &result.Invite, &result.Server, nil
+	memberCount, err := s.serverRepo.CountActiveMembers(ctx, result.Server.ID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	return &result.Invite, &result.Server, memberCount, nil
 }
 
 func (s *serverService) JoinByInvite(ctx context.Context, actorID, code string) (*models.Server, error) {

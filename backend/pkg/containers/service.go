@@ -56,7 +56,7 @@ func ServerService() services.ServerService {
 
 func ChannelService() services.ChannelService {
 	channelSvcOnce.Do(func() {
-		channelSvc = svcimpl.NewChannelService(ServerRepository(), ChannelRepository())
+		channelSvc = svcimpl.NewChannelService(ServerRepository(), ChannelRepository(), MessageRepository())
 	})
 	return channelSvc
 }
@@ -113,7 +113,9 @@ func VoiceService() services.VoiceService {
 		voiceSvc = svcimpl.NewVoiceService(
 			ServerRepository(),
 			ChannelRepository(),
+			UserRepository(),
 			RecordingRepository(),
+			NotificationService(),
 			LiveKitService(),
 			EgressService(),
 		)

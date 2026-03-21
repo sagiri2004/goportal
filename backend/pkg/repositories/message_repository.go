@@ -12,6 +12,11 @@ type MessageRepository interface {
 	ListByChannel(ctx context.Context, channelID string, limit, offset int) ([]models.Message, error)
 	Update(ctx context.Context, m *models.Message) error
 	SoftDelete(ctx context.Context, messageID string) error
+	UpsertUserChannelRead(ctx context.Context, read *models.UserChannelRead) error
+	MarkChannelRead(ctx context.Context, userID, channelID string, readAt int64) error
+	IncrementUnreadCounts(ctx context.Context, channelID string, excludeUserIDs []string) error
+	ListUserChannelReads(ctx context.Context, userID string, channelIDs []string) ([]models.UserChannelRead, error)
+	SaveMentions(ctx context.Context, mentions []models.MessageMention) error
 
 	ListAttachmentsByMessageIDs(ctx context.Context, messageIDs []string) ([]models.MessageAttachment, error)
 	ListAttachmentsByMessageID(ctx context.Context, messageID string) ([]models.MessageAttachment, error)

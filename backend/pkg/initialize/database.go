@@ -14,20 +14,23 @@ import (
 
 func InitDatabase(runMigrate bool, runSeed bool) error {
 	engine := global.Config.Database.Engine
+	gormLogger := logger.Default.LogMode(logger.Silent)
 	if engine == "" {
 		engine = "sqlite3"
 	}
 
 	switch engine {
 	case "sqlite3":
-		db, err := gorm.Open(sqlite.Open(global.Config.Database.DSN), &gorm.Config{})
+		db, err := gorm.Open(sqlite.Open(global.Config.Database.DSN), &gorm.Config{
+			Logger: gormLogger,
+		})
 		if err != nil {
 			return err
 		}
 		global.DB = db
 	case "mysql":
 		db, err := gorm.Open(mysql.Open(global.Config.Database.DSN), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: gormLogger,
 		})
 		if err != nil {
 			return err

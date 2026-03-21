@@ -2,6 +2,7 @@ package v1
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sagiri2004/goportal/pkg/apperr"
@@ -31,8 +32,19 @@ func (ctrl *channelController) ListByServer(c *gin.Context) {
 		return
 	}
 	resp := make([]serializers.ChannelResponse, 0, len(channels))
+	channelIDs := make([]string, 0, len(channels))
 	for i := range channels {
-		resp = append(resp, serializers.NewChannelResponse(&channels[i]))
+		channelIDs = append(channelIDs, channels[i].ID)
+	}
+	readRows, _ := containers.MessageRepository().ListUserChannelReads(c.Request.Context(), userID, channelIDs)
+	unreadByChannel := make(map[string]int64, len(readRows))
+	for i := range readRows {
+		unreadByChannel[readRows[i].ChannelID] = readRows[i].UnreadCount
+	}
+	for i := range channels {
+		item := serializers.NewChannelResponse(&channels[i])
+		item.UnreadCount = unreadByChannel[channels[i].ID]
+		resp = append(resp, item)
 	}
 	c.JSON(http.StatusOK, serializers.Success("OK", "Channels fetched", resp))
 }
@@ -284,4 +296,102 @@ func (ctrl *channelController) ListOverwrites(c *gin.Context) {
 		resp = append(resp, serializers.NewChannelOverwriteResponse(&overwrites[i]))
 	}
 	c.JSON(http.StatusOK, serializers.Success("OK", "Channel overwrites fetched", resp))
+}
+
+func (ctrl *channelController) MarkRead(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	channelID := c.Param("id")
+	if err := containers.ChannelService().MarkRead(c.Request.Context(), userID, channelID); err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Channel read state updated", nil))
+}
+
+func (ctrl *channelController) GetNotificationSetting(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	channelID := c.Param("id")
+	setting, err := containers.ChannelService().GetNotificationSetting(c.Request.Context(), userID, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Notification setting fetched", serializers.ChannelNotificationSettingResponse{
+		UserID:     setting.UserID,
+		ChannelID:  setting.ChannelID,
+		Level:      setting.Level,
+		MutedUntil: toISOTime(setting.MutedUntil),
+	}))
+}
+
+func (ctrl *channelController) UpdateNotificationSetting(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	channelID := c.Param("id")
+	var req serializers.ChannelNotificationSettingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	var mutedUntil *int64
+	if req.MutedUntil != nil {
+		parsed, err := time.Parse(time.RFC3339, *req.MutedUntil)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+			return
+		}
+		ts := parsed.Unix()
+		mutedUntil = &ts
+	}
+	setting, err := containers.ChannelService().UpdateNotificationSetting(
+		c.Request.Context(),
+		userID,
+		channelID,
+		req.Level,
+		mutedUntil,
+	)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Notification setting updated", serializers.ChannelNotificationSettingResponse{
+		UserID:     setting.UserID,
+		ChannelID:  setting.ChannelID,
+		Level:      setting.Level,
+		MutedUntil: toISOTime(setting.MutedUntil),
+	}))
+}
+
+func toISOTime(ts *int64) *string {
+	if ts == nil || *ts <= 0 {
+		return nil
+	}
+	formatted := time.Unix(*ts, 0).UTC().Format(time.RFC3339)
+	return &formatted
 }

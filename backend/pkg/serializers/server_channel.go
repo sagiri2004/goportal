@@ -76,25 +76,41 @@ func NewServerResponse(server *models.Server) ServerResponse {
 }
 
 type ChannelResponse struct {
-	ID        string  `json:"id"`
-	ServerID  string  `json:"server_id"`
-	ParentID  *string `json:"parent_id,omitempty"`
-	Type      string  `json:"type"`
-	Name      string  `json:"name"`
-	Position  int     `json:"position"`
-	IsPrivate bool    `json:"is_private"`
+	ID          string  `json:"id"`
+	ServerID    string  `json:"server_id"`
+	ParentID    *string `json:"parent_id,omitempty"`
+	Type        string  `json:"type"`
+	Name        string  `json:"name"`
+	Position    int     `json:"position"`
+	IsPrivate   bool    `json:"is_private"`
+	UnreadCount int64   `json:"unread_count"`
 }
 
 func NewChannelResponse(channel *models.Channel) ChannelResponse {
 	return ChannelResponse{
-		ID:        channel.ID,
-		ServerID:  channel.ServerID,
-		ParentID:  channel.ParentID,
-		Type:      channel.Type,
-		Name:      channel.Name,
-		Position:  channel.Position,
-		IsPrivate: channel.IsPrivate,
+		ID:          channel.ID,
+		ServerID:    channel.ServerID,
+		ParentID:    channel.ParentID,
+		Type:        channel.Type,
+		Name:        channel.Name,
+		Position:    channel.Position,
+		IsPrivate:   channel.IsPrivate,
+		UnreadCount: 0,
 	}
+}
+
+type MarkChannelReadRequest struct{}
+
+type ChannelNotificationSettingRequest struct {
+	Level      string  `json:"level" binding:"required"`
+	MutedUntil *string `json:"muted_until"`
+}
+
+type ChannelNotificationSettingResponse struct {
+	UserID     string  `json:"user_id"`
+	ChannelID  string  `json:"channel_id"`
+	Level      string  `json:"level"`
+	MutedUntil *string `json:"muted_until,omitempty"`
 }
 
 func NewChannelMemberResponse(member *models.ChannelMember) ChannelMemberResponse {

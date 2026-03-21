@@ -161,3 +161,31 @@ func (r *channelRepository) ListOverwrites(ctx context.Context, channelID string
 	}
 	return overwrites, nil
 }
+
+func (r *channelRepository) GetNotificationSetting(ctx context.Context, userID, channelID string) (*models.ChannelNotificationSetting, error) {
+	var setting models.ChannelNotificationSetting
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND channel_id = ?", userID, channelID).
+		First(&setting).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &models.ChannelNotificationSetting{
+				UserID:    userID,
+				ChannelID: channelID,
+				Level:     models.NotificationLevelAll,
+			}, nil
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &setting, nil
+}
+
+func (r *channelRepository) UpsertNotificationSetting(ctx context.Context, setting *models.ChannelNotificationSetting) error {
+	if setting == nil {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Save(setting).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}

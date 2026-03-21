@@ -426,7 +426,8 @@
       "type": "TEXT",
       "name": "general",
       "position": 0,
-      "is_private": false
+      "is_private": false,
+      "unread_count": 3
     }
   ]
 }

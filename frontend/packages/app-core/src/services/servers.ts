@@ -30,12 +30,24 @@ const pickColor = (id: string): string => {
 const mapServer = (server: ServerDTO): MockServer => ({
   id: server.id,
   name: server.name,
+  ownerId: server.owner_id,
   initials: deriveInitials(server.name),
   color: pickColor(server.id),
   iconUrl: server.icon_url ?? undefined,
   bannerUrl: server.banner_url ?? undefined,
   boostLevel: undefined,
 })
+
+export type InvitePreviewDTO = {
+  invite_code: string
+  expires_at?: number | null
+  server: {
+    id: string
+    name: string
+    icon_url?: string
+    member_count: number
+  }
+}
 
 export const getServers = async (): Promise<MockServer[]> => {
   const servers = await apiClient.get<ServerDTO[]>('/api/v1/servers')
@@ -58,4 +70,12 @@ export const createServer = async (body: CreateServerRequest): Promise<MockServe
 
 export const joinServer = async (serverId: string): Promise<void> => {
   await apiClient.post<void>(`/api/v1/servers/${serverId}/join`)
+}
+
+export const getInvitePreview = async (code: string): Promise<InvitePreviewDTO> =>
+  apiClient.get<InvitePreviewDTO>(`/api/v1/invites/${encodeURIComponent(code)}`)
+
+export const joinByInviteCode = async (code: string): Promise<MockServer> => {
+  const server = await apiClient.post<ServerDTO>(`/api/v1/invites/${encodeURIComponent(code)}/join`)
+  return mapServer(server)
 }

@@ -41,7 +41,7 @@ type ServerService interface {
 	DeleteRole(ctx context.Context, actorID, serverID, roleID string) error
 	ListRoles(ctx context.Context, actorID, serverID string) ([]models.Role, error)
 	CreateInvite(ctx context.Context, actorID, serverID string, input CreateInviteInput) (*models.ServerInvite, error)
-	GetInvite(ctx context.Context, code string) (*models.ServerInvite, *models.Server, error)
+	GetInvite(ctx context.Context, code string) (*models.ServerInvite, *models.Server, int64, error)
 	JoinByInvite(ctx context.Context, actorID, code string) (*models.Server, error)
 	JoinPublicServer(ctx context.Context, actorID, serverID string) error
 	CreateJoinRequest(ctx context.Context, actorID, serverID string, input CreateJoinRequestInput) (*models.ServerJoinRequest, error)

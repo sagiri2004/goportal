@@ -106,6 +106,7 @@ export type ChannelDTO = {
   name:       string
   position:   number
   is_private: boolean
+  unread_count?: number
   parent_id?: string | null
 }
 

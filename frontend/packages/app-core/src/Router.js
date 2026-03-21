@@ -8,15 +8,18 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * - Fallback: redirect to /auth/login
  */
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useOutletContext } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { AuthLayout } from './AuthLayout';
 import { PrivateRoute } from './PrivateRoute';
 import { AppShell } from './layout/AppShell';
 import { AuthView } from '@goportal/feature-auth';
 import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard';
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react';
-import { getChannels, getServers } from './services';
+import { useAuthStore } from '@goportal/store';
+import { getChannels, getServers, hydrateSession } from './services';
 import { APP_NAME } from '@goportal/config';
+const POST_AUTH_REDIRECT_KEY = 'goportal_post_auth_redirect';
+const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code';
 const readLastVisited = () => {
     try {
         const raw = localStorage.getItem('last_visited');
@@ -87,10 +90,60 @@ const DMHomePage = () => {
     }
     return (_jsxs("div", { className: "flex-1 flex flex-col items-center justify-center gap-3 text-center px-8", children: [_jsx(MessageCircle, { className: "w-12 h-12 text-muted-foreground" }), _jsx("h2", { className: "text-xl font-semibold text-foreground", children: "Tin nh\u1EAFn tr\u1EF1c ti\u1EBFp" }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Ch\u1ECDn m\u1ED9t cu\u1ED9c tr\u00F2 chuy\u1EC7n ho\u1EB7c t\u00ECm b\u1EA1n b\u00E8 \u0111\u1EC3 b\u1EAFt \u0111\u1EA7u." })] }));
 };
+const InviteEntryPage = () => {
+    const { code = '' } = useParams();
+    const [isHydrated, setIsHydrated] = React.useState(false);
+    const [nextPath, setNextPath] = React.useState(null);
+    const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+    const token = useAuthStore((state) => state.token);
+    const normalizedCode = code.trim();
+    React.useEffect(() => {
+        let isMounted = true;
+        const restore = async () => {
+            await hydrateSession();
+            if (isMounted) {
+                setIsHydrated(true);
+            }
+        };
+        void restore();
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+    React.useEffect(() => {
+        if (!isHydrated || !normalizedCode) {
+            return;
+        }
+        if (!isAuthenticated || !token) {
+            localStorage.setItem(POST_AUTH_REDIRECT_KEY, `/invite/${normalizedCode}`);
+            setNextPath('/auth/login');
+            return;
+        }
+        localStorage.setItem(PENDING_INVITE_CODE_KEY, normalizedCode);
+        setNextPath('/app');
+    }, [isAuthenticated, isHydrated, normalizedCode, token]);
+    if (!normalizedCode) {
+        return _jsx(Navigate, { to: "/app", replace: true });
+    }
+    if (!isHydrated) {
+        return (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: _jsx("div", { className: "h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" }) }));
+    }
+    if (!nextPath) {
+        return (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: _jsx("div", { className: "h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" }) }));
+    }
+    return _jsx(Navigate, { to: nextPath, replace: true });
+};
 export const Router = () => {
     const handleAuthSuccess = () => {
+        const intendedPath = localStorage.getItem(POST_AUTH_REDIRECT_KEY);
+        if (intendedPath?.startsWith('/')) {
+            localStorage.removeItem(POST_AUTH_REDIRECT_KEY);
+            window.location.href = intendedPath;
+            return;
+        }
+        localStorage.removeItem(POST_AUTH_REDIRECT_KEY);
         window.location.href = '/app';
     };
-    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(AppIndexRedirect, {}) }), _jsx(Route, { path: "@me", element: _jsx(DMHomePage, {}) }), _jsx(Route, { path: "servers/:serverId/channels/:channelId", element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "servers/:serverId/voice/:channelId", element: _jsx(VoiceChannelView, {}) })] }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
+    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsx(Route, { path: "/invite/:code", element: _jsx(InviteEntryPage, {}) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(AppIndexRedirect, {}) }), _jsx(Route, { path: "@me", element: _jsx(DMHomePage, {}) }), _jsx(Route, { path: "servers/:serverId/channels/:channelId", element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "servers/:serverId/voice/:channelId", element: _jsx(VoiceChannelView, {}) })] }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
 };
 //# sourceMappingURL=Router.js.map

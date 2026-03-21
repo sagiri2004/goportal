@@ -10,7 +10,7 @@ const mapChannel = (channel: ChannelDTO): MockChannel => ({
   id: channel.id,
   name: channel.name,
   type: channel.type === 'VOICE' ? 'voice' : 'text',
-  unread: 0, // TODO: remove when backend implements unread count
+  unread: channel.unread_count ?? 0,
 })
 
 const toCategories = (channels: ChannelDTO[]): MockCategory[] => {
@@ -59,3 +59,27 @@ export const createChannel = async (
   const channel = await apiClient.post<ChannelDTO>(`/api/v1/servers/${serverId}/channels`, body)
   return mapChannel(channel)
 }
+
+export type ChannelNotificationLevel = 'all' | 'mentions_only' | 'none'
+
+export type ChannelNotificationSetting = {
+  user_id: string
+  channel_id: string
+  level: ChannelNotificationLevel
+  muted_until?: string | null
+}
+
+export const markChannelRead = async (channelId: string): Promise<void> => {
+  await apiClient.post(`/api/v1/channels/${channelId}/read`, {})
+}
+
+export const getChannelNotificationSetting = async (
+  channelId: string
+): Promise<ChannelNotificationSetting> =>
+  apiClient.get<ChannelNotificationSetting>(`/api/v1/channels/${channelId}/notification-settings`)
+
+export const updateChannelNotificationSetting = async (
+  channelId: string,
+  body: { level: ChannelNotificationLevel; muted_until: string | null }
+): Promise<ChannelNotificationSetting> =>
+  apiClient.put<ChannelNotificationSetting>(`/api/v1/channels/${channelId}/notification-settings`, body)

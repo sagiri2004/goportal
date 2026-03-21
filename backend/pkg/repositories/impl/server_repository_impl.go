@@ -431,6 +431,17 @@ func (r *serverRepository) FindInviteWithServer(ctx context.Context, code string
 	}, nil
 }
 
+func (r *serverRepository) CountActiveMembers(ctx context.Context, serverID string) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&models.ServerMember{}).
+		Where("server_id = ? AND deleted_at = 0 AND status = ?", serverID, models.ServerMemberStatusActive).
+		Count(&count).Error; err != nil {
+		return 0, apperr.E("DB_ERROR", err)
+	}
+	return count, nil
+}
+
 func (r *serverRepository) JoinServerByInvite(ctx context.Context, code, userID string, nowUnix int64) (*models.Server, error) {
 	var outServer models.Server
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

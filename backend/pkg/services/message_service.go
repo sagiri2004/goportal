@@ -15,6 +15,7 @@ type CreateMessageInput struct {
 	Encoding       string
 	IsPinned       bool
 	AttachmentIDs  []string
+	ReplyToID      *string
 }
 
 type UpdateMessageInput struct {

@@ -1,12 +1,10 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useMemo, useState } from 'react';
-import { cn } from '@goportal/ui';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger, cn, } from '@goportal/ui';
 import { useOutletContext } from 'react-router-dom';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
-import { Panel, Group as PanelGroup } from 'react-resizable-panels';
-import { ResizeHandle } from '@goportal/app-core';
-import { mockVoiceParticipants } from '@goportal/app-core';
-import { ArrowLeftRight, Camera, ChevronDown, LayoutGrid, Maximize2, Mic, MicOff, MessageSquare, Monitor, MoreHorizontal, PhoneOff, Settings, Sparkles, Users, Volume2, X, } from 'lucide-react';
+import { VideoTrack, useLocalParticipant, useParticipants, useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
+import { Camera, MessageSquare, Mic, MicOff, Monitor, PhoneOff, Settings, Users, Volume2, X, } from 'lucide-react';
 import { ThreadPanelChat } from './components/ThreadPanelChat';
 const getGridLayout = (count) => {
     if (count <= 1)
@@ -18,48 +16,76 @@ const getGridLayout = (count) => {
     const columns = 3;
     return { columns, rows: Math.ceil(count / columns) };
 };
+const colorFromId = (id) => {
+    const palette = ['bg-indigo-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-cyan-500', 'bg-rose-500'];
+    let hash = 0;
+    for (let index = 0; index < id.length; index += 1) {
+        hash = (hash + id.charCodeAt(index)) % 1031;
+    }
+    return palette[hash % palette.length];
+};
+const initialsFromName = (name) => name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2);
+const parseAvatarURL = (metadata) => {
+    if (!metadata) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(metadata);
+        return parsed.avatar_url ?? parsed.avatarUrl;
+    }
+    catch {
+        return undefined;
+    }
+};
+const ConnectedVoiceGrid = ({ room }) => {
+    const participants = useParticipants({ room });
+    const { localParticipant } = useLocalParticipant({ room });
+    const videoTracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { room, onlySubscribed: false });
+    const participantTiles = useMemo(() => {
+        return participants.map((participant) => {
+            const screenShareTrackRef = videoTracks.find((candidate) => candidate?.participant?.identity === participant.identity &&
+                candidate?.source === Track.Source.ScreenShare);
+            const cameraTrackRef = videoTracks.find((candidate) => candidate?.participant?.identity === participant.identity &&
+                candidate?.source === Track.Source.Camera);
+            const trackRef = screenShareTrackRef ?? cameraTrackRef;
+            const trackSource = trackRef?.source;
+            const isMediaActive = Boolean(trackRef);
+            const isScreenSharing = trackSource === Track.Source.ScreenShare;
+            const name = participant.identity === localParticipant.identity
+                ? (participant.name || localParticipant.name || 'You')
+                : (participant.name || participant.identity || 'Unknown');
+            return {
+                id: participant.identity,
+                name,
+                avatarUrl: parseAvatarURL(participant.metadata),
+                avatarColor: colorFromId(participant.identity || name),
+                isSpeaking: participant.isSpeaking,
+                isMicrophoneEnabled: participant.isMicrophoneEnabled,
+                isScreenSharing,
+                isMediaActive,
+                trackRef,
+            };
+        });
+    }, [localParticipant.identity, localParticipant.name, participants, videoTracks]);
+    const { columns, rows } = getGridLayout(Math.max(1, participantTiles.length));
+    return (_jsx("div", { className: cn('mx-auto grid h-full w-full gap-3', participantTiles.length <= 1 ? 'max-w-[960px]' : 'max-w-[1600px]'), style: {
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }, children: participantTiles.map((participant) => (_jsxs("div", { className: cn('relative h-full min-h-[180px] overflow-hidden rounded-lg border border-white/10 bg-[hsl(240,8%,14%)]', participantTiles.length === 1 ? 'aspect-video max-h-[620px] self-center' : ''), children: [_jsx("div", { className: cn('pointer-events-none absolute inset-0 rounded-lg ring-2 transition-all duration-150', participant.isSpeaking ? 'ring-green-500' : 'ring-transparent') }), participant.isMediaActive ? (_jsxs(_Fragment, { children: [_jsx(VideoTrack, { trackRef: participant.trackRef, className: "h-full w-full bg-black object-contain" }), participant.isScreenSharing && (_jsxs("div", { className: "absolute left-2 top-2 flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[11px] text-white", children: [_jsx(Monitor, { className: "h-3 w-3" }), _jsx("span", { children: "Screen Share" })] }))] })) : (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: participant.avatarUrl ? (_jsx("img", { src: participant.avatarUrl, alt: participant.name, className: "h-20 w-20 rounded-full object-cover" })) : (_jsx("div", { className: cn('flex h-20 w-20 items-center justify-center rounded-full text-xl font-semibold text-white', participant.avatarColor), children: initialsFromName(participant.name) })) })), _jsxs("div", { className: "absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-0.5 text-sm font-medium text-white", children: [participant.name, ' ', !participant.isMicrophoneEnabled && _jsx("span", { className: "text-muted-foreground", children: "\u2022 muted" })] }), !participant.isMediaActive && !participant.isMicrophoneEnabled && (_jsx("div", { className: "absolute bottom-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500", children: _jsx(MicOff, { className: "h-3 w-3 text-white" }) }))] }, participant.id))) }));
+};
 export const VoiceChannelView = () => {
-    const { activeChannelId } = useOutletContext();
+    const { activeChannelId, voiceState, canManageVoiceTools, leaveVoiceChannel, toggleMicrophone, toggleCamera, toggleScreenShare, pushToast, } = useOutletContext();
     const [showThread, setShowThread] = useState(false);
-    const [isMuted, setIsMuted] = useState(true);
-    const [isCameraOn, setIsCameraOn] = useState(false);
-    const participants = mockVoiceParticipants;
-    const { columns, rows } = getGridLayout(participants.length);
-    const channelName = activeChannelId || 'afk-base';
+    const channelName = voiceState?.channelName ?? (activeChannelId || 'voice');
     const voiceName = useMemo(() => `# ${channelName}`, [channelName]);
-    const savedLayout = useMemo(() => {
-        if (typeof window === 'undefined')
-            return undefined;
-        try {
-            const raw = window.localStorage.getItem('voice-thread-panel');
-            if (!raw)
-                return undefined;
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed) || parsed.length !== 2)
-                return undefined;
-            const threadSize = Math.min(45, Math.max(24, Number(parsed[1]) || 0));
-            const mainSize = 100 - threadSize;
-            return [mainSize, threadSize];
-        }
-        catch {
-            return undefined;
-        }
-    }, []);
-    return (_jsx("div", { className: "flex h-full min-h-0 min-w-0 w-full overflow-hidden", children: _jsx("div", { className: "flex-1 min-w-0 overflow-hidden", children: _jsxs(PanelGroup, { ...{ autoSaveId: 'voice-thread-panel' }, direction: "horizontal", defaultLayout: savedLayout, onLayout: (layout) => {
-                    if (typeof window === 'undefined')
-                        return;
-                    window.localStorage.setItem('voice-thread-panel', JSON.stringify(layout));
-                }, className: "h-full w-full min-w-0 overflow-hidden", children: [_jsx(Panel, { id: "voice-main", minSize: 35, maxSize: 120, className: "overflow-hidden", children: _jsxs("div", { className: "group/voice relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[hsl(240,10%,6%)]", children: [_jsxs("div", { className: "flex h-12 flex-shrink-0 items-center justify-between px-4", children: [_jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [_jsx(Volume2, { className: "h-4 w-4 text-muted-foreground" }), _jsx("p", { className: "truncate text-base font-semibold text-foreground", children: voiceName })] }), _jsxs("div", { className: "flex items-center gap-1", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setShowThread((v) => !v), className: "flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(Users, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "M\u1EDF b\u1EA3ng b\u00EAn ph\u1EA3i" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setShowThread((v) => !v), className: "flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(MessageSquare, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Hi\u1EC7n tr\u00F2 chuy\u1EC7n" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(Settings, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "C\u00E0i \u0111\u1EB7t" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(X, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "R\u1EDDi k\u00EAnh tho\u1EA1i" })] })] })] }), _jsx("div", { className: "flex-1 min-h-0 overflow-hidden p-4", children: _jsx("div", { className: cn('mx-auto grid h-full w-full gap-2', participants.length === 1 ? 'max-w-[900px]' : 'max-w-[1600px]'), style: {
-                                            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                                            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                                        }, children: participants.map((participant) => {
-                                            const isMediaActive = participant.isScreenSharing || participant.isCameraOn;
-                                            return (_jsxs("div", { className: cn('relative h-full min-h-0 overflow-hidden rounded-lg bg-[hsl(240,8%,14%)]', participants.length === 1 ? 'aspect-video max-h-[600px] self-center' : ''), children: [_jsx("div", { className: cn('pointer-events-none absolute inset-0 rounded-lg ring-2 transition-all duration-150', participant.isSpeaking ? 'ring-green-500' : 'ring-transparent') }), isMediaActive ? (_jsxs(_Fragment, { children: [_jsx("img", { src: participant.streamUrl ?? `https://picsum.photos/seed/${participant.id}/900/600`, alt: participant.name, className: "h-full w-full bg-black object-contain" }), participant.isScreenSharing && (_jsxs("div", { className: "absolute left-2 top-2 flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[11px] text-white", children: [_jsx(Monitor, { className: "h-3 w-3" }), _jsx("span", { children: "Screen Share" })] }))] })) : (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: participant.avatarUrl ? (_jsx("img", { src: participant.avatarUrl, alt: participant.name, className: "h-20 w-20 rounded-full object-cover" })) : (_jsx("div", { className: cn('flex h-20 w-20 items-center justify-center rounded-full text-xl font-semibold text-white', participant.avatarColor), children: participant.name[0]?.toUpperCase() ?? '?' })) })), _jsxs("div", { className: "absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-0.5 text-sm font-medium text-white", children: [participant.name, ' ', participant.isMuted && _jsx("span", { className: "text-muted-foreground", children: "\u2022 muted" })] }), !isMediaActive && participant.isMuted && (_jsx("div", { className: "absolute bottom-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500", children: _jsx(MicOff, { className: "h-3 w-3 text-white" }) }))] }, participant.id));
-                                        }) }) }), _jsx("div", { className: "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4", children: _jsxs("div", { className: "pointer-events-auto flex h-16 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 backdrop-blur-sm opacity-0 translate-y-2 transition-all duration-200 hover:bg-black/45 group-hover/voice:translate-y-0 group-hover/voice:opacity-100 focus-within:translate-y-0 focus-within:opacity-100", children: [_jsxs("div", { className: "flex items-center overflow-hidden rounded-md bg-[hsl(240,5%,18%)]", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setIsMuted((v) => !v), className: cn('flex h-10 w-10 items-center justify-center rounded-l-md', isMuted ? 'bg-red-500/20 text-red-400' : 'text-foreground'), children: _jsx(Mic, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: isMuted ? 'Bật tiếng' : 'Tắt tiếng' })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center border-l border-[hsl(240,4%,22%)] text-muted-foreground", children: _jsx(ChevronDown, { className: "h-3 w-3" }) }) }), _jsx(TooltipContent, { children: "C\u00E0i \u0111\u1EB7t \u00E2m \u0111\u1EA7u v\u00E0o" })] })] }), _jsxs("div", { className: "flex items-center overflow-hidden rounded-md bg-[hsl(240,5%,18%)]", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setIsCameraOn((v) => !v), className: cn('flex h-10 w-10 items-center justify-center rounded-l-md', !isCameraOn ? 'text-foreground' : 'text-green-400'), children: _jsx(Camera, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "B\u1EADt camera" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center border-l border-[hsl(240,4%,22%)] text-muted-foreground", children: _jsx(ChevronDown, { className: "h-3 w-3" }) }) }), _jsx(TooltipContent, { children: "C\u00E0i \u0111\u1EB7t camera" })] })] }), [
-                                                { icon: ArrowLeftRight, label: 'Hoạt động' },
-                                                { icon: Users, label: 'Danh sách thành viên' },
-                                                { icon: Sparkles, label: 'Hiệu ứng' },
-                                                { icon: MoreHorizontal, label: 'Thêm' },
-                                            ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center rounded-md bg-[hsl(240,5%,18%)] text-foreground transition-colors hover:bg-[hsl(240,4%,22%)]", children: _jsx(Icon, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-600", children: _jsx(PhoneOff, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Ng\u1EAFt k\u1EBFt n\u1ED1i" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground", children: _jsx(Maximize2, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "To\u00E0n m\u00E0n h\u00ECnh" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground", children: _jsx(LayoutGrid, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Thay \u0111\u1ED5i b\u1ED1 c\u1EE5c" })] })] }) })] }) }), showThread && (_jsxs(_Fragment, { children: [_jsx(ResizeHandle, {}), _jsx(Panel, { id: "voice-thread", defaultSize: 34, minSize: 24, maxSize: 45, className: "overflow-hidden", children: _jsx("div", { className: "h-full min-h-0 min-w-0 overflow-hidden", children: _jsxs("aside", { className: "flex h-full min-h-0 min-w-0 w-full flex-col border-l border-border bg-[hsl(240,6%,10%)]", children: [_jsxs("div", { className: "flex h-12 items-center justify-between border-b border-border px-3", children: [_jsxs("p", { className: "truncate text-base font-semibold text-foreground", children: ["# ", channelName] }), _jsx("button", { type: "button", onClick: () => setShowThread(false), className: "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground", children: _jsx(X, { className: "h-4 w-4" }) })] }), _jsx(ThreadPanelChat, { channelName: channelName, channelId: activeChannelId })] }) }) })] }))] }) }) }));
+    const disabledRecordingMessage = 'Ghi âm và stream tạm thời bị tắt để ổn định voice channel.';
+    return (_jsxs("div", { className: "flex h-full min-h-0 min-w-0 w-full bg-[hsl(240,10%,6%)]", children: [_jsxs("section", { className: "flex min-h-0 min-w-0 flex-1 flex-col", children: [_jsxs("header", { className: "flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-4", children: [_jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [_jsx(Volume2, { className: "h-4 w-4 text-muted-foreground" }), _jsx("p", { className: "truncate text-sm font-semibold text-foreground", children: voiceName })] }), _jsxs("div", { className: "flex items-center gap-1", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setShowThread((v) => !v), className: "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(MessageSquare, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: showThread ? 'Ẩn trò chuyện' : 'Hiện trò chuyện' })] }), canManageVoiceTools ? (_jsxs(DropdownMenu, { children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx(DropdownMenuTrigger, { asChild: true, children: _jsx("button", { type: "button", className: "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(Settings, { className: "h-4 w-4" }) }) }) }), _jsx(TooltipContent, { children: "C\u00E0i \u0111\u1EB7t voice" })] }), _jsx(DropdownMenuContent, { align: "end", className: "w-56", children: _jsx(DropdownMenuItem, { onClick: () => pushToast(disabledRecordingMessage), children: "Ghi \u00E2m/Stream t\u1EA1m t\u1EAFt" }) })] })) : null, _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => void leaveVoiceChannel(), className: "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", children: _jsx(X, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "R\u1EDDi k\u00EAnh tho\u1EA1i" })] })] })] }), _jsx("div", { className: "min-h-0 flex-1 overflow-hidden p-4", children: voiceState?.room ? (_jsx(ConnectedVoiceGrid, { room: voiceState.room })) : (_jsx("div", { className: "flex h-full items-center justify-center rounded-lg border border-border/40 bg-[hsl(240,8%,14%)] text-sm text-muted-foreground", children: "Ch\u01B0a k\u1EBFt n\u1ED1i voice. Vui l\u00F2ng tham gia l\u1EA1i k\u00EAnh tho\u1EA1i." })) }), _jsx("footer", { className: "flex h-16 shrink-0 items-center justify-center border-t border-white/10 px-4", children: _jsxs("div", { className: "flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-2 py-1.5 backdrop-blur-sm", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => void toggleMicrophone(), className: cn('flex h-10 w-10 items-center justify-center rounded-md transition-colors', voiceState?.isMicrophoneEnabled
+                                                    ? 'text-foreground hover:bg-white/10'
+                                                    : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'), children: voiceState?.isMicrophoneEnabled ? _jsx(Mic, { className: "h-4 w-4" }) : _jsx(MicOff, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: voiceState?.isMicrophoneEnabled ? 'Tắt tiếng' : 'Bật tiếng' })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => void toggleCamera(), className: cn('flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10', voiceState?.isCameraEnabled ? 'text-green-400' : 'text-foreground'), children: _jsx(Camera, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Camera" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => void toggleScreenShare(), className: cn('flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10', voiceState?.isScreenShareEnabled ? 'text-green-400' : 'text-foreground'), children: _jsx(Monitor, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Chia s\u1EBB m\u00E0n h\u00ECnh" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => setShowThread((v) => !v), className: "flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-white/10", children: _jsx(Users, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Th\u00E0nh vi\u00EAn v\u00E0 chat" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { type: "button", onClick: () => void leaveVoiceChannel(), className: "flex h-10 w-10 items-center justify-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-600", children: _jsx(PhoneOff, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Ng\u1EAFt k\u1EBFt n\u1ED1i" })] })] }) })] }), showThread ? (_jsxs("aside", { className: "hidden h-full w-[360px] shrink-0 border-l border-white/10 bg-[hsl(240,6%,10%)] lg:flex lg:min-h-0 lg:flex-col", children: [_jsxs("div", { className: "flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3", children: [_jsxs("p", { className: "truncate text-sm font-semibold text-foreground", children: ["# ", channelName] }), _jsx("button", { type: "button", onClick: () => setShowThread(false), className: "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground", children: _jsx(X, { className: "h-4 w-4" }) })] }), _jsx("div", { className: "min-h-0 flex-1 overflow-hidden", children: _jsx(ThreadPanelChat, { channelName: channelName, channelId: activeChannelId }) })] })) : null] }));
 };
 //# sourceMappingURL=VoiceChannelView.js.map

@@ -1,33 +1,51 @@
 import React, { useMemo, useState } from 'react'
-import { cn } from '@goportal/ui'
-import { useOutletContext } from 'react-router-dom'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
-import { Panel, Group as PanelGroup } from 'react-resizable-panels'
-import { ResizeHandle } from '@goportal/app-core'
-import { mockVoiceParticipants } from '@goportal/app-core'
 import {
-  ArrowLeftRight,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+} from '@goportal/ui'
+import { useOutletContext } from 'react-router-dom'
+import { VideoTrack, useLocalParticipant, useParticipants, useTracks } from '@livekit/components-react'
+import { type Room, Track } from 'livekit-client'
+import {
   Camera,
-  ChevronDown,
-  LayoutGrid,
-  Maximize2,
+  MessageSquare,
   Mic,
   MicOff,
-  MessageSquare,
   Monitor,
-  MoreHorizontal,
   PhoneOff,
   Settings,
-  Sparkles,
   Users,
   Volume2,
   X,
 } from 'lucide-react'
 import { ThreadPanelChat } from './components/ThreadPanelChat'
 
+type VoiceState = {
+  channelId: string
+  channelName: string
+  serverId: string
+  serverName: string
+  room: Room
+  isMicrophoneEnabled: boolean
+  isCameraEnabled: boolean
+  isScreenShareEnabled: boolean
+}
+
 type ShellContext = {
   activeChannelId: string
-  activeServerId: string
+  voiceState: VoiceState | null
+  canManageVoiceTools: boolean
+  leaveVoiceChannel: () => Promise<void>
+  toggleMicrophone: () => Promise<void>
+  toggleCamera: () => Promise<void>
+  toggleScreenShare: () => Promise<void>
+  pushToast: (message: string) => void
 }
 
 const getGridLayout = (count: number) => {
@@ -38,310 +56,338 @@ const getGridLayout = (count: number) => {
   return { columns, rows: Math.ceil(count / columns) }
 }
 
-export const VoiceChannelView: React.FC = () => {
-  const { activeChannelId } = useOutletContext<ShellContext>()
-  const [showThread, setShowThread] = useState(false)
-  const [isMuted, setIsMuted] = useState(true)
-  const [isCameraOn, setIsCameraOn] = useState(false)
+const colorFromId = (id: string): string => {
+  const palette = ['bg-indigo-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-cyan-500', 'bg-rose-500']
+  let hash = 0
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash + id.charCodeAt(index)) % 1031
+  }
+  return palette[hash % palette.length]
+}
 
-  const participants = mockVoiceParticipants
-  const { columns, rows } = getGridLayout(participants.length)
-  const channelName = activeChannelId || 'afk-base'
-  const voiceName = useMemo(() => `# ${channelName}`, [channelName])
-  const savedLayout = useMemo(() => {
-    if (typeof window === 'undefined') return undefined
-    try {
-      const raw = window.localStorage.getItem('voice-thread-panel')
-      if (!raw) return undefined
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed) || parsed.length !== 2) return undefined
+const initialsFromName = (name: string): string =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2)
 
-      const threadSize = Math.min(45, Math.max(24, Number(parsed[1]) || 0))
-      const mainSize = 100 - threadSize
-      return [mainSize, threadSize]
-    } catch {
-      return undefined
-    }
-  }, [])
+const parseAvatarURL = (metadata?: string): string | undefined => {
+  if (!metadata) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(metadata) as { avatar_url?: string; avatarUrl?: string }
+    return parsed.avatar_url ?? parsed.avatarUrl
+  } catch {
+    return undefined
+  }
+}
+
+const ConnectedVoiceGrid: React.FC<{ room: Room }> = ({ room }) => {
+  const participants = useParticipants({ room })
+  const { localParticipant } = useLocalParticipant({ room })
+  const videoTracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { room, onlySubscribed: false }) as any[]
+
+  const participantTiles = useMemo(() => {
+    return participants.map((participant) => {
+      const screenShareTrackRef = videoTracks.find(
+        (candidate) =>
+          candidate?.participant?.identity === participant.identity &&
+          candidate?.source === Track.Source.ScreenShare
+      )
+      const cameraTrackRef = videoTracks.find(
+        (candidate) =>
+          candidate?.participant?.identity === participant.identity &&
+          candidate?.source === Track.Source.Camera
+      )
+      const trackRef = screenShareTrackRef ?? cameraTrackRef
+      const trackSource = trackRef?.source as Track.Source | undefined
+      const isMediaActive = Boolean(trackRef)
+      const isScreenSharing = trackSource === Track.Source.ScreenShare
+      const name =
+        participant.identity === localParticipant.identity
+          ? (participant.name || localParticipant.name || 'You')
+          : (participant.name || participant.identity || 'Unknown')
+
+      return {
+        id: participant.identity,
+        name,
+        avatarUrl: parseAvatarURL(participant.metadata),
+        avatarColor: colorFromId(participant.identity || name),
+        isSpeaking: participant.isSpeaking,
+        isMicrophoneEnabled: participant.isMicrophoneEnabled,
+        isScreenSharing,
+        isMediaActive,
+        trackRef,
+      }
+    })
+  }, [localParticipant.identity, localParticipant.name, participants, videoTracks])
+
+  const { columns, rows } = getGridLayout(Math.max(1, participantTiles.length))
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full overflow-hidden">
-      <div className="flex-1 min-w-0 overflow-hidden">
-        <PanelGroup
-          {...({ autoSaveId: 'voice-thread-panel' } as any)}
-          direction="horizontal"
-          defaultLayout={savedLayout}
-          onLayout={(layout: number[]) => {
-            if (typeof window === 'undefined') return
-            window.localStorage.setItem('voice-thread-panel', JSON.stringify(layout))
-          }}
-          className="h-full w-full min-w-0 overflow-hidden"
+    <div
+      className={cn(
+        'mx-auto grid h-full w-full gap-3',
+        participantTiles.length <= 1 ? 'max-w-[960px]' : 'max-w-[1600px]'
+      )}
+      style={{
+        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+      }}
+    >
+      {participantTiles.map((participant) => (
+        <div
+          key={participant.id}
+          className={cn(
+            'relative h-full min-h-[180px] overflow-hidden rounded-lg border border-white/10 bg-[hsl(240,8%,14%)]',
+            participantTiles.length === 1 ? 'aspect-video max-h-[620px] self-center' : ''
+          )}
         >
-          <Panel id="voice-main" minSize={35} maxSize={120} className="overflow-hidden">
-            <div className="group/voice relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[hsl(240,10%,6%)]">
-              <div className="flex h-12 flex-shrink-0 items-center justify-between px-4">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Volume2 className="h-4 w-4 text-muted-foreground" />
-                  <p className="truncate text-base font-semibold text-foreground">{voiceName}</p>
+          <div
+            className={cn(
+              'pointer-events-none absolute inset-0 rounded-lg ring-2 transition-all duration-150',
+              participant.isSpeaking ? 'ring-green-500' : 'ring-transparent'
+            )}
+          />
+
+          {participant.isMediaActive ? (
+            <>
+              <VideoTrack trackRef={participant.trackRef} className="h-full w-full bg-black object-contain" />
+              {participant.isScreenSharing && (
+                <div className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[11px] text-white">
+                  <Monitor className="h-3 w-3" />
+                  <span>Screen Share</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+              )}
+            </>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              {participant.avatarUrl ? (
+                <img src={participant.avatarUrl} alt={participant.name} className="h-20 w-20 rounded-full object-cover" />
+              ) : (
+                <div
+                  className={cn(
+                    'flex h-20 w-20 items-center justify-center rounded-full text-xl font-semibold text-white',
+                    participant.avatarColor
+                  )}
+                >
+                  {initialsFromName(participant.name)}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-0.5 text-sm font-medium text-white">
+            {participant.name}{' '}
+            {!participant.isMicrophoneEnabled && <span className="text-muted-foreground">• muted</span>}
+          </div>
+
+          {!participant.isMediaActive && !participant.isMicrophoneEnabled && (
+            <div className="absolute bottom-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500">
+              <MicOff className="h-3 w-3 text-white" />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export const VoiceChannelView: React.FC = () => {
+  const {
+    activeChannelId,
+    voiceState,
+    canManageVoiceTools,
+    leaveVoiceChannel,
+    toggleMicrophone,
+    toggleCamera,
+    toggleScreenShare,
+    pushToast,
+  } = useOutletContext<ShellContext>()
+
+  const [showThread, setShowThread] = useState(false)
+
+  const channelName = voiceState?.channelName ?? (activeChannelId || 'voice')
+  const voiceName = useMemo(() => `# ${channelName}`, [channelName])
+  const disabledRecordingMessage = 'Ghi âm và stream tạm thời bị tắt để ổn định voice channel.'
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 w-full bg-[hsl(240,10%,6%)]">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <Volume2 className="h-4 w-4 text-muted-foreground" />
+            <p className="truncate text-sm font-semibold text-foreground">{voiceName}</p>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setShowThread((v) => !v)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{showThread ? 'Ẩn trò chuyện' : 'Hiện trò chuyện'}</TooltipContent>
+            </Tooltip>
+
+            {canManageVoiceTools ? (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => setShowThread((v) => !v)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                      >
-                        <Users className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Mở bảng bên phải</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setShowThread((v) => !v)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                      >
-                        <MessageSquare className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Hiện trò chuyện</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         <Settings className="h-4 w-4" />
                       </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cài đặt</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Rời kênh thoại</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cài đặt voice</TooltipContent>
+                </Tooltip>
 
-              <div className="flex-1 min-h-0 overflow-hidden p-4">
-                <div
-                  className={cn(
-                    'mx-auto grid h-full w-full gap-2',
-                    participants.length === 1 ? 'max-w-[900px]' : 'max-w-[1600px]'
-                  )}
-                  style={{
-                    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                    gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                  }}
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem
+                    onClick={() => pushToast(disabledRecordingMessage)}
+                  >
+                    Ghi âm/Stream tạm tắt
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void leaveVoiceChannel()}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
-                  {participants.map((participant) => {
-                    const isMediaActive = participant.isScreenSharing || participant.isCameraOn
-                    return (
-                      <div
-                        key={participant.id}
-                        className={cn(
-                          'relative h-full min-h-0 overflow-hidden rounded-lg bg-[hsl(240,8%,14%)]',
-                          participants.length === 1 ? 'aspect-video max-h-[600px] self-center' : ''
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'pointer-events-none absolute inset-0 rounded-lg ring-2 transition-all duration-150',
-                            participant.isSpeaking ? 'ring-green-500' : 'ring-transparent'
-                          )}
-                        />
+                  <X className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Rời kênh thoại</TooltipContent>
+            </Tooltip>
+          </div>
+        </header>
 
-                        {isMediaActive ? (
-                          <>
-                            <img
-                              src={participant.streamUrl ?? `https://picsum.photos/seed/${participant.id}/900/600`}
-                              alt={participant.name}
-                              className="h-full w-full bg-black object-contain"
-                            />
-                            {participant.isScreenSharing && (
-                              <div className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[11px] text-white">
-                                <Monitor className="h-3 w-3" />
-                                <span>Screen Share</span>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            {participant.avatarUrl ? (
-                              <img src={participant.avatarUrl} alt={participant.name} className="h-20 w-20 rounded-full object-cover" />
-                            ) : (
-                              <div
-                                className={cn(
-                                  'flex h-20 w-20 items-center justify-center rounded-full text-xl font-semibold text-white',
-                                  participant.avatarColor
-                                )}
-                              >
-                                {participant.name[0]?.toUpperCase() ?? '?'}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-0.5 text-sm font-medium text-white">
-                          {participant.name}{' '}
-                          {participant.isMuted && <span className="text-muted-foreground">• muted</span>}
-                        </div>
-
-                        {!isMediaActive && participant.isMuted && (
-                          <div className="absolute bottom-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500">
-                            <MicOff className="h-3 w-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
-                <div className="pointer-events-auto flex h-16 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 backdrop-blur-sm opacity-0 translate-y-2 transition-all duration-200 hover:bg-black/45 group-hover/voice:translate-y-0 group-hover/voice:opacity-100 focus-within:translate-y-0 focus-within:opacity-100">
-                <div className="flex items-center overflow-hidden rounded-md bg-[hsl(240,5%,18%)]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setIsMuted((v) => !v)}
-                        className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-l-md',
-                          isMuted ? 'bg-red-500/20 text-red-400' : 'text-foreground'
-                        )}
-                      >
-                        <Mic className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{isMuted ? 'Bật tiếng' : 'Tắt tiếng'}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="flex h-10 w-10 items-center justify-center border-l border-[hsl(240,4%,22%)] text-muted-foreground">
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cài đặt âm đầu vào</TooltipContent>
-                  </Tooltip>
-                </div>
-
-                <div className="flex items-center overflow-hidden rounded-md bg-[hsl(240,5%,18%)]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setIsCameraOn((v) => !v)}
-                        className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-l-md',
-                          !isCameraOn ? 'text-foreground' : 'text-green-400'
-                        )}
-                      >
-                        <Camera className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Bật camera</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="flex h-10 w-10 items-center justify-center border-l border-[hsl(240,4%,22%)] text-muted-foreground">
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cài đặt camera</TooltipContent>
-                  </Tooltip>
-                </div>
-
-                {[
-                  { icon: ArrowLeftRight, label: 'Hoạt động' },
-                  { icon: Users, label: 'Danh sách thành viên' },
-                  { icon: Sparkles, label: 'Hiệu ứng' },
-                  { icon: MoreHorizontal, label: 'Thêm' },
-                ].map(({ icon: Icon, label }) => (
-                  <Tooltip key={label}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-10 w-10 items-center justify-center rounded-md bg-[hsl(240,5%,18%)] text-foreground transition-colors hover:bg-[hsl(240,4%,22%)]"
-                      >
-                        <Icon className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{label}</TooltipContent>
-                  </Tooltip>
-                ))}
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-600">
-                      <PhoneOff className="h-5 w-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Ngắt kết nối</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Toàn màn hình</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
-                      <LayoutGrid className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Thay đổi bố cục</TooltipContent>
-                </Tooltip>
-                </div>
-              </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-4">
+          {voiceState?.room ? (
+            <ConnectedVoiceGrid room={voiceState.room} />
+          ) : (
+            <div className="flex h-full items-center justify-center rounded-lg border border-border/40 bg-[hsl(240,8%,14%)] text-sm text-muted-foreground">
+              Chưa kết nối voice. Vui lòng tham gia lại kênh thoại.
             </div>
-          </Panel>
-
-          {showThread && (
-            <>
-              <ResizeHandle />
-              <Panel
-                id="voice-thread"
-                defaultSize={34}
-                minSize={24}
-                maxSize={45}
-                className="overflow-hidden"
-              >
-                <div className="h-full min-h-0 min-w-0 overflow-hidden">
-                  <aside className="flex h-full min-h-0 min-w-0 w-full flex-col border-l border-border bg-[hsl(240,6%,10%)]">
-                    <div className="flex h-12 items-center justify-between border-b border-border px-3">
-                      <p className="truncate text-base font-semibold text-foreground"># {channelName}</p>
-                      <button
-                        type="button"
-                        onClick={() => setShowThread(false)}
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <ThreadPanelChat channelName={channelName} channelId={activeChannelId} />
-                  </aside>
-                </div>
-              </Panel>
-            </>
           )}
-        </PanelGroup>
-      </div>
+        </div>
+
+        <footer className="flex h-16 shrink-0 items-center justify-center border-t border-white/10 px-4">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-2 py-1.5 backdrop-blur-sm">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void toggleMicrophone()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors',
+                    voiceState?.isMicrophoneEnabled
+                      ? 'text-foreground hover:bg-white/10'
+                      : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                  )}
+                >
+                  {voiceState?.isMicrophoneEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{voiceState?.isMicrophoneEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void toggleCamera()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10',
+                    voiceState?.isCameraEnabled ? 'text-green-400' : 'text-foreground'
+                  )}
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Camera</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void toggleScreenShare()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10',
+                    voiceState?.isScreenShareEnabled ? 'text-green-400' : 'text-foreground'
+                  )}
+                >
+                  <Monitor className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Chia sẻ màn hình</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setShowThread((v) => !v)}
+                  className="flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-white/10"
+                >
+                  <Users className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Thành viên và chat</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void leaveVoiceChannel()}
+                  className="flex h-10 w-10 items-center justify-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-600"
+                >
+                  <PhoneOff className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Ngắt kết nối</TooltipContent>
+            </Tooltip>
+          </div>
+        </footer>
+      </section>
+
+      {showThread ? (
+        <aside className="hidden h-full w-[360px] shrink-0 border-l border-white/10 bg-[hsl(240,6%,10%)] lg:flex lg:min-h-0 lg:flex-col">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3">
+            <p className="truncate text-sm font-semibold text-foreground"># {channelName}</p>
+            <button
+              type="button"
+              onClick={() => setShowThread(false)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ThreadPanelChat channelName={channelName} channelId={activeChannelId} />
+          </div>
+        </aside>
+      ) : null}
+
     </div>
   )
 }

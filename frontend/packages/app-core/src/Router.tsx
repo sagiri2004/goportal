@@ -8,20 +8,24 @@
  */
 
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useOutletContext } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
 import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react'
-import { getChannels, getServers } from './services'
+import { useAuthStore } from '@goportal/store'
+import { getChannels, getServers, hydrateSession } from './services'
 import { APP_NAME } from '@goportal/config'
 
 type LastVisited = {
   serverId: string
   channelId: string
 }
+
+const POST_AUTH_REDIRECT_KEY = 'goportal_post_auth_redirect'
+const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code'
 
 const readLastVisited = (): LastVisited | null => {
   try {
@@ -183,8 +187,77 @@ const DMHomePage: React.FC = () => {
   )
 }
 
+const InviteEntryPage: React.FC = () => {
+  const { code = '' } = useParams<{ code: string }>()
+  const [isHydrated, setIsHydrated] = React.useState(false)
+  const [nextPath, setNextPath] = React.useState<string | null>(null)
+  const isAuthenticated = useAuthStore((state: any) => state.isAuthenticated)
+  const token = useAuthStore((state: any) => state.token)
+  const normalizedCode = code.trim()
+
+  React.useEffect(() => {
+    let isMounted = true
+
+    const restore = async () => {
+      await hydrateSession()
+      if (isMounted) {
+        setIsHydrated(true)
+      }
+    }
+
+    void restore()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!isHydrated || !normalizedCode) {
+      return
+    }
+
+    if (!isAuthenticated || !token) {
+      localStorage.setItem(POST_AUTH_REDIRECT_KEY, `/invite/${normalizedCode}`)
+      setNextPath('/auth/login')
+      return
+    }
+
+    localStorage.setItem(PENDING_INVITE_CODE_KEY, normalizedCode)
+    setNextPath('/app')
+  }, [isAuthenticated, isHydrated, normalizedCode, token])
+
+  if (!normalizedCode) {
+    return <Navigate to="/app" replace />
+  }
+
+  if (!isHydrated) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+      </div>
+    )
+  }
+
+  if (!nextPath) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+      </div>
+    )
+  }
+
+  return <Navigate to={nextPath} replace />
+}
+
 export const Router: React.FC = () => {
   const handleAuthSuccess = () => {
+    const intendedPath = localStorage.getItem(POST_AUTH_REDIRECT_KEY)
+    if (intendedPath?.startsWith('/')) {
+      localStorage.removeItem(POST_AUTH_REDIRECT_KEY)
+      window.location.href = intendedPath
+      return
+    }
+    localStorage.removeItem(POST_AUTH_REDIRECT_KEY)
     window.location.href = '/app'
   }
 
@@ -200,6 +273,8 @@ export const Router: React.FC = () => {
             </AuthLayout>
           }
         />
+
+        <Route path="/invite/:code" element={<InviteEntryPage />} />
 
         {/* Protected routes */}
         <Route

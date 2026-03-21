@@ -113,7 +113,7 @@ export const getMessages = async (channelId, opts = {}) => {
         offset: response.offset ?? offset,
     };
 };
-export const sendMessage = async (channelId, content, attachmentIds = []) => {
+export const sendMessage = async (channelId, content, attachmentIds = [], replyToId) => {
     if (IS_MOCK_MESSAGES) {
         await simulateDelay(120);
         const now = new Date();
@@ -139,8 +139,26 @@ export const sendMessage = async (channelId, content, attachmentIds = []) => {
         content,
         encoding: 'utf-8',
         attachment_ids: attachmentIds,
+        reply_to_id: replyToId ?? null,
     });
     return mapMessage(item);
+};
+export const updateMessage = async (messageId, content) => {
+    const item = await apiClient.patch(`/api/v1/messages/${messageId}`, {
+        content_type: 'text/plain',
+        content,
+        encoding: 'utf-8',
+    });
+    return mapMessage(item);
+};
+export const deleteMessage = async (messageId) => {
+    await apiClient.delete(`/api/v1/messages/${messageId}`);
+};
+export const addReaction = async (messageId, emoji) => {
+    await apiClient.post(`/api/v1/messages/${messageId}/reactions`, { emoji });
+};
+export const removeReaction = async (messageId, emoji) => {
+    await apiClient.delete(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`);
 };
 export const uploadMessageAttachment = async (file, onProgress) => {
     const uploaded = await uploadMedia(file, 'message_attachment', { onProgress });

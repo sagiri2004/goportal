@@ -30,9 +30,11 @@ func NewLiveKitService() services.LiveKitService {
 	}
 }
 
-func (s *liveKitService) GenerateAccessToken(channelID, userID string) (string, error) {
+func (s *liveKitService) GenerateAccessToken(channelID, userID, displayName, metadata string) (string, error) {
 	channelID = strings.TrimSpace(channelID)
 	userID = strings.TrimSpace(userID)
+	displayName = strings.TrimSpace(displayName)
+	metadata = strings.TrimSpace(metadata)
 	if channelID == "" || userID == "" {
 		return "", apperr.E("MISSING_FIELDS", nil)
 	}
@@ -42,6 +44,12 @@ func (s *liveKitService) GenerateAccessToken(channelID, userID string) (string, 
 
 	token := auth.NewAccessToken(s.apiKey, s.apiSecret)
 	token.SetIdentity(userID)
+	if displayName != "" {
+		token.SetName(displayName)
+	}
+	if metadata != "" {
+		token.SetMetadata(metadata)
+	}
 	token.SetValidFor(time.Hour)
 	canPublish := true
 	canSubscribe := true

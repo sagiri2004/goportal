@@ -164,6 +164,109 @@
 - Auth: `Bearer token`
 - Description: Delete overwrite row for target subject.
 
+---
+
+### CHANNELS: Mark Channel Read
+
+- Method: `POST`
+- Path: `/api/v1/channels/:id/read`
+- Auth: `Bearer token`
+- Description: Mark current channel as read for the current user (`unread_count=0`, update `last_read_at`).
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - Channel UUID.
+- Body JSON:
+
+```json
+{}
+```
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Channel read state updated",
+  "data": null
+}
+```
+
+---
+
+### CHANNELS: Get Notification Setting
+
+- Method: `GET`
+- Path: `/api/v1/channels/:id/notification-settings`
+- Auth: `Bearer token`
+- Description: Get current user's notification level for a channel.
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Notification setting fetched",
+  "data": {
+    "user_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+    "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
+    "level": "all",
+    "muted_until": null
+  }
+}
+```
+
+---
+
+### CHANNELS: Update Notification Setting
+
+- Method: `PUT`
+- Path: `/api/v1/channels/:id/notification-settings`
+- Auth: `Bearer token`
+- Description: Update current user's notification level for a channel.
+
+#### Request
+
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token}}`
+- Body JSON:
+
+```json
+{
+  "level": "mentions_only",
+  "muted_until": "2026-03-22T10:00:00Z"
+}
+```
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Notification setting updated",
+  "data": {
+    "user_id": "66a2f8be-3055-4e11-a987-0f3dbe6dd8d1",
+    "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
+    "level": "mentions_only",
+    "muted_until": "2026-03-22T10:00:00Z"
+  }
+}
+```
+
 #### Frontend Notes
 
 - Channel effective permission order: base server role perms -> `@everyone` overwrite -> role overwrites -> user overwrite.

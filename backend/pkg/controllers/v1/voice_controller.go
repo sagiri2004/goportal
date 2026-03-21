@@ -36,6 +36,30 @@ func (ctrl *voiceController) GenerateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, serializers.Success("OK", "Voice token generated", serializers.NewVoiceTokenResponse(result.Token, result.URL)))
 }
 
+func (ctrl *voiceController) ListParticipants(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	channelID := c.Param("id")
+	participants, err := containers.VoiceService().ListChannelParticipants(c.Request.Context(), userID, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, serializers.Success("OK", "Voice participants fetched", gin.H{
+		"items": participants,
+	}))
+}
+
 func (ctrl *voiceController) StartRecording(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {

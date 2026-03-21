@@ -75,12 +75,8 @@ export const createServerInvite = async (
   serverId: string,
   body: { max_uses?: number; expires_at?: number }
 ): Promise<{
-  id: string
-  server_id: string
-  inviter_id: string
-  code: string
-  max_uses: number
-  uses: number
+  invite_code: string
+  invite_url: string
   expires_at?: number
 }> => apiClient.post(`/api/v1/servers/${serverId}/invites`, body)
 

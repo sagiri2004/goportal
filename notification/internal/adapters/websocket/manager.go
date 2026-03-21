@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,8 @@ type Manager struct {
 	presence     ports.PresenceRepository
 	mu           sync.RWMutex
 	connections  map[string]*websocket.Conn
+	focusByUser  map[string]string
+	typingTimers map[string]*time.Timer
 }
 
 func NewManager(
@@ -41,6 +44,8 @@ func NewManager(
 		writeTimeout: writeTimeout,
 		presence:     presence,
 		connections:  make(map[string]*websocket.Conn),
+		focusByUser:  make(map[string]string),
+		typingTimers: make(map[string]*time.Timer),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true
@@ -98,10 +103,12 @@ func (m *Manager) readLoop(userID string, conn *websocket.Conn) {
 	})
 
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		_, payload, err := conn.ReadMessage()
+		if err != nil {
 			log.Printf("[notification] websocket read loop closed user_id=%s err=%v", userID, err)
 			return
 		}
+		m.handleInbound(userID, payload)
 	}
 }
 
@@ -156,6 +163,13 @@ func (m *Manager) disconnectUser(ctx context.Context, userID string, conn *webso
 	if ok && existing == conn {
 		delete(m.connections, userID)
 	}
+	delete(m.focusByUser, userID)
+	for key, timer := range m.typingTimers {
+		if strings.HasSuffix(key, ":"+userID) {
+			timer.Stop()
+			delete(m.typingTimers, key)
+		}
+	}
 	m.mu.Unlock()
 
 	_ = conn.Close()
@@ -169,5 +183,127 @@ func (m *Manager) CloseAll() {
 	for userID, conn := range m.connections {
 		_ = conn.Close()
 		delete(m.connections, userID)
+	}
+}
+
+func (m *Manager) GetFocusedChannel(userID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.focusByUser[userID]
+}
+
+func (m *Manager) ListConnectedUsers() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	users := make([]string, 0, len(m.connections))
+	for userID := range m.connections {
+		users = append(users, userID)
+	}
+	return users
+}
+
+func (m *Manager) handleInbound(userID string, payload []byte) {
+	var event struct {
+		Type string `json:"type"`
+		Data struct {
+			ChannelID string `json:"channel_id"`
+			Username  string `json:"username"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return
+	}
+	eventType := strings.ToLower(strings.TrimSpace(event.Type))
+	switch eventType {
+	case "channel.focus":
+		m.setFocusedChannel(userID, event.Data.ChannelID)
+	case "typing.start":
+		m.handleTypingStart(userID, event.Data.ChannelID, event.Data.Username)
+	}
+}
+
+func (m *Manager) setFocusedChannel(userID, channelID string) {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return
+	}
+	m.mu.Lock()
+	m.focusByUser[userID] = channelID
+	m.mu.Unlock()
+}
+
+func (m *Manager) handleTypingStart(userID, channelID, username string) {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return
+	}
+	if username == "" {
+		username = userID
+	}
+	m.setFocusedChannel(userID, channelID)
+	key := channelID + ":" + userID
+
+	m.mu.Lock()
+	if existing := m.typingTimers[key]; existing != nil {
+		existing.Stop()
+	}
+	m.typingTimers[key] = time.AfterFunc(3*time.Second, func() {
+		m.broadcastTypingStop(userID, channelID)
+		m.mu.Lock()
+		delete(m.typingTimers, key)
+		m.mu.Unlock()
+	})
+	targetUsers := make([]string, 0)
+	for targetUserID, focusedChannelID := range m.focusByUser {
+		if targetUserID == userID {
+			continue
+		}
+		if focusedChannelID == channelID {
+			targetUsers = append(targetUsers, targetUserID)
+		}
+	}
+	m.mu.Unlock()
+
+	msgPayload, _ := json.Marshal(map[string]any{
+		"channel_id": channelID,
+		"user_id":    userID,
+		"username":   username,
+	})
+	for _, targetUserID := range targetUsers {
+		_ = m.SendToUser(targetUserID, domain.OutboundNotification{
+			Type:      "typing",
+			UserID:    targetUserID,
+			Payload:   msgPayload,
+			Priority:  "NORMAL",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+}
+
+func (m *Manager) broadcastTypingStop(userID, channelID string) {
+	m.mu.RLock()
+	targetUsers := make([]string, 0)
+	for targetUserID, focusedChannelID := range m.focusByUser {
+		if targetUserID == userID {
+			continue
+		}
+		if focusedChannelID == channelID {
+			targetUsers = append(targetUsers, targetUserID)
+		}
+	}
+	m.mu.RUnlock()
+
+	msgPayload, _ := json.Marshal(map[string]any{
+		"channel_id": channelID,
+		"user_id":    userID,
+	})
+	for _, targetUserID := range targetUsers {
+		_ = m.SendToUser(targetUserID, domain.OutboundNotification{
+			Type:      "typing.stop",
+			UserID:    targetUserID,
+			Payload:   msgPayload,
+			Priority:  "NORMAL",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		})
 	}
 }

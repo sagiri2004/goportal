@@ -116,6 +116,7 @@ func (ctrl *messageController) Create(c *gin.Context) {
 		Encoding:       req.Encoding,
 		IsPinned:       req.IsPinned,
 		AttachmentIDs:  req.AttachmentIDs,
+		ReplyToID:      req.ReplyToID,
 	})
 	if err != nil {
 		if ae, ok := apperr.From(err); ok {
@@ -222,4 +223,34 @@ func (ctrl *messageController) ToggleReaction(c *gin.Context) {
 		action = "added"
 	}
 	c.JSON(http.StatusOK, serializers.Success("OK", "Reaction "+action, gin.H{"added": added}))
+}
+
+func (ctrl *messageController) RemoveReaction(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	messageID := c.Param("id")
+	emoji := c.Param("emoji")
+	if emoji == "" {
+		c.JSON(http.StatusBadRequest, serializers.Error("MISSING_FIELDS", "Missing required fields"))
+		return
+	}
+
+	added, err := containers.MessageService().ToggleReaction(c.Request.Context(), userID, messageID, emoji)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	// Reaction didn't exist; restore previous state as no-op delete.
+	if added {
+		_, _ = containers.MessageService().ToggleReaction(c.Request.Context(), userID, messageID, emoji)
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Reaction removed", nil))
 }

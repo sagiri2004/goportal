@@ -20,4 +20,6 @@ type ChannelRepository interface {
 	UpsertOverwrite(ctx context.Context, overwrite *models.ChannelPermissionOverwrite) error
 	DeleteOverwrite(ctx context.Context, channelID, subjectType, subjectID string) error
 	ListOverwrites(ctx context.Context, channelID string) ([]models.ChannelPermissionOverwrite, error)
+	GetNotificationSetting(ctx context.Context, userID, channelID string) (*models.ChannelNotificationSetting, error)
+	UpsertNotificationSetting(ctx context.Context, setting *models.ChannelNotificationSetting) error
 }

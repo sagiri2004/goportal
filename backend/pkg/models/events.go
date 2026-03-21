@@ -21,6 +21,8 @@ const (
 	NotificationStatusDeliveredToServer = "DELIVERED_TO_SERVER"
 	NotificationStatusDeliveredToClient = "DELIVERED_TO_CLIENT"
 	NotificationStatusFailed            = "FAILED"
+
+	VoiceEventTypeActivityUpdated = "VOICE_CHANNEL_ACTIVITY_UPDATED"
 )
 
 type MessageCreatedEvent struct {
@@ -38,11 +40,36 @@ type ChatMessageCreatedEvent struct {
 	EventID     string                   `json:"event_id"`
 	EventType   string                   `json:"event_type"`
 	OccurredAt  string                   `json:"occurred_at"`
+	ServerID    string                   `json:"server_id,omitempty"`
 	ChannelID   string                   `json:"channel_id"`
 	AuthorID    string                   `json:"author_id"`
 	MessageID   string                   `json:"message_id"`
 	Content     MessageContentEnvelope   `json:"content"`
 	Attachments []MessageAttachmentEvent `json:"attachments,omitempty"`
+	Mentions    []MentionEvent           `json:"mentions,omitempty"`
+	Author      *EventAuthor             `json:"author,omitempty"`
+	ReplyTo     *ReplyPreviewEvent       `json:"reply_to,omitempty"`
+	UpdatedAt   int64                    `json:"updated_at,omitempty"`
+	CreatedAt   int64                    `json:"created_at,omitempty"`
+}
+
+type MentionEvent struct {
+	MentionType     string  `json:"mention_type"`
+	MentionedUserID *string `json:"mentioned_user_id,omitempty"`
+	ChannelID       *string `json:"channel_id,omitempty"`
+}
+
+type EventAuthor struct {
+	ID        string  `json:"id"`
+	Username  string  `json:"username"`
+	AvatarURL *string `json:"avatar_url,omitempty"`
+}
+
+type ReplyPreviewEvent struct {
+	MessageID  string `json:"message_id"`
+	AuthorID   string `json:"author_id"`
+	AuthorName string `json:"author_name"`
+	Content    string `json:"content"`
 }
 
 type MessageAttachmentEvent struct {
@@ -64,6 +91,20 @@ type NotificationEvent struct {
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
 }
 
+type VoiceChannelParticipantSnapshot struct {
+	UserID          string `json:"user_id"`
+	Name            string `json:"name"`
+	AvatarURL       string `json:"avatar_url,omitempty"`
+	IsScreenSharing bool   `json:"is_screen_sharing"`
+}
+
+type VoiceChannelActivityUpdatedEvent struct {
+	EventType    string                            `json:"event_type"`
+	ServerID     string                            `json:"server_id"`
+	ChannelID    string                            `json:"channel_id"`
+	Participants []VoiceChannelParticipantSnapshot `json:"participants"`
+}
+
 type NotificationDeliveryEvent struct {
 	EventID      string `json:"event_id"`
 	UserID       string `json:"user_id"`
@@ -71,4 +112,25 @@ type NotificationDeliveryEvent struct {
 	DeliveryType string `json:"delivery_type"`
 	DeliveredAt  int64  `json:"delivered_at"`
 	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+type MessageDeletedEvent struct {
+	EventID    string `json:"event_id"`
+	EventType  string `json:"event_type"`
+	OccurredAt string `json:"occurred_at"`
+	ServerID   string `json:"server_id,omitempty"`
+	MessageID  string `json:"message_id"`
+	ChannelID  string `json:"channel_id"`
+}
+
+type ReactionChangedEvent struct {
+	EventID    string `json:"event_id"`
+	EventType  string `json:"event_type"`
+	OccurredAt string `json:"occurred_at"`
+	ServerID   string `json:"server_id,omitempty"`
+	MessageID  string `json:"message_id"`
+	ChannelID  string `json:"channel_id"`
+	Emoji      string `json:"emoji"`
+	UserID     string `json:"user_id"`
+	Username   string `json:"username"`
 }

@@ -25,12 +25,6 @@ func RegisterHandlers(router *message.Router, subscriber message.Subscriber) err
 	)
 
 	router.AddConsumerHandler(
-		"notification_new_message_consumer",
-		NewMessageTopic,
-		subscriber,
-		handler.HandleNewMessage,
-	)
-	router.AddConsumerHandler(
 		"notification_delivery_receipt_consumer",
 		DeliveryReceiptTopic,
 		subscriber,

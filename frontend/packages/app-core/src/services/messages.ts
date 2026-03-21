@@ -34,6 +34,7 @@ type BackendMessage = {
     emoji: string
     user_id?: string
   }>
+  reply_to_id?: string
 }
 
 type MessagePage = {
@@ -185,7 +186,8 @@ export const getMessages = async (
 export const sendMessage = async (
   channelId: string,
   content: string,
-  attachmentIds: string[] = []
+  attachmentIds: string[] = [],
+  replyToId?: string | null
 ): Promise<UIMessage> => {
   if (IS_MOCK_MESSAGES) {
     await simulateDelay(120)
@@ -215,9 +217,31 @@ export const sendMessage = async (
     content,
     encoding: 'utf-8',
     attachment_ids: attachmentIds,
+    reply_to_id: replyToId ?? null,
   })
 
   return mapMessage(item)
+}
+
+export const updateMessage = async (messageId: string, content: string): Promise<UIMessage> => {
+  const item = await apiClient.patch<BackendMessage>(`/api/v1/messages/${messageId}`, {
+    content_type: 'text/plain',
+    content,
+    encoding: 'utf-8',
+  })
+  return mapMessage(item)
+}
+
+export const deleteMessage = async (messageId: string): Promise<void> => {
+  await apiClient.delete(`/api/v1/messages/${messageId}`)
+}
+
+export const addReaction = async (messageId: string, emoji: string): Promise<void> => {
+  await apiClient.post(`/api/v1/messages/${messageId}/reactions`, { emoji })
+}
+
+export const removeReaction = async (messageId: string, emoji: string): Promise<void> => {
+  await apiClient.delete(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)
 }
 
 export const uploadMessageAttachment = async (
