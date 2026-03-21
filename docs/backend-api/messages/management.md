@@ -106,6 +106,7 @@
   "content": "Hello channel",
   "encoding": "utf-8",
   "is_pinned": false,
+  "reply_to_id": "d4d8cb90-66bb-4f1b-94db-dcdb649786f7",
   "attachment_ids": [
     "9dd2151d-a31f-4f33-b9f3-7a46a8092222"
   ]
@@ -164,6 +165,7 @@
 
 - `content` is stored in envelope format: `type`, `payload`, `encoding`.
 - `attachment_ids` must come from `POST /api/v1/upload` with `media_type=message_attachment`.
+- `reply_to_id` is optional and must belong to a message in the same channel.
 
 ---
 
@@ -335,3 +337,38 @@
 #### Frontend Notes
 
 - Toggle behavior is idempotent for same `message_id + user_id + emoji`.
+
+---
+
+### MESSAGES: Remove Reaction
+
+- Method: `DELETE`
+- Path: `/api/v1/messages/:id/reactions/:emoji`
+- Auth: `Bearer token`
+- Description: Remove a specific emoji reaction for current user from a message.
+
+#### Request
+
+- Headers:
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - Message UUID.
+  - `emoji`: `string` - Emoji to remove (URL-encoded).
+- Body JSON:
+
+```json
+{}
+```
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Reaction removed",
+  "data": null
+}
+```

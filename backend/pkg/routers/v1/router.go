@@ -81,6 +81,9 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		channels.GET("/:id/overwrites", v1.Channel.ListOverwrites)
 		channels.PUT("/:id/overwrites", v1.Channel.UpsertOverwrite)
 		channels.DELETE("/:id/overwrites/:subjectType/:subjectId", v1.Channel.DeleteOverwrite)
+		channels.POST("/:id/read", middlewares.RequireChannelPermission(models.PermissionReadMessages, "id"), v1.Channel.MarkRead)
+		channels.GET("/:id/notification-settings", v1.Channel.GetNotificationSetting)
+		channels.PUT("/:id/notification-settings", v1.Channel.UpdateNotificationSetting)
 	}
 
 	messages := api.Group("/messages")
@@ -90,6 +93,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		messages.PATCH("/:id", v1.Message.Update)
 		messages.DELETE("/:id", v1.Message.Delete)
 		messages.POST("/:id/reactions", v1.Message.ToggleReaction)
+		messages.DELETE("/:id/reactions/:emoji", v1.Message.RemoveReaction)
 	}
 
 	upload := api.Group("/upload")

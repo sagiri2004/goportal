@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/sagiri2004/goportal/pkg/apperr"
 	"github.com/sagiri2004/goportal/pkg/models"
@@ -13,12 +14,18 @@ import (
 type channelService struct {
 	serverRepo  repositories.ServerRepository
 	channelRepo repositories.ChannelRepository
+	messageRepo repositories.MessageRepository
 }
 
-func NewChannelService(serverRepo repositories.ServerRepository, channelRepo repositories.ChannelRepository) services.ChannelService {
+func NewChannelService(
+	serverRepo repositories.ServerRepository,
+	channelRepo repositories.ChannelRepository,
+	messageRepo repositories.MessageRepository,
+) services.ChannelService {
 	return &channelService{
 		serverRepo:  serverRepo,
 		channelRepo: channelRepo,
+		messageRepo: messageRepo,
 	}
 }
 
@@ -360,4 +367,89 @@ func (s *channelService) ListOverwrites(ctx context.Context, actorID, channelID 
 		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
 	}
 	return s.channelRepo.ListOverwrites(ctx, channelID)
+}
+
+func (s *channelService) MarkRead(ctx context.Context, actorID, channelID string) error {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	if actorID == "" || channelID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
+		return apperr.E("NOT_SERVER_MEMBER", err)
+	}
+	canRead, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, models.PermissionReadMessages)
+	if err != nil {
+		return err
+	}
+	if !canRead {
+		return apperr.E("INSUFFICIENT_PERMISSION", nil)
+	}
+	if channel.IsPrivate {
+		isMember, err := s.channelRepo.IsMember(ctx, channelID, actorID)
+		if err != nil {
+			return err
+		}
+		if !isMember {
+			return apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
+	}
+	return s.messageRepo.MarkChannelRead(ctx, actorID, channelID, time.Now().Unix())
+}
+
+func (s *channelService) GetNotificationSetting(ctx context.Context, actorID, channelID string) (*models.ChannelNotificationSetting, error) {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	if actorID == "" || channelID == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
+		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+	return s.channelRepo.GetNotificationSetting(ctx, actorID, channelID)
+}
+
+func (s *channelService) UpdateNotificationSetting(
+	ctx context.Context,
+	actorID, channelID, level string,
+	mutedUntil *int64,
+) (*models.ChannelNotificationSetting, error) {
+	actorID = strings.TrimSpace(actorID)
+	channelID = strings.TrimSpace(channelID)
+	level = strings.TrimSpace(strings.ToLower(level))
+	if actorID == "" || channelID == "" || level == "" {
+		return nil, apperr.E("MISSING_FIELDS", nil)
+	}
+	switch level {
+	case models.NotificationLevelAll, models.NotificationLevelMentionsOnly, models.NotificationLevelNone:
+	default:
+		return nil, apperr.E("INVALID_NOTIFICATION_LEVEL", nil)
+	}
+
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
+		return nil, apperr.E("NOT_SERVER_MEMBER", err)
+	}
+
+	setting := &models.ChannelNotificationSetting{
+		UserID:     actorID,
+		ChannelID:  channelID,
+		Level:      level,
+		MutedUntil: mutedUntil,
+	}
+	if err := s.channelRepo.UpsertNotificationSetting(ctx, setting); err != nil {
+		return nil, err
+	}
+	return setting, nil
 }

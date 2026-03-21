@@ -1193,6 +1193,39 @@ export const AppShell: React.FC = () => {
     })
   }, [])
 
+  const setChannelUnread = useCallback((channelId: string, unreadCount: number) => {
+    if (!channelId) {
+      return
+    }
+    const nextUnread = Math.max(0, Math.floor(unreadCount))
+    setChannelsByServer((prev) => {
+      let hasChanged = false
+      const next: Record<string, MockCategory[]> = {}
+
+      Object.entries(prev).forEach(([serverId, categories]) => {
+        const nextCategories = categories.map((category) => {
+          const nextChannels = category.channels.map((channel) => {
+            if (channel.id !== channelId || channel.type !== 'text' || (channel.unread ?? 0) === nextUnread) {
+              return channel
+            }
+            hasChanged = true
+            return {
+              ...channel,
+              unread: nextUnread,
+            }
+          })
+          return {
+            ...category,
+            channels: nextChannels,
+          }
+        })
+        next[serverId] = nextCategories
+      })
+
+      return hasChanged ? next : prev
+    })
+  }, [])
+
   const handleCreateChannel = useCallback(async (payload: { name: string; type: 'TEXT' | 'VOICE' }) => {
     if (!activeServerId) {
       return
@@ -1635,6 +1668,7 @@ export const AppShell: React.FC = () => {
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
+      setChannelUnread,
     }),
     [
       showMembers,
@@ -1659,6 +1693,7 @@ export const AppShell: React.FC = () => {
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
+      setChannelUnread,
     ],
   )
 

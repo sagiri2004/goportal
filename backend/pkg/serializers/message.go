@@ -13,6 +13,7 @@ type CreateMessageRequest struct {
 	Encoding      string   `json:"encoding"`
 	IsPinned      bool     `json:"is_pinned"`
 	AttachmentIDs []string `json:"attachment_ids"`
+	ReplyToID     *string  `json:"reply_to_id,omitempty"`
 }
 
 type UpdateMessageRequest struct {
@@ -46,6 +47,7 @@ type MessageResponse struct {
 	UpdatedAt   int64                         `json:"updated_at"`
 	Attachments []AttachmentResponse          `json:"attachments"`
 	Reactions   []ReactionResponse            `json:"reactions"`
+	ReplyToID   *string                       `json:"reply_to_id,omitempty"`
 }
 
 type AttachmentResponse struct {
@@ -111,5 +113,6 @@ func NewMessageResponse(
 		UpdatedAt:   m.UpdatedAt,
 		Attachments: attResp,
 		Reactions:   reactionResp,
+		ReplyToID:   m.ReplyToID,
 	}
 }

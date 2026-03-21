@@ -498,7 +498,7 @@ export const ServerSettingsOverlay = ({ open, initialTab = 'profile', serverId, 
                                     setIsCreatingInvite(true);
                                     try {
                                         const invite = await createServerInvite(serverId, { max_uses: 0 });
-                                        setInviteCode(invite.code);
+                                        setInviteCode(invite.invite_code);
                                         onToast('Đã tạo liên kết mời.');
                                     }
                                     catch (error) {

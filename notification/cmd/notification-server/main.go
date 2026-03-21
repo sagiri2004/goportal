@@ -76,7 +76,7 @@ func run() error {
 	receiptPublisher := watermilladapter.NewDeliveryReceiptPublisher(publisher, cfg.TopicDeliveryReceipt)
 	dispatcher := usecase.NewDispatchNotification(cfg.ServerID, presenceRepo, wsManager, distBus, dlqPublisher, receiptPublisher)
 
-	router, err := watermilladapter.NewRouter(subscriber, dispatcher, cfg.TopicNotifications)
+	router, err := watermilladapter.NewRouter(subscriber, dispatcher, cfg.TopicNotifications, wsManager)
 	if err != nil {
 		return fmt.Errorf("init watermill router: %w", err)
 	}

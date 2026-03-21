@@ -18,7 +18,16 @@ import {
 } from 'lucide-react'
 import { useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
-import { getMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core'
+import {
+  addReaction,
+  deleteMessage,
+  getMessages,
+  markChannelRead,
+  removeReaction,
+  sendMessage,
+  updateMessage,
+  uploadMessageAttachment,
+} from '@goportal/app-core'
 import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
 import type { Message as ChatMessage } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
@@ -50,6 +59,7 @@ type ShellContext = {
   }>
   incrementChannelUnread?: (channelId: string) => void
   resetChannelUnread?: (channelId: string) => void
+  setChannelUnread?: (channelId: string, unreadCount: number) => void
   applyVoiceChannelActivityUpdate?: (update: {
     serverId: string
     channelId: string
@@ -76,6 +86,7 @@ const MESSAGE_CREATED_EVENT_TYPES = new Set([
   'MESSAGE_CREATED',
   'MESSAGE_CREATE',
   'MESSAGE:CREATE',
+  'MESSAGE.CREATED',
 ])
 
 const MESSAGE_UPDATED_EVENT_TYPES = new Set([
@@ -83,6 +94,7 @@ const MESSAGE_UPDATED_EVENT_TYPES = new Set([
   'MESSAGE_UPDATED',
   'MESSAGE_UPDATE',
   'MESSAGE:UPDATE',
+  'MESSAGE.UPDATED',
 ])
 
 const MESSAGE_DELETED_EVENT_TYPES = new Set([
@@ -90,18 +102,21 @@ const MESSAGE_DELETED_EVENT_TYPES = new Set([
   'MESSAGE_DELETED',
   'MESSAGE_DELETE',
   'MESSAGE:DELETE',
+  'MESSAGE.DELETED',
 ])
 
 const REACTION_ADDED_EVENT_TYPES = new Set([
   'MESSAGE_REACTION_ADDED',
   'REACTION_ADDED',
   'MESSAGE:REACTION:ADD',
+  'REACTION.ADDED',
 ])
 
 const REACTION_REMOVED_EVENT_TYPES = new Set([
   'MESSAGE_REACTION_REMOVED',
   'REACTION_REMOVED',
   'MESSAGE:REACTION:REMOVE',
+  'REACTION.REMOVED',
 ])
 
 const VOICE_ACTIVITY_EVENT_TYPES = new Set([
@@ -299,6 +314,13 @@ const mapSocketPayloadToMessage = (
       : undefined,
     attachments: mapSocketAttachments(payload?.attachments),
     reactions: mapSocketReactions(payload?.reactions, currentUserId),
+    replyTo: payload?.reply_to
+      ? {
+          messageId: payload.reply_to.message_id ?? payload.reply_to.id ?? '',
+          authorName: payload.reply_to.author_name ?? payload.reply_to.author_id ?? 'unknown',
+          content: payload.reply_to.content ?? '',
+        }
+      : undefined,
   }
 }
 
@@ -310,6 +332,7 @@ export const DashboardView: React.FC = () => {
     activeCategories,
     incrementChannelUnread,
     resetChannelUnread,
+    setChannelUnread,
     applyVoiceChannelActivityUpdate,
   } = useOutletContext<ShellContext>()
   const currentUser = useAuthStore((state: any) => state.user)
@@ -331,14 +354,35 @@ export const DashboardView: React.FC = () => {
   const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
   const activeChannelIdRef = useRef(activeChannelId)
   const currentUserIdRef = useRef<string | null>(currentUser?.id ?? null)
+  const socketRef = useRef<WebSocket | null>(null)
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const isNearBottomRef = useRef(true)
+  const [newMessageCount, setNewMessageCount] = useState(0)
+  const [typingUsersByChannel, setTypingUsersByChannel] = useState<Record<string, Record<string, string>>>({})
+  const typingTimersRef = useRef<Record<string, number>>({})
+  const lastTypingSentAtRef = useRef<Record<string, number>>({})
+  const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingDraft, setEditingDraft] = useState('')
 
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId
   }, [activeChannelId])
 
   useEffect(() => {
+    isNearBottomRef.current = isNearBottom
+  }, [isNearBottom])
+
+  useEffect(() => {
     currentUserIdRef.current = currentUser?.id ?? null
   }, [currentUser?.id])
+
+  useEffect(() => {
+    return () => {
+      Object.values(typingTimersRef.current).forEach((timer) => window.clearTimeout(timer))
+      typingTimersRef.current = {}
+    }
+  }, [])
 
   const activeChannel = useMemo(
     () => {
@@ -425,8 +469,38 @@ export const DashboardView: React.FC = () => {
     if (!activeChannelId) {
       return
     }
+    requestAnimationFrame(() => {
+      const list = messageListRef.current
+      if (!list) {
+        return
+      }
+      list.scrollTop = list.scrollHeight
+      setNewMessageCount(0)
+      setIsNearBottom(true)
+    })
+  }, [activeChannelId])
+
+  useEffect(() => {
+    if (!activeChannelId) {
+      return
+    }
     resetChannelUnread?.(activeChannelId)
+    void markChannelRead(activeChannelId).catch(() => {})
+    const socket = socketRef.current
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'channel.focus',
+        data: { channel_id: activeChannelId },
+      }))
+    }
   }, [activeChannelId, resetChannelUnread])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+      return
+    }
+    void Notification.requestPermission()
+  }, [])
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -544,6 +618,87 @@ export const DashboardView: React.FC = () => {
         return
       }
 
+      if (eventType === 'CHANNEL.UNREAD') {
+        const payload = event.payload ?? {}
+        const channelId = payload.channel_id as string | undefined
+        const unreadCount = Number(payload.unread_count ?? 0)
+        if (!channelId) {
+          return
+        }
+        if (channelId !== activeChannelIdRef.current) {
+          setChannelUnread?.(channelId, unreadCount)
+        } else if (unreadCount > 0) {
+          resetChannelUnread?.(channelId)
+        }
+        return
+      }
+
+      if (eventType === 'MENTION') {
+        const payload = event.payload ?? {}
+        if (
+          typeof window !== 'undefined' &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted'
+        ) {
+          const title = payload.from_username ? `@mention từ ${payload.from_username}` : 'Bạn được nhắc đến'
+          const body = payload.preview ?? 'Bạn có một @mention mới'
+          if (document.hidden) {
+            new Notification(title, { body })
+          }
+        }
+        return
+      }
+
+      if (eventType === 'TYPING' || eventType === 'TYPING.START') {
+        const payload = event.payload ?? {}
+        const channelId = payload.channel_id as string | undefined
+        const userId = payload.user_id as string | undefined
+        const username = payload.username as string | undefined
+        if (!channelId || !userId || userId === currentUserIdRef.current) {
+          return
+        }
+        setTypingUsersByChannel((prev) => ({
+          ...prev,
+          [channelId]: {
+            ...(prev[channelId] ?? {}),
+            [userId]: username ?? userId,
+          },
+        }))
+        const timerKey = `${channelId}:${userId}`
+        if (typingTimersRef.current[timerKey]) {
+          window.clearTimeout(typingTimersRef.current[timerKey])
+        }
+        typingTimersRef.current[timerKey] = window.setTimeout(() => {
+          setTypingUsersByChannel((prev) => {
+            const channelUsers = { ...(prev[channelId] ?? {}) }
+            delete channelUsers[userId]
+            return { ...prev, [channelId]: channelUsers }
+          })
+          delete typingTimersRef.current[timerKey]
+        }, 3000)
+        return
+      }
+
+      if (eventType === 'TYPING.STOP') {
+        const payload = event.payload ?? {}
+        const channelId = payload.channel_id as string | undefined
+        const userId = payload.user_id as string | undefined
+        if (!channelId || !userId) {
+          return
+        }
+        const timerKey = `${channelId}:${userId}`
+        if (typingTimersRef.current[timerKey]) {
+          window.clearTimeout(typingTimersRef.current[timerKey])
+          delete typingTimersRef.current[timerKey]
+        }
+        setTypingUsersByChannel((prev) => {
+          const channelUsers = { ...(prev[channelId] ?? {}) }
+          delete channelUsers[userId]
+          return { ...prev, [channelId]: channelUsers }
+        })
+        return
+      }
+
       if (MESSAGE_CREATED_EVENT_TYPES.has(eventType)) {
         const payload = event.payload ?? {}
         const message = mapSocketPayloadToMessage(payload, event.timestamp, currentUserIdRef.current)
@@ -565,10 +720,33 @@ export const DashboardView: React.FC = () => {
 
           if (activeChannelIdRef.current !== channelId) {
             incrementChannelUnread?.(channelId)
+          } else {
+            void markChannelRead(channelId).catch(() => {})
+            if (isNearBottomRef.current) {
+              requestAnimationFrame(() => {
+                const list = messageListRef.current
+                if (!list) {
+                  return
+                }
+                list.scrollTop = list.scrollHeight
+              })
+            } else {
+              setNewMessageCount((count) => count + 1)
+            }
           }
 
           return next
         })
+
+        if (
+          typeof window !== 'undefined' &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted' &&
+          document.hidden
+        ) {
+          const authorName = message.author ?? 'New message'
+          new Notification(authorName, { body: message.content.slice(0, 120) })
+        }
         return
       }
 
@@ -662,12 +840,19 @@ export const DashboardView: React.FC = () => {
       const target = targets[reconnectAttempt % targets.length]
       const ws = new WebSocket(target)
       socket = ws
+      socketRef.current = ws
 
       ws.onopen = () => {
         if (socket !== ws) {
           return
         }
         reconnectAttempt = 0
+        if (activeChannelIdRef.current) {
+          ws.send(JSON.stringify({
+            type: 'channel.focus',
+            data: { channel_id: activeChannelIdRef.current },
+          }))
+        }
       }
 
       ws.onmessage = (event) => {
@@ -680,6 +865,7 @@ export const DashboardView: React.FC = () => {
       ws.onclose = () => {
         if (socket === ws) {
           socket = null
+          socketRef.current = null
         }
         if (closedByClient) {
           return
@@ -718,12 +904,19 @@ export const DashboardView: React.FC = () => {
       }
       socket?.close()
       socket = null
+      socketRef.current = null
     }
-  }, [applyVoiceChannelActivityUpdate, currentUser?.id, incrementChannelUnread, token])
+  }, [applyVoiceChannelActivityUpdate, currentUser?.id, incrementChannelUnread, resetChannelUnread, setChannelUnread, token])
 
   const handleScrollToLoadMore = useCallback(
     async (event: React.UIEvent<HTMLElement>) => {
       const container = event.currentTarget
+      const distanceToBottom = container.scrollHeight - (container.scrollTop + container.clientHeight)
+      const nearBottom = distanceToBottom <= 150
+      setIsNearBottom(nearBottom)
+      if (nearBottom && newMessageCount > 0) {
+        setNewMessageCount(0)
+      }
       if (container.scrollTop > 48) {
         return
       }
@@ -774,7 +967,7 @@ export const DashboardView: React.FC = () => {
         container.scrollTop = updatedHeight - previousHeight + container.scrollTop
       })
     },
-    [activeChannelId, pagingByChannel]
+    [activeChannelId, newMessageCount, pagingByChannel]
   )
 
   const extractFirstUrl = useCallback((text: string): string | null => {
@@ -865,14 +1058,27 @@ export const DashboardView: React.FC = () => {
   }, [activeMessages, extractFirstUrl])
 
   const actionButtons = [
-    { icon: Reply, label: 'Reply' },
-    { icon: Edit, label: 'Edit' },
-    { icon: Trash2, label: 'Delete' },
-    { icon: MoreHorizontal, label: 'More' },
-  ]
+    { icon: Reply, label: 'Reply', key: 'reply' },
+    { icon: Edit, label: 'Edit', key: 'edit' },
+    { icon: Trash2, label: 'Delete', key: 'delete' },
+    { icon: MoreHorizontal, label: 'More', key: 'more' },
+  ] as const
 
-  const toggleReaction = (messageId: string, emoji: string) => {
-    const currentUserId = 'you'
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    const currentUserId = currentUserIdRef.current ?? 'you'
+    const message = (messagesByChannel[activeChannelKey] ?? []).find((item) => item.id === messageId)
+    const reaction = (message?.reactions ?? []).find((item) => item.emoji === emoji)
+    const hasReacted = !!reaction?.hasReacted
+    try {
+      if (hasReacted) {
+        await removeReaction(messageId, emoji)
+      } else {
+        await addReaction(messageId, emoji)
+      }
+    } catch {
+      // inline API errors are handled by apiClient toast event
+      return
+    }
     setMessagesByChannel((prev) => {
       const messages = prev[activeChannelKey] ?? []
       const nextMessages = messages.map((message) => {
@@ -942,7 +1148,28 @@ export const DashboardView: React.FC = () => {
   const updateComposerState = useCallback(() => {
     const content = inputRef.current?.innerText.trim() ?? ''
     setComposerHasContent(content.length > 0)
-  }, [])
+    if (!activeChannelId || !content) {
+      return
+    }
+    const now = Date.now()
+    const key = `${activeChannelId}:${currentUserIdRef.current ?? 'anonymous'}`
+    const lastSentAt = lastTypingSentAtRef.current[key] ?? 0
+    if (now - lastSentAt < 2000) {
+      return
+    }
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return
+    }
+    socket.send(JSON.stringify({
+      type: 'typing.start',
+      data: {
+        channel_id: activeChannelId,
+        username: currentUser?.username ?? '',
+      },
+    }))
+    lastTypingSentAtRef.current[key] = now
+  }, [activeChannelId, currentUser?.username])
 
   const onSend = useCallback(
     async ({ content, files }: { content: string; files: File[] }): Promise<boolean> => {
@@ -968,14 +1195,27 @@ export const DashboardView: React.FC = () => {
           attachmentIds.push(...uploaded)
         }
 
-        const message = await sendMessage(activeChannelId, content, attachmentIds)
+        const message = await sendMessage(activeChannelId, content, attachmentIds, replyToMessage?.id)
+        const nextMessage = replyToMessage
+          ? {
+              ...message,
+              replyTo: {
+                messageId: replyToMessage.id,
+                authorName: replyToMessage.author,
+                authorColor: replyToMessage.authorColor,
+                content: replyToMessage.content,
+                hasAttachment: (replyToMessage.attachments ?? []).length > 0,
+              },
+            }
+          : message
         setMessagesByChannel((prev) => {
           const currentMessages = prev[activeChannelKey] ?? []
           return {
             ...prev,
-            [activeChannelKey]: [...currentMessages, message],
+            [activeChannelKey]: [...currentMessages, nextMessage],
           }
         })
+        setReplyToMessage(null)
         return true
       } catch (error) {
         setComposerError(error instanceof Error ? error.message : 'Failed to send message.')
@@ -985,7 +1225,7 @@ export const DashboardView: React.FC = () => {
         setUploadProgressByFile({})
       }
     },
-    [activeChannelId, activeChannelKey]
+    [activeChannelId, activeChannelKey, replyToMessage?.id]
   )
 
   const handleKeyDown = useCallback(
@@ -1047,13 +1287,70 @@ export const DashboardView: React.FC = () => {
   const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles
 
   const composerPlaceholder = `Message #${activeChannel?.name ?? 'general'}`
+  const typingUsers = Object.values(typingUsersByChannel[activeChannelId] ?? {})
 
   const removePendingFile = (index: number) => {
     setPendingFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))
   }
 
+  const handleMessageAction = async (action: 'reply' | 'edit' | 'delete' | 'more', message: ChatMessage) => {
+    if (action === 'reply') {
+      setReplyToMessage(message)
+      return
+    }
+    if (action === 'edit') {
+      setEditingMessageId(message.id)
+      setEditingDraft(message.content)
+      return
+    }
+    if (action === 'delete') {
+      const confirmed = window.confirm('Bạn có chắc muốn xoá tin nhắn này không?')
+      if (!confirmed) {
+        return
+      }
+      try {
+        await deleteMessage(message.id)
+      } catch {
+        return
+      }
+      setMessagesByChannel((prev) => ({
+        ...prev,
+        [activeChannelKey]: (prev[activeChannelKey] ?? []).filter((item) => item.id !== message.id),
+      }))
+    }
+  }
+
+  const saveEditedMessage = async () => {
+    if (!editingMessageId) {
+      return
+    }
+    const nextContent = editingDraft.trim()
+    if (!nextContent) {
+      return
+    }
+    try {
+      const updated = await updateMessage(editingMessageId, nextContent)
+      setMessagesByChannel((prev) => ({
+        ...prev,
+        [activeChannelKey]: (prev[activeChannelKey] ?? []).map((item) =>
+          item.id === editingMessageId
+            ? {
+                ...item,
+                content: updated.content,
+                editedAt: updated.editedAt ?? item.editedAt ?? updated.timestamp,
+              }
+            : item
+        ),
+      }))
+      setEditingMessageId(null)
+      setEditingDraft('')
+    } catch {
+      // no-op
+    }
+  }
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="relative h-full flex flex-col overflow-hidden">
       <div className="flex-none">
         <ChannelHeader
           channel={activeChannel}
@@ -1100,12 +1397,19 @@ export const DashboardView: React.FC = () => {
               (attachment) => attachment.type === 'file' || attachment.type === 'audio'
             )
             const reactions = msg.reactions ?? []
+            const hasPersonalMention = Boolean(
+              (currentUser?.username && msg.content.includes(`@${currentUser.username}`)) ||
+              msg.content.includes('@everyone')
+            )
 
             if (msg.startsGroup) {
               return (
                 <div
                   key={msg.id}
-                  className="relative group overflow-visible"
+                  className={cn(
+                    'relative group overflow-visible',
+                    hasPersonalMention ? 'border-l-2 border-indigo-500 pl-1' : ''
+                  )}
                 >
                   {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}
                   <div className="flex gap-3 px-2 py-1 rounded-md hover:bg-white/5">
@@ -1132,8 +1436,30 @@ export const DashboardView: React.FC = () => {
                         <span className="text-xs text-muted-foreground ml-2">
                           {msg.timestamp}
                         </span>
+                        {msg.editedAt && (
+                          <span className="text-xs text-muted-foreground ml-2">(đã chỉnh sửa)</span>
+                        )}
                       </div>
-                      <TextContent content={msg.content} className="text-foreground" />
+                      {editingMessageId === msg.id ? (
+                        <textarea
+                          value={editingDraft}
+                          onChange={(event) => setEditingDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault()
+                              void saveEditedMessage()
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault()
+                              setEditingMessageId(null)
+                              setEditingDraft('')
+                            }
+                          }}
+                          className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none"
+                        />
+                      ) : (
+                        <TextContent content={msg.content} className="text-foreground" />
+                      )}
                       {imageAttachments.length > 0 && <ImageAttachment attachments={imageAttachments} />}
                       {videoAttachments.map((attachment) => (
                         <VideoAttachment key={attachment.id} url={attachment.url} />
@@ -1176,12 +1502,13 @@ export const DashboardView: React.FC = () => {
                         </button>
                       )}
                     />
-                    {actionButtons.map(({ icon: Icon, label }) => (
+                    {actionButtons.map(({ icon: Icon, label, key }) => (
                       <Tooltip key={label}>
                         <TooltipTrigger asChild>
                           <button
                             className="cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150"
                             type="button"
+                            onClick={() => void handleMessageAction(key, msg)}
                           >
                             <Icon className="w-4 h-4" />
                           </button>
@@ -1197,10 +1524,32 @@ export const DashboardView: React.FC = () => {
             return (
               <div
                 key={msg.id}
-                className="relative group overflow-visible pl-[52px] py-0.5 rounded-md hover:bg-white/5"
+                className={cn(
+                  'relative group overflow-visible pl-[52px] py-0.5 rounded-md hover:bg-white/5',
+                  hasPersonalMention ? 'border-l-2 border-indigo-500' : ''
+                )}
               >
                 {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}
-                <TextContent content={msg.content} className="text-foreground" />
+                {editingMessageId === msg.id ? (
+                  <textarea
+                    value={editingDraft}
+                    onChange={(event) => setEditingDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        void saveEditedMessage()
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        setEditingMessageId(null)
+                        setEditingDraft('')
+                      }
+                    }}
+                    className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none"
+                  />
+                ) : (
+                  <TextContent content={msg.content} className="text-foreground" />
+                )}
                 {imageAttachments.length > 0 && <ImageAttachment attachments={imageAttachments} />}
                 {videoAttachments.map((attachment) => (
                   <VideoAttachment key={attachment.id} url={attachment.url} />
@@ -1240,12 +1589,13 @@ export const DashboardView: React.FC = () => {
                       </button>
                     )}
                   />
-                  {actionButtons.map(({ icon: Icon, label }) => (
+                  {actionButtons.map(({ icon: Icon, label, key }) => (
                     <Tooltip key={label}>
                       <TooltipTrigger asChild>
                         <button
                           className="cursor-pointer p-1.5 hover:bg-accent rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150"
                           type="button"
+                          onClick={() => void handleMessageAction(key, msg)}
                         >
                           <Icon className="w-4 h-4" />
                         </button>
@@ -1259,6 +1609,26 @@ export const DashboardView: React.FC = () => {
           })}
         </div>
       </section>
+
+      {newMessageCount > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
+          <button
+            type="button"
+            className="pointer-events-auto rounded-full bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white shadow-md"
+            onClick={() => {
+              const list = messageListRef.current
+              if (!list) {
+                return
+              }
+              list.scrollTop = list.scrollHeight
+              setNewMessageCount(0)
+              setIsNearBottom(true)
+            }}
+          >
+            ↓ {newMessageCount} tin nhắn mới
+          </button>
+        </div>
+      )}
 
       <footer className="flex-none mx-4 mb-4">
         <div
@@ -1326,6 +1696,27 @@ export const DashboardView: React.FC = () => {
             <p className="px-3 pb-2 text-xs text-red-400">{composerError}</p>
           )}
 
+          {replyToMessage && (
+            <div className="mx-3 mt-2 rounded-md border border-border bg-background/50 px-2 py-1">
+              <ReplyPreview
+                replyTo={{
+                  messageId: replyToMessage.id,
+                  authorName: replyToMessage.author,
+                  authorColor: replyToMessage.authorColor,
+                  content: replyToMessage.content,
+                  hasAttachment: (replyToMessage.attachments ?? []).length > 0,
+                }}
+              />
+              <button
+                type="button"
+                className="mt-1 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setReplyToMessage(null)}
+              >
+                Huỷ trả lời
+              </button>
+            </div>
+          )}
+
           <div className="flex items-end gap-2 px-3">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1383,6 +1774,11 @@ export const DashboardView: React.FC = () => {
               />
             </div>
           </div>
+          {typingUsers.length > 0 && (
+            <p className="px-3 pb-2 text-xs italic text-muted-foreground">
+              {typingUsers.join(', ')} đang nhắn tin...
+            </p>
+          )}
         </div>
       </footer>
     </div>

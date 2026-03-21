@@ -23,6 +23,7 @@ const pickColor = (id) => {
 const mapServer = (server) => ({
     id: server.id,
     name: server.name,
+    ownerId: server.owner_id,
     initials: deriveInitials(server.name),
     color: pickColor(server.id),
     iconUrl: server.icon_url ?? undefined,
@@ -48,5 +49,10 @@ export const createServer = async (body) => {
 };
 export const joinServer = async (serverId) => {
     await apiClient.post(`/api/v1/servers/${serverId}/join`);
+};
+export const getInvitePreview = async (code) => apiClient.get(`/api/v1/invites/${encodeURIComponent(code)}`);
+export const joinByInviteCode = async (code) => {
+    const server = await apiClient.post(`/api/v1/invites/${encodeURIComponent(code)}/join`);
+    return mapServer(server);
 };
 //# sourceMappingURL=servers.js.map

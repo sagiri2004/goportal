@@ -3,7 +3,7 @@ const mapChannel = (channel) => ({
     id: channel.id,
     name: channel.name,
     type: channel.type === 'VOICE' ? 'voice' : 'text',
-    unread: 0, // TODO: remove when backend implements unread count
+    unread: channel.unread_count ?? 0,
 });
 const toCategories = (channels) => {
     const sorted = [...channels].sort((left, right) => left.position - right.position);
@@ -40,4 +40,9 @@ export const createChannel = async (serverId, body) => {
     const channel = await apiClient.post(`/api/v1/servers/${serverId}/channels`, body);
     return mapChannel(channel);
 };
+export const markChannelRead = async (channelId) => {
+    await apiClient.post(`/api/v1/channels/${channelId}/read`, {});
+};
+export const getChannelNotificationSetting = async (channelId) => apiClient.get(`/api/v1/channels/${channelId}/notification-settings`);
+export const updateChannelNotificationSetting = async (channelId, body) => apiClient.put(`/api/v1/channels/${channelId}/notification-settings`, body);
 //# sourceMappingURL=channels.js.map

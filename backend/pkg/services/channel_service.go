@@ -18,4 +18,7 @@ type ChannelService interface {
 	UpsertOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string, allowBits, denyBits int64) error
 	DeleteOverwrite(ctx context.Context, actorID, channelID, subjectType, subjectID string) error
 	ListOverwrites(ctx context.Context, actorID, channelID string) ([]models.ChannelPermissionOverwrite, error)
+	MarkRead(ctx context.Context, actorID, channelID string) error
+	GetNotificationSetting(ctx context.Context, actorID, channelID string) (*models.ChannelNotificationSetting, error)
+	UpdateNotificationSetting(ctx context.Context, actorID, channelID, level string, mutedUntil *int64) (*models.ChannelNotificationSetting, error)
 }

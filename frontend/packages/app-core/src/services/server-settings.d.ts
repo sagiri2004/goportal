@@ -44,12 +44,8 @@ export declare const createServerInvite: (serverId: string, body: {
     max_uses?: number;
     expires_at?: number;
 }) => Promise<{
-    id: string;
-    server_id: string;
-    inviter_id: string;
-    code: string;
-    max_uses: number;
-    uses: number;
+    invite_code: string;
+    invite_url: string;
     expires_at?: number;
 }>;
 export declare const uploadServerMedia: (file: File) => Promise<string>;
