@@ -1277,9 +1277,231 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"emoji\": \"\ud83d\udd25\"\n}"
+              "raw": "{\n  \"emoji\": \"🔥\"\n}"
             },
             "description": "Toggle reaction for current user on target message."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Voice & Recording",
+      "item": [
+        {
+          "name": "Generate Voice Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/voice/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "voice",
+                "token"
+              ]
+            },
+            "description": "Generate a LiveKit access token for current user in a voice channel."
+          }
+        },
+        {
+          "name": "Start Recording",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/recording/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "recording",
+                "start"
+              ]
+            },
+            "description": "Start room composite recording. Requires MANAGE_CHANNELS."
+          }
+        },
+        {
+          "name": "Stop Recording",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/recording/stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "recording",
+                "stop"
+              ]
+            },
+            "description": "Stop active recording and persist final metadata."
+          }
+        },
+        {
+          "name": "List Recordings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/recordings?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "recordings"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List channel recording rows with pagination."
+          }
+        },
+        {
+          "name": "Start RTMP Stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/stream/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "stream",
+                "start"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rtmp_url\": \"rtmp://a.rtmp.youtube.com/live2/<stream-key>\"\n}"
+            },
+            "description": "Start RTMP stream output for channel. Requires MANAGE_CHANNELS."
+          }
+        },
+        {
+          "name": "Stop RTMP Stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/channels/{{channel_id}}/stream/stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "{{channel_id}}",
+                "stream",
+                "stop"
+              ]
+            },
+            "description": "Stop active RTMP stream for channel."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "LiveKit Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer <livekit-signature-token>"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks/livekit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "livekit"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"egress_ended\",\n  \"egress_info\": {\n    \"egress_id\": \"EG_xxx\"\n  }\n}"
+            },
+            "description": "Backend-to-backend callback endpoint for LiveKit egress lifecycle events."
           }
         }
       ]

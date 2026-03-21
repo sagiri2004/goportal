@@ -3,6 +3,7 @@ package containers
 import (
 	"sync"
 
+	"github.com/sagiri2004/goportal/global"
 	pkgglobal "github.com/sagiri2004/goportal/pkg/global"
 	"github.com/sagiri2004/goportal/pkg/services"
 	svcimpl "github.com/sagiri2004/goportal/pkg/services/impl"
@@ -23,12 +24,18 @@ var (
 	notificationSvc     services.NotificationService
 	storageSvcOnce      sync.Once
 	storageSvc          services.StorageService
+	livekitSvcOnce      sync.Once
+	livekitSvc          services.LiveKitService
+	egressSvcOnce       sync.Once
+	egressSvc           services.EgressService
+	voiceSvcOnce        sync.Once
+	voiceSvc            services.VoiceService
 )
 
 // UserService returns the singleton UserService instance.
 func UserService() services.UserService {
 	userSvcOnce.Do(func() {
-		userSvc = svcimpl.NewUserService(UserRepository())
+		userSvc = svcimpl.NewUserService(UserRepository(), StorageService())
 	})
 	return userSvc
 }
@@ -42,7 +49,7 @@ func SocialService() services.SocialService {
 
 func ServerService() services.ServerService {
 	serverSvcOnce.Do(func() {
-		serverSvc = svcimpl.NewServerService(UserRepository(), ServerRepository())
+		serverSvc = svcimpl.NewServerService(UserRepository(), ServerRepository(), MessageRepository(), StorageService())
 	})
 	return serverSvc
 }
@@ -61,6 +68,7 @@ func MessageService() services.MessageService {
 			ServerRepository(),
 			ChannelRepository(),
 			UserRepository(),
+			StorageService(),
 			pkgglobal.Publisher,
 		)
 	})
@@ -76,8 +84,39 @@ func NotificationService() services.NotificationService {
 
 func StorageService() services.StorageService {
 	storageSvcOnce.Do(func() {
-		provider := svcimpl.NewLocalStorageProvider("uploads", "/uploads")
+		cfg := global.Config.Cloudinary
+		provider, err := svcimpl.NewCloudinaryStorageProvider(cfg.CloudName, cfg.APIKey, cfg.APISecret, cfg.Folder)
+		if err != nil || cfg.CloudName == "" || cfg.APIKey == "" || cfg.APISecret == "" {
+			provider = svcimpl.NewLocalStorageProvider("uploads", "/uploads")
+		}
 		storageSvc = svcimpl.NewStorageService(provider)
 	})
 	return storageSvc
+}
+
+func LiveKitService() services.LiveKitService {
+	livekitSvcOnce.Do(func() {
+		livekitSvc = svcimpl.NewLiveKitService()
+	})
+	return livekitSvc
+}
+
+func EgressService() services.EgressService {
+	egressSvcOnce.Do(func() {
+		egressSvc = svcimpl.NewEgressService()
+	})
+	return egressSvc
+}
+
+func VoiceService() services.VoiceService {
+	voiceSvcOnce.Do(func() {
+		voiceSvc = svcimpl.NewVoiceService(
+			ServerRepository(),
+			ChannelRepository(),
+			RecordingRepository(),
+			LiveKitService(),
+			EgressService(),
+		)
+	})
+	return voiceSvc
 }

@@ -13,7 +13,7 @@ type CreateServerModalProps = {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   defaultServerName: string
-  onCreate: (payload: CreateServerRequest) => Promise<void>
+  onCreate: (payload: CreateServerRequest, iconFile: File | null) => Promise<void>
 }
 
 export const CreateServerModal: React.FC<CreateServerModalProps> = ({
@@ -29,6 +29,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
     is_public: true,
   })
   const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null)
+  const [iconFile, setIconFile] = useState<File | null>(null)
   const [nameError, setNameError] = useState<string>()
   const [submitError, setSubmitError] = useState<string>()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -45,6 +46,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
       is_public: true,
     })
     setIconPreviewUrl(null)
+    setIconFile(null)
     setNameError(undefined)
     setSubmitError(undefined)
     setIsSubmitting(false)
@@ -94,6 +96,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
     if (iconPreviewUrl) {
       URL.revokeObjectURL(iconPreviewUrl)
     }
+    setIconFile(file)
     setIconPreviewUrl(URL.createObjectURL(file))
   }
 
@@ -112,7 +115,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
       await onCreate({
         name: form.name.trim(),
         is_public: form.is_public,
-      })
+      }, iconFile)
       onOpenChange(false)
     } catch (error) {
       const message =

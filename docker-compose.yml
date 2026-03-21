@@ -96,6 +96,39 @@ services:
     networks:
       - goportal-net
 
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: goportal-livekit
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50100-50200:50100-50200/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+    networks:
+      - goportal-net
+
+  livekit-egress:
+    image: livekit/egress:latest
+    container_name: goportal-livekit-egress
+    restart: unless-stopped
+    command: ["--config", "/etc/egress/egress.yaml"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    volumes:
+      - ./egress.yaml:/etc/egress/egress.yaml:ro
+      - ./livekit-output:/out
+    networks:
+      - goportal-net
+
 networks:
   goportal-net:
     driver: bridge

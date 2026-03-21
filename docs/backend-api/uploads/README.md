@@ -2,7 +2,7 @@
 
 Base path: `/api/v1/upload`
 
-This router handles message attachment uploads.
+This router handles generic media uploads (avatars, server media, role icons, message attachments).
 
 ## Features
 

@@ -19,6 +19,7 @@
       "id": "51597501-fcd3-4fe1-9a43-d2264a6446f0",
       "server_id": "d65bdaa2-0805-4067-b101-059ea536a422",
       "name": "owner",
+      "icon_url": null,
       "color": "#ED4245",
       "position": 100,
       "is_everyone": false,
@@ -58,6 +59,7 @@
 ```json
 {
   "name": "Designer",
+  "icon_url": "https://res.cloudinary.com/<cloud>/image/upload/v1742165419/goportal/roles/designer.png",
   "color": "#00AAFF",
   "permissions": ["VIEW_CHANNEL", "SEND_MESSAGES"]
 }
@@ -76,6 +78,7 @@
     "id": "b1c369b3-2b86-4ffc-a10b-86d57dd59553",
     "server_id": "d65bdaa2-0805-4067-b101-059ea536a422",
     "name": "Designer",
+    "icon_url": "https://res.cloudinary.com/<cloud>/image/upload/v1742165419/goportal/roles/designer.png",
     "color": "#00AAFF",
     "position": 81,
     "is_everyone": false,
@@ -106,6 +109,7 @@
 ```json
 {
   "name": "Designer+",
+  "icon_url": "",
   "color": "#FF5500",
   "permissions": ["VIEW_CHANNEL"]
 }
@@ -124,6 +128,7 @@
     "id": "b1c369b3-2b86-4ffc-a10b-86d57dd59553",
     "server_id": "d65bdaa2-0805-4067-b101-059ea536a422",
     "name": "Designer+",
+    "icon_url": null,
     "color": "#FF5500",
     "position": 81,
     "is_everyone": false,
@@ -176,4 +181,3 @@ Use these exact strings:
 - `KICK_MEMBERS`
 - `BAN_MEMBERS`
 - `APPROVE_MEMBERS`
-

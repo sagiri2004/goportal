@@ -61,7 +61,7 @@
 - Method: `PATCH`
 - Path: `/api/v1/users/me`
 - Auth: `Bearer token`
-- Description: Update the current user's profile fields. In Phase 1, only `username` is updatable.
+- Description: Update current user profile fields (`username`, `avatar_url`).
 
 #### Request
 
@@ -76,7 +76,8 @@
 
 ```json
 {
-  "username": "john-updated"
+  "username": "john-updated",
+  "avatar_url": "https://res.cloudinary.com/<cloud>/image/upload/v1742165419/goportal/avatars/user.png"
 }
 ```
 
@@ -126,4 +127,5 @@
 #### Frontend Notes
 
 - `username` minimum length is 3.
+- `avatar_url` accepts empty string to clear avatar.
 - Show conflict-specific UI message when code is `USERNAME_EXISTS`.

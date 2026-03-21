@@ -40,8 +40,7 @@ const getGridLayout = (count: number) => {
 
 export const VoiceChannelView: React.FC = () => {
   const { activeChannelId } = useOutletContext<ShellContext>()
-  const [showThread, setShowThread] = useState(true)
-  const [showMemberOverlay, setShowMemberOverlay] = useState(false)
+  const [showThread, setShowThread] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [isCameraOn, setIsCameraOn] = useState(false)
 
@@ -70,16 +69,16 @@ export const VoiceChannelView: React.FC = () => {
       <div className="flex-1 min-w-0 overflow-hidden">
         <PanelGroup
           {...({ autoSaveId: 'voice-thread-panel' } as any)}
-          orientation="horizontal"
+          direction="horizontal"
           defaultLayout={savedLayout}
-          onLayoutChanged={(layout) => {
+          onLayout={(layout: number[]) => {
             if (typeof window === 'undefined') return
             window.localStorage.setItem('voice-thread-panel', JSON.stringify(layout))
           }}
           className="h-full w-full min-w-0 overflow-hidden"
         >
           <Panel id="voice-main" minSize={35} maxSize={120} className="overflow-hidden">
-            <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[hsl(240,10%,6%)]">
+            <div className="group/voice relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[hsl(240,10%,6%)]">
               <div className="flex h-12 flex-shrink-0 items-center justify-between px-4">
                 <div className="flex min-w-0 items-center gap-2">
                   <Volume2 className="h-4 w-4 text-muted-foreground" />
@@ -90,13 +89,13 @@ export const VoiceChannelView: React.FC = () => {
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => setShowMemberOverlay((v) => !v)}
+                        onClick={() => setShowThread((v) => !v)}
                         className="flex h-8 w-8 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         <Users className="h-4 w-4" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>Danh sách thành viên</TooltipContent>
+                    <TooltipContent>Mở bảng bên phải</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -134,22 +133,6 @@ export const VoiceChannelView: React.FC = () => {
                   </Tooltip>
                 </div>
               </div>
-
-              {showMemberOverlay && (
-                <div className="absolute right-4 top-14 z-20 w-56 rounded-md border border-border bg-[hsl(240,6%,10%)] p-2 shadow-lg">
-                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</p>
-                  <div className="space-y-1">
-                    {participants.map((participant) => (
-                      <div key={participant.id} className="flex items-center gap-2 rounded px-1.5 py-1">
-                        <div className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold text-white', participant.avatarColor)}>
-                          {participant.name[0]?.toUpperCase() ?? '?'}
-                        </div>
-                        <p className="truncate text-sm text-foreground">{participant.name}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="flex-1 min-h-0 overflow-hidden p-4">
                 <div
@@ -226,7 +209,8 @@ export const VoiceChannelView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex h-16 flex-shrink-0 items-center justify-center gap-2">
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+                <div className="pointer-events-auto flex h-16 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 backdrop-blur-sm opacity-0 translate-y-2 transition-all duration-200 hover:bg-black/45 group-hover/voice:translate-y-0 group-hover/voice:opacity-100 focus-within:translate-y-0 focus-within:opacity-100">
                 <div className="flex items-center overflow-hidden rounded-md bg-[hsl(240,5%,18%)]">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -323,6 +307,7 @@ export const VoiceChannelView: React.FC = () => {
                   </TooltipTrigger>
                   <TooltipContent>Thay đổi bố cục</TooltipContent>
                 </Tooltip>
+                </div>
               </div>
             </div>
           </Panel>
@@ -349,7 +334,7 @@ export const VoiceChannelView: React.FC = () => {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
-                    <ThreadPanelChat channelName={channelName} />
+                    <ThreadPanelChat channelName={channelName} channelId={activeChannelId} />
                   </aside>
                 </div>
               </Panel>

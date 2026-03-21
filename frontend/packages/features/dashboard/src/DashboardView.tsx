@@ -7,6 +7,7 @@ import {
   Gift,
   Hash,
   Image,
+  Loader2,
   MoreHorizontal,
   Plus,
   Reply,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
-import { getMessages, sendMessage } from '@goportal/app-core'
+import { getMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core'
 import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
 import type { Message as ChatMessage } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
@@ -58,6 +59,9 @@ export const DashboardView: React.FC = () => {
   const inputRef = useRef<HTMLDivElement>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [composerHasContent, setComposerHasContent] = useState(false)
+  const [uploadProgressByFile, setUploadProgressByFile] = useState<Record<string, number>>({})
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false)
+  const [composerError, setComposerError] = useState<string | null>(null)
   const embedCacheRef = useRef<Record<string, LinkEmbedData | null>>({})
   const embedInFlightRef = useRef<Record<string, boolean>>({})
   const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
@@ -367,42 +371,45 @@ export const DashboardView: React.FC = () => {
   }, [])
 
   const onSend = useCallback(
-    async ({ content, files }: { content: string; files: File[] }) => {
+    async ({ content, files }: { content: string; files: File[] }): Promise<boolean> => {
       if (!activeChannelId) {
-        return
+        return false
       }
 
-      const message = await sendMessage(activeChannelId, content)
+      try {
+        setComposerError(null)
+        const attachmentIds: string[] = []
 
-      setMessagesByChannel((prev) => {
-        const currentMessages = prev[activeChannelKey] ?? []
-        return {
-          ...prev,
-          [activeChannelKey]: [
-            ...currentMessages,
-            {
-              ...message,
-              // TODO: remove when backend attachment upload flow is integrated with composer
-              attachments: files.length > 0
-                ? files.map((file, index) => ({
-                    id: `upload-${Date.now()}-${index}`,
-                    type: file.type.startsWith('image/')
-                      ? ('image' as const)
-                      : file.type.startsWith('video/')
-                        ? ('video' as const)
-                        : file.type.startsWith('audio/')
-                          ? ('audio' as const)
-                          : ('file' as const),
-                    url: URL.createObjectURL(file),
-                    filename: file.name,
-                    filesize: file.size,
-                    mimeType: file.type || 'application/octet-stream',
-                  }))
-                : message.attachments,
-            },
-          ],
+        if (files.length > 0) {
+          setIsUploadingFiles(true)
+          const uploaded = await Promise.all(
+            files.map(async (file, index) => {
+              const uploadKey = `${file.name}-${file.size}-${index}`
+              const result = await uploadMessageAttachment(file, (progress) => {
+                setUploadProgressByFile((prev) => ({ ...prev, [uploadKey]: progress }))
+              })
+              return result.attachmentId
+            })
+          )
+          attachmentIds.push(...uploaded)
         }
-      })
+
+        const message = await sendMessage(activeChannelId, content, attachmentIds)
+        setMessagesByChannel((prev) => {
+          const currentMessages = prev[activeChannelKey] ?? []
+          return {
+            ...prev,
+            [activeChannelKey]: [...currentMessages, message],
+          }
+        })
+        return true
+      } catch (error) {
+        setComposerError(error instanceof Error ? error.message : 'Failed to send message.')
+        return false
+      } finally {
+        setIsUploadingFiles(false)
+        setUploadProgressByFile({})
+      }
     },
     [activeChannelId, activeChannelKey]
   )
@@ -415,12 +422,14 @@ export const DashboardView: React.FC = () => {
         if (!content && pendingFiles.length === 0) {
           return
         }
-        await onSend({ content, files: pendingFiles })
-        if (inputRef.current) {
-          inputRef.current.innerText = ''
+        const sent = await onSend({ content, files: pendingFiles })
+        if (sent) {
+          if (inputRef.current) {
+            inputRef.current.innerText = ''
+          }
+          setPendingFiles([])
+          setComposerHasContent(false)
         }
-        setPendingFiles([])
-        setComposerHasContent(false)
       }
     },
     [onSend, pendingFiles]
@@ -461,7 +470,7 @@ export const DashboardView: React.FC = () => {
     noKeyboard: true,
   })
 
-  const canSend = composerHasContent || pendingFiles.length > 0
+  const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles
 
   const composerPlaceholder = `Message #${activeChannel?.name ?? 'general'}`
 
@@ -711,6 +720,7 @@ export const DashboardView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => removePendingFile(index)}
+                    disabled={isUploadingFiles}
                     className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                   >
                     <X className="h-2.5 w-2.5" />
@@ -720,6 +730,28 @@ export const DashboardView: React.FC = () => {
             </div>
           )}
 
+          {isUploadingFiles && (
+            <div className="px-3 pb-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Uploading attachments...</span>
+              </div>
+              {pendingFiles.map((file, index) => {
+                const key = `${file.name}-${file.size}-${index}`
+                const progress = uploadProgressByFile[key] ?? 0
+                return (
+                  <p key={key} className="truncate">
+                    {file.name}: {progress}%
+                  </p>
+                )
+              })}
+            </div>
+          )}
+
+          {composerError && (
+            <p className="px-3 pb-2 text-xs text-red-400">{composerError}</p>
+          )}
+
           <div className="flex items-end gap-2 px-3">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -727,6 +759,7 @@ export const DashboardView: React.FC = () => {
                   className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
                   type="button"
                   onClick={open}
+                  disabled={isUploadingFiles}
                 >
                   <Plus className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                 </button>

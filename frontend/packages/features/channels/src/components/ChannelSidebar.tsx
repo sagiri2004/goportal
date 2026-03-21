@@ -28,8 +28,10 @@ import {
   LogOut,
   Zap,
   Monitor,
-  MoreHorizontal,
+  Activity,
+  MonitorOff,
   PhoneOff,
+  Sparkles,
   Wifi,
 } from 'lucide-react'
 
@@ -60,8 +62,14 @@ type ChannelSidebarProps = {
   onInviteMember?: () => void
   onOpenServerSettings?: () => void
   onOpenServerMembers?: () => void
-  isInVoiceChannel?: boolean
-  activeVoiceChannelName?: string
+  onOpenUserSettings?: () => void
+  voiceState?: {
+    channelId: string
+    channelName: string
+    serverId: string
+    serverName: string
+  } | null
+  onLeaveVoiceChannel?: () => void
 }
 
 type ChannelMember = {
@@ -126,7 +134,8 @@ const ChannelRow: React.FC<{
   channel: SidebarChannel
   active: boolean
   onSelect: () => void
-}> = ({ channel, active, onSelect }) => {
+  onInviteMember: () => void
+}> = ({ channel, active, onSelect, onInviteMember }) => {
   const unreadCount = typeof channel.unread === 'number' ? channel.unread : 0
   const hasUnread = unreadCount > 0
   const isVoice = channel.type === 'voice'
@@ -168,9 +177,16 @@ const ChannelRow: React.FC<{
           <div className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onInviteMember()
+                  }}
+                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]"
+                >
                   <UserPlus className="h-[14px] w-[14px]" />
-                </span>
+                </button>
               </TooltipTrigger>
               <TooltipContent>Invite</TooltipContent>
             </Tooltip>
@@ -246,73 +262,168 @@ const VoiceActivityRow: React.FC<{
   )
 }
 
-const VoiceConnectedPanel: React.FC<{
-  channelName: string
-  serverName: string
-}> = ({ channelName, serverName }) => {
+const UserPanel: React.FC<{
+  voiceState?: {
+    channelId: string
+    channelName: string
+    serverId: string
+    serverName: string
+  } | null
+  onLeaveVoiceChannel: () => void
+  onOpenUserSettings?: () => void
+}> = ({ voiceState, onLeaveVoiceChannel, onOpenUserSettings }) => {
   const [muted, setMuted] = useState(false)
   const [deafened, setDeafened] = useState(false)
-  const [sharing, setSharing] = useState(false)
+  const [isScreenShareOff, setIsScreenShareOff] = useState(false)
+  const [isVoiceActive, setIsVoiceActive] = useState(false)
+  const isInVoice = Boolean(voiceState)
 
   return (
-    <div className="bg-[hsl(240,7%,7%)] px-2 pb-1.5 pt-1.5">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="mb-0.5 flex items-center gap-1.5">
-            <Wifi className="h-3.5 w-3.5 text-green-500" />
-            <p className="text-xs font-semibold text-green-400">Đã Kết Nối Giọng Nói</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
-        >
-          <PhoneOff className="h-4 w-4" />
-        </button>
-      </div>
-      <p className="mb-1 truncate text-xs text-muted-foreground">#{channelName} / {serverName}</p>
+    <div className={`bg-[hsl(240,7%,7%)] px-2 transition-all duration-200 ${isInVoice ? 'py-2' : 'h-[52px] py-0'}`}>
+      {isInVoice && voiceState ? (
+        <>
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <Wifi className="h-3.5 w-3.5 text-green-500" />
+                <p className="text-xs font-semibold text-green-400">Đã Kết Nối Giọng Nói</p>
+              </div>
+              <p className="truncate text-xs text-muted-foreground">
+                {voiceState.channelName} / {voiceState.serverName}
+              </p>
+            </div>
 
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => setMuted((v) => !v)}
-          className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-            muted
-              ? 'text-red-400 hover:bg-red-500/20'
-              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
-          }`}
-        >
-          <Mic className="h-4 w-4" />
-          {muted && <span className="absolute h-[2px] w-5 rotate-[-35deg] bg-red-400" />}
-        </button>
-        <button
-          type="button"
-          onClick={() => setDeafened((v) => !v)}
-          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-            deafened
-              ? 'text-red-400 hover:bg-red-500/20'
-              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
-          }`}
-        >
-          <Headphones className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setSharing((v) => !v)}
-          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-            sharing
-              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/25'
-              : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
-          }`}
-        >
-          <Monitor className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-accent hover:text-[hsl(0,0%,96%)]"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-accent hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Activity className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Tín hiệu</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onLeaveVoiceChannel}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                  >
+                    <PhoneOff className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Ngắt kết nối</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+
+          <div className="mb-2 flex items-center gap-1">
+            {[
+              { label: 'Tắt chia sẻ màn hình', icon: MonitorOff, onClick: () => setIsScreenShareOff((v) => !v), active: isScreenShareOff },
+              { label: 'Hoạt động', icon: Monitor, onClick: () => setIsVoiceActive((v) => !v), active: isVoiceActive },
+              { label: 'Người tham gia', icon: Users },
+              { label: 'Hiệu ứng', icon: Sparkles },
+            ].map(({ label, icon: Icon, onClick, active }) => (
+              <Tooltip key={label}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onClick}
+                    className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                      active
+                        ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/25'
+                        : 'text-[hsl(0,0%,70%)] hover:bg-accent hover:text-[hsl(0,0%,96%)]'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{label}</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      <div className={`flex items-center justify-between ${isInVoice ? '' : 'h-[52px]'}`}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
+            >
+              <div className="relative h-8 w-8 flex-shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                  <span className="text-xs font-bold text-accent-foreground">Y</span>
+                </div>
+                <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
+                {isInVoice && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[hsl(240,7%,7%)] bg-green-400" />
+                )}
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
+                  You
+                </p>
+                <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
+              </div>
+            </button>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-40">
+            <ContextMenuItem>Log out</ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setMuted((v) => !v)}
+                className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                  muted
+                    ? 'text-red-400 hover:bg-red-500/20'
+                    : 'text-[hsl(0,0%,70%)] hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]'
+                }`}
+              >
+                <Mic className="h-4 w-4" />
+                {muted && <span className="pointer-events-none absolute h-[2px] w-5 rotate-[-35deg] bg-red-400" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Mic</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setDeafened((v) => !v)}
+                className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                  deafened
+                    ? 'text-red-400 hover:bg-red-500/20'
+                    : 'text-[hsl(0,0%,70%)] hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]'
+                }`}
+              >
+                <Headphones className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Headphones</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onOpenUserSettings}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </div>
   )
@@ -336,8 +447,9 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onInviteMember = () => {},
   onOpenServerSettings = () => {},
   onOpenServerMembers = () => {},
-  isInVoiceChannel = false,
-  activeVoiceChannelName = 'afk-base',
+  onOpenUserSettings,
+  voiceState = null,
+  onLeaveVoiceChannel = () => {},
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
@@ -445,11 +557,19 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
               type="button"
               className="flex h-12 w-full items-center gap-3 border-b border-[hsl(240,4%,13%)] px-3 transition-colors hover:bg-white/[0.03]"
             >
-              <div
-                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${serverColor} text-sm font-bold text-white`}
-              >
-                {initials}
-              </div>
+              {serverIconUrl ? (
+                <img
+                  src={serverIconUrl}
+                  alt={serverName}
+                  className="h-8 w-8 flex-shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <div
+                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${serverColor} text-sm font-bold text-white`}
+                >
+                  {initials}
+                </div>
+              )}
               <span className="flex-1 truncate text-left text-[15px] font-semibold text-[hsl(0,0%,96%)]">
                 {serverName}
               </span>
@@ -458,8 +578,11 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
           </DropdownMenuTrigger>
         )}
         <DropdownMenuContent className="w-56" align="start" side="bottom">
+          <DropdownMenuItem onClick={onCreateChannel}>
+            <Plus className="mr-2 h-4 w-4" /> Tạo Kênh
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onInviteMember}>
-            <UserPlus className="mr-2 h-4 w-4" /> Invite People
+            <UserPlus className="mr-2 h-4 w-4" /> Lời mời
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenServerSettings}>
             <Settings className="mr-2 h-4 w-4" /> Server Settings
@@ -502,6 +625,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                             channel={ch}
                             active={ch.id === activeChannelId}
                             onSelect={() => onSelectChannel(ch.id, ch.type)}
+                            onInviteMember={onInviteMember}
                           />
                           {ch.type === 'voice' && <VoiceActivityRow channel={ch} />}
                         </React.Fragment>
@@ -537,6 +661,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                     }}
                     active={channel.id === activeChannelId}
                     onSelect={() => onSelectChannel(channel.id, 'text')}
+                    onInviteMember={onInviteMember}
                   />
                 ))}
               </div>
@@ -569,6 +694,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                       }}
                       active={channel.id === activeChannelId}
                       onSelect={() => onSelectChannel(channel.id, 'voice')}
+                      onInviteMember={onInviteMember}
                     />
                     <VoiceActivityRow
                       channel={{
@@ -589,136 +715,11 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         )}
       </div>
 
-      {isInVoiceChannel ? (
-        <>
-          <VoiceConnectedPanel channelName={activeVoiceChannelName} serverName={serverName} />
-          <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
-            <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
-                >
-                  <div className="relative h-8 w-8 flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
-                      <span className="text-xs font-bold text-accent-foreground">Y</span>
-                    </div>
-                    <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
-                  </div>
-                  <div className="min-w-0 text-left">
-                    <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
-                      You
-                    </p>
-                    <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
-                  </div>
-                </button>
-              </ContextMenuTrigger>
-              <ContextMenuContent className="w-40">
-                <ContextMenuItem>Log out</ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-
-            <div className="flex items-center gap-0.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                  >
-                    <Mic className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Mic</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                  >
-                    <Headphones className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Headphones</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Settings</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="flex h-[52px] items-center justify-between bg-[hsl(240,7%,7%)] px-2">
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
-              >
-                <div className="relative h-8 w-8 flex-shrink-0">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
-                    <span className="text-xs font-bold text-accent-foreground">Y</span>
-                  </div>
-                  <span className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-[hsl(240,7%,7%)] bg-[#23a55a]" />
-                </div>
-                <div className="min-w-0 text-left">
-                  <p className="truncate text-[13px] font-semibold leading-4 text-[hsl(0,0%,96%)]">
-                    You
-                  </p>
-                  <p className="truncate text-[11px] leading-3 text-[hsl(0,0%,60%)]">Online</p>
-                </div>
-              </button>
-            </ContextMenuTrigger>
-            <ContextMenuContent className="w-40">
-              <ContextMenuItem>Log out</ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-
-          <div className="flex items-center gap-0.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                >
-                  <Mic className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Mic</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                >
-                  <Headphones className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Headphones</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Settings</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      )}
+      <UserPanel
+        voiceState={voiceState}
+        onLeaveVoiceChannel={onLeaveVoiceChannel}
+        onOpenUserSettings={onOpenUserSettings}
+      />
     </aside>
   )
 }

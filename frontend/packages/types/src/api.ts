@@ -48,7 +48,8 @@ export type AuthErrorCode = typeof AUTH_ERROR_CODES[keyof typeof AUTH_ERROR_CODE
 // USERS
 // ---------------------------------------------------------------------------
 export type UpdateProfileRequest = {
-  username: string   // min 3 chars
+  username?: string   // min 3 chars
+  avatar_url?: string
 }
 
 export const USER_ERROR_CODES = {
@@ -226,6 +227,7 @@ export type RoleDTO = {
   id:          string
   server_id:   string
   name:        string
+  icon_url?:   string | null
   color:       string
   position:    number
   is_everyone: boolean
@@ -234,12 +236,14 @@ export type RoleDTO = {
 
 export type CreateRoleRequest = {
   name:        string
+  icon_url?:   string
   color:       string
   permissions: string[]
 }
 
 export type UpdateRoleRequest = {
   name?:       string
+  icon_url?:   string
   color?:      string
   permissions?: string[]
 }
@@ -303,7 +307,8 @@ export type InviteErrorCode = typeof INVITE_ERROR_CODES[keyof typeof INVITE_ERRO
 // UPLOADS
 // ---------------------------------------------------------------------------
 export type UploadResponseDTO = {
-  attachment_id: string
+  attachment_id?: string
+  media_type: string
   url:           string
   file_name:     string
   file_type:     string

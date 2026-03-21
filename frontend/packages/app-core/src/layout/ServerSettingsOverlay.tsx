@@ -14,6 +14,8 @@ import {
   updateServerMemberRoles,
   updateServerProfile,
   uploadServerMedia,
+  uploadServerBanner,
+  uploadRoleIcon,
   type ServerMemberWithRoles,
 } from '../services'
 
@@ -122,13 +124,15 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null)
   const [editorTab, setEditorTab] = useState<'display' | 'permissions' | 'links' | 'members'>('display')
   const [rolePermissionSearch, setRolePermissionSearch] = useState('')
-  const [roleDraft, setRoleDraft] = useState<{ name: string; color: string; permissions: string[] } | null>(null)
+  const [roleDraft, setRoleDraft] = useState<{ name: string; iconUrl: string | null; color: string; permissions: string[] } | null>(null)
   const [isSavingRole, setIsSavingRole] = useState(false)
+  const [isUploadingRoleIcon, setIsUploadingRoleIcon] = useState(false)
   const [roleSaveError, setRoleSaveError] = useState<string | null>(null)
   const [roleFormError, setRoleFormError] = useState<string | null>(null)
   const [isCreatingRole, setIsCreatingRole] = useState(false)
   const iconInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
+  const roleIconInputRef = useRef<HTMLInputElement>(null)
 
   const isDirty =
     name.trim() !== initialState.name ||
@@ -190,7 +194,12 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
     }
     const permsA = [...activeRole.permissions].sort().join('|')
     const permsB = [...roleDraft.permissions].sort().join('|')
-    return activeRole.name !== roleDraft.name || activeRole.color.toLowerCase() !== roleDraft.color.toLowerCase() || permsA !== permsB
+    return (
+      activeRole.name !== roleDraft.name ||
+      (activeRole.icon_url ?? null) !== (roleDraft.iconUrl ?? null) ||
+      activeRole.color.toLowerCase() !== roleDraft.color.toLowerCase() ||
+      permsA !== permsB
+    )
   }, [activeRole, roleDraft])
 
   useEffect(() => {
@@ -296,6 +305,7 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
     }
     setRoleDraft({
       name: activeRole.name,
+      iconUrl: activeRole.icon_url ?? null,
       color: activeRole.color,
       permissions: [...activeRole.permissions],
     })
@@ -315,7 +325,7 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
       setIsUploadingBanner(true)
     }
     try {
-      const url = await uploadServerMedia(file)
+      const url = type === 'icon' ? await uploadServerMedia(file) : await uploadServerBanner(file)
       if (type === 'icon') {
         setIconUrl(url)
       } else {
@@ -444,6 +454,7 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
     if (!activeRole) return
     setRoleDraft({
       name: activeRole.name,
+      iconUrl: activeRole.icon_url ?? null,
       color: activeRole.color,
       permissions: [...activeRole.permissions],
     })
@@ -452,8 +463,9 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
 
   const saveRoleDraft = async () => {
     if (!activeRole || !roleDraft) return
-    const body: { name?: string; color?: string; permissions?: string[] } = {}
+    const body: { name?: string; icon_url?: string; color?: string; permissions?: string[] } = {}
     if (roleDraft.name.trim() !== activeRole.name) body.name = roleDraft.name.trim()
+    if ((roleDraft.iconUrl ?? null) !== (activeRole.icon_url ?? null)) body.icon_url = roleDraft.iconUrl ?? ''
     if (roleDraft.color.toLowerCase() !== activeRole.color.toLowerCase()) body.color = roleDraft.color
     const currentPerms = [...activeRole.permissions].sort().join('|')
     const nextPerms = [...roleDraft.permissions].sort().join('|')
@@ -486,6 +498,19 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
       onToast('Đã xóa vai trò.')
     } catch (error) {
       setRoleFormError(error instanceof Error ? error.message : 'Không thể xóa vai trò.')
+    }
+  }
+
+  const handleUploadRoleIcon = async (file: File) => {
+    setIsUploadingRoleIcon(true)
+    setRoleSaveError(null)
+    try {
+      const url = await uploadRoleIcon(file)
+      setRoleDraft((prev) => (prev ? { ...prev, iconUrl: url } : prev))
+    } catch (error) {
+      setRoleSaveError(error instanceof Error ? error.message : 'Không thể tải ảnh vai trò.')
+    } finally {
+      setIsUploadingRoleIcon(false)
     }
   }
 
@@ -654,7 +679,11 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
                   <div className="space-y-2">
                     {filteredRoles.map((role) => (
                       <div key={role.id} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: role.color }} />
+                        {role.icon_url ? (
+                          <img src={role.icon_url} alt={role.name} className="h-5 w-5 rounded-full object-cover" />
+                        ) : (
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: role.color }} />
+                        )}
                         <span className="flex-1 text-sm">{role.name}</span>
                         <span className="text-xs text-muted-foreground">{roleMemberCount.get(role.id) ?? 0} thành viên</span>
                         <Button type="button" variant="ghost" onClick={() => setEditingRoleId(role.id)}>
@@ -722,6 +751,47 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
                       <div>
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Tên vai trò</p>
                         <Input className="mt-2" value={roleDraft.name} onChange={(event) => setRoleDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev))} />
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Biểu tượng vai trò</p>
+                        <div className="mt-2 flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-border bg-accent">
+                            {roleDraft.iconUrl ? (
+                              <img src={roleDraft.iconUrl} alt={roleDraft.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="text-xs font-semibold">{roleDraft.name[0]?.toUpperCase() ?? 'R'}</span>
+                            )}
+                          </div>
+                          <input
+                            ref={roleIconInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              if (file) {
+                                void handleUploadRoleIcon(file)
+                              }
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => roleIconInputRef.current?.click()}
+                            disabled={isUploadingRoleIcon}
+                          >
+                            {isUploadingRoleIcon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            Tải ảnh
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setRoleDraft((prev) => (prev ? { ...prev, iconUrl: null } : prev))}
+                            disabled={isUploadingRoleIcon}
+                          >
+                            Xóa
+                          </Button>
+                        </div>
                       </div>
                       <div>
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Màu sắc</p>

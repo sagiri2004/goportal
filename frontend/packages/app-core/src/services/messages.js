@@ -3,6 +3,7 @@ import { mockMessages } from '../mock/messages';
 import { simulateDelay } from '../mock/user';
 import { apiClient } from '../lib/api-client';
 import { useAuthStore } from '@goportal/store';
+import { uploadMedia } from './upload';
 const palette = [
     'bg-indigo-500',
     'bg-purple-500',
@@ -112,7 +113,7 @@ export const getMessages = async (channelId, opts = {}) => {
         offset: response.offset ?? offset,
     };
 };
-export const sendMessage = async (channelId, content) => {
+export const sendMessage = async (channelId, content, attachmentIds = []) => {
     if (IS_MOCK_MESSAGES) {
         await simulateDelay(120);
         const now = new Date();
@@ -137,7 +138,18 @@ export const sendMessage = async (channelId, content) => {
         content_type: 'text/plain',
         content,
         encoding: 'utf-8',
+        attachment_ids: attachmentIds,
     });
     return mapMessage(item);
+};
+export const uploadMessageAttachment = async (file, onProgress) => {
+    const uploaded = await uploadMedia(file, 'message_attachment', { onProgress });
+    if (!uploaded.attachment_id) {
+        throw new Error('Upload failed: attachment id is missing.');
+    }
+    return {
+        attachmentId: uploaded.attachment_id,
+        url: uploaded.url,
+    };
 };
 //# sourceMappingURL=messages.js.map

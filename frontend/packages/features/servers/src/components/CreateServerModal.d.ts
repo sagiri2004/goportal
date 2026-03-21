@@ -4,7 +4,7 @@ type CreateServerModalProps = {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
     defaultServerName: string;
-    onCreate: (payload: CreateServerRequest) => Promise<void>;
+    onCreate: (payload: CreateServerRequest, iconFile: File | null) => Promise<void>;
 };
 export declare const CreateServerModal: React.FC<CreateServerModalProps>;
 export {};

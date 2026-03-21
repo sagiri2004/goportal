@@ -11,6 +11,7 @@ export type ServerMemberWithRoles = {
         id: string;
         server_id: string;
         name: string;
+        icon_url?: string | null;
         color: string;
         position: number;
         is_everyone: boolean;
@@ -28,11 +29,13 @@ export declare const updateServerMemberRoles: (serverId: string, userId: string,
 export declare const getServerRoles: (serverId: string) => Promise<RoleDTO[]>;
 export declare const createServerRole: (serverId: string, body: {
     name: string;
+    icon_url?: string;
     color: string;
     permissions: string[];
 }) => Promise<RoleDTO>;
 export declare const updateServerRole: (serverId: string, roleId: string, body: {
     name?: string;
+    icon_url?: string;
     color?: string;
     permissions?: string[];
 }) => Promise<RoleDTO>;
@@ -50,4 +53,7 @@ export declare const createServerInvite: (serverId: string, body: {
     expires_at?: number;
 }>;
 export declare const uploadServerMedia: (file: File) => Promise<string>;
+export declare const uploadServerBanner: (file: File) => Promise<string>;
+export declare const uploadRoleIcon: (file: File) => Promise<string>;
+export declare const uploadAvatar: (file: File) => Promise<string>;
 //# sourceMappingURL=server-settings.d.ts.map

@@ -4,9 +4,14 @@ server:
   jwt_secret: "goportal-secret-key-change-me"
 
 redis:
-  addr: "127.0.0.1:6379"
+  address: "127.0.0.1:6379"
   password: ""
   db: 0
+
+livekit:
+  url: "ws://localhost:7880"
+  api_key: "devkey"
+  api_secret: "livekit-dev-secret-change-me-32chars"
 
 logger:
   log_level: "info"
@@ -23,3 +28,9 @@ cron:
 
 slack:
   webhook_url: ""
+
+cloudinary:
+  cloud_name: ""
+  api_key: ""
+  api_secret: ""
+  folder: ""

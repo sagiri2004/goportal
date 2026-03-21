@@ -15,16 +15,25 @@ import (
 )
 
 type serverService struct {
-	userRepo   repositories.UserRepository
-	serverRepo repositories.ServerRepository
+	userRepo    repositories.UserRepository
+	serverRepo  repositories.ServerRepository
+	messageRepo repositories.MessageRepository
+	storage     services.StorageService
 }
 
 var roleColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
-func NewServerService(userRepo repositories.UserRepository, serverRepo repositories.ServerRepository) services.ServerService {
+func NewServerService(
+	userRepo repositories.UserRepository,
+	serverRepo repositories.ServerRepository,
+	messageRepo repositories.MessageRepository,
+	storage services.StorageService,
+) services.ServerService {
 	return &serverService{
-		userRepo:   userRepo,
-		serverRepo: serverRepo,
+		userRepo:    userRepo,
+		serverRepo:  serverRepo,
+		messageRepo: messageRepo,
+		storage:     storage,
 	}
 }
 
@@ -78,7 +87,22 @@ func (s *serverService) UpdateServer(ctx context.Context, actorID, serverID stri
 		normalizedName = &trimmed
 	}
 
-	return s.serverRepo.UpdateServer(ctx, serverID, normalizedName, iconURL, bannerURL)
+	normalizedIconURL := normalizeOptionalMediaURL(iconURL)
+	normalizedBannerURL := normalizeOptionalMediaURL(bannerURL)
+
+	updated, err := s.serverRepo.UpdateServer(ctx, serverID, normalizedName, normalizedIconURL, normalizedBannerURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if shouldDeleteMedia(server.IconURL, updated.IconURL) {
+		_ = s.storage.DeleteByURL(ctx, *server.IconURL)
+	}
+	if shouldDeleteMedia(server.BannerURL, updated.BannerURL) {
+		_ = s.storage.DeleteByURL(ctx, *server.BannerURL)
+	}
+
+	return updated, nil
 }
 
 func (s *serverService) ListUserServers(ctx context.Context, userID string) ([]models.Server, error) {
@@ -166,7 +190,44 @@ func (s *serverService) DeleteServer(ctx context.Context, actorID, serverID stri
 		return apperr.E("SERVER_OWNER_REQUIRED", nil)
 	}
 
-	return s.serverRepo.DeleteByID(ctx, serverID)
+	roles, err := s.serverRepo.ListRolesByServerID(ctx, serverID)
+	if err != nil {
+		return err
+	}
+	attachments, err := s.messageRepo.ListAttachmentsByServerID(ctx, serverID)
+	if err != nil {
+		return err
+	}
+
+	attachmentIDs := make([]string, 0, len(attachments))
+	for i := range attachments {
+		attachmentIDs = append(attachmentIDs, attachments[i].ID)
+	}
+
+	if err := s.serverRepo.DeleteByID(ctx, serverID); err != nil {
+		return err
+	}
+
+	if len(attachmentIDs) > 0 {
+		_ = s.messageRepo.SoftDeleteAttachmentsByIDs(ctx, attachmentIDs)
+	}
+
+	if server.IconURL != nil && *server.IconURL != "" {
+		_ = s.storage.DeleteByURL(ctx, *server.IconURL)
+	}
+	if server.BannerURL != nil && *server.BannerURL != "" {
+		_ = s.storage.DeleteByURL(ctx, *server.BannerURL)
+	}
+	for i := range roles {
+		if roles[i].IconURL != nil && *roles[i].IconURL != "" {
+			_ = s.storage.DeleteByURL(ctx, *roles[i].IconURL)
+		}
+	}
+	for i := range attachments {
+		_ = s.storage.DeleteByURL(ctx, attachments[i].FileURL)
+	}
+
+	return nil
 }
 
 func (s *serverService) KickMember(ctx context.Context, actorID, serverID, memberUserID string) error {
@@ -215,7 +276,7 @@ func (s *serverService) LeaveServer(ctx context.Context, actorID, serverID strin
 	return s.serverRepo.RemoveMember(ctx, serverID, actorID)
 }
 
-func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name, color string, permissionNames []string) (*models.Role, error) {
+func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name string, iconURL *string, color string, permissionNames []string) (*models.Role, error) {
 	actorID = strings.TrimSpace(actorID)
 	serverID = strings.TrimSpace(serverID)
 	name = strings.TrimSpace(name)
@@ -261,6 +322,7 @@ func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name,
 	role := &models.Role{
 		ServerID:    serverID,
 		Name:        name,
+		IconURL:     normalizeOptionalMediaURL(iconURL),
 		Color:       color,
 		Position:    0,
 		Permissions: sumPermissions(permissionValues),
@@ -280,7 +342,7 @@ func (s *serverService) CreateRole(ctx context.Context, actorID, serverID, name,
 	return role, nil
 }
 
-func (s *serverService) UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, color *string, permissionNames []string) (*models.Role, error) {
+func (s *serverService) UpdateRole(ctx context.Context, actorID, serverID, roleID string, name, iconURL, color *string, permissionNames []string) (*models.Role, error) {
 	actorID = strings.TrimSpace(actorID)
 	serverID = strings.TrimSpace(serverID)
 	roleID = strings.TrimSpace(roleID)
@@ -326,6 +388,7 @@ func (s *serverService) UpdateRole(ctx context.Context, actorID, serverID, roleI
 		}
 		normalizedColor = &trimmed
 	}
+	normalizedIconURL := normalizeOptionalMediaURL(iconURL)
 
 	var permissionValues []int64
 	if permissionNames != nil {
@@ -343,7 +406,14 @@ func (s *serverService) UpdateRole(ctx context.Context, actorID, serverID, roleI
 			}
 		}
 	}
-	return s.serverRepo.UpdateRole(ctx, roleID, normalizedName, normalizedColor, permissionValues)
+	updated, err := s.serverRepo.UpdateRole(ctx, roleID, normalizedName, normalizedIconURL, normalizedColor, permissionValues)
+	if err != nil {
+		return nil, err
+	}
+	if shouldDeleteMedia(role.IconURL, updated.IconURL) {
+		_ = s.storage.DeleteByURL(ctx, *role.IconURL)
+	}
+	return updated, nil
 }
 
 func (s *serverService) DeleteRole(ctx context.Context, actorID, serverID, roleID string) error {
@@ -386,7 +456,13 @@ func (s *serverService) DeleteRole(ctx context.Context, actorID, serverID, roleI
 		return apperr.E("ROLE_ASSIGN_FORBIDDEN", nil)
 	}
 
-	return s.serverRepo.DeleteRole(ctx, roleID)
+	if err := s.serverRepo.DeleteRole(ctx, roleID); err != nil {
+		return err
+	}
+	if role.IconURL != nil && *role.IconURL != "" {
+		_ = s.storage.DeleteByURL(ctx, *role.IconURL)
+	}
+	return nil
 }
 
 func (s *serverService) ListRoles(ctx context.Context, actorID, serverID string) ([]models.Role, error) {
@@ -679,4 +755,22 @@ func generateInviteCode() (string, error) {
 
 func hasPermissionEscalation(requested, actorPerms int64) bool {
 	return requested&^actorPerms != 0
+}
+
+func normalizeOptionalMediaURL(input *string) *string {
+	if input == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*input)
+	return &trimmed
+}
+
+func shouldDeleteMedia(previous, current *string) bool {
+	if previous == nil || *previous == "" {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	return *previous != *current
 }

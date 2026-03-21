@@ -127,9 +127,10 @@ func (ctrl *messageController) Create(c *gin.Context) {
 	}
 
 	author, _ := containers.UserService().GetByID(c.Request.Context(), userID)
+	attachments, _ := containers.MessageRepository().ListAttachmentsByMessageID(c.Request.Context(), msg.ID)
 	c.JSON(
 		http.StatusCreated,
-		serializers.Success("OK", "Message created", serializers.NewMessageResponse(msg, author, nil, nil)),
+		serializers.Success("OK", "Message created", serializers.NewMessageResponse(msg, author, attachments, nil)),
 	)
 }
 

@@ -12,8 +12,9 @@ import {
   Smile,
   Trash2,
   X,
+  Loader2,
 } from 'lucide-react'
-import { mockMessages } from '@goportal/app-core'
+import { mockMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core'
 import { TextContent } from './TextContent'
 import { ReplyPreview } from './ReplyPreview'
 import { ImageAttachment } from './ImageAttachment'
@@ -24,13 +25,17 @@ import { EmojiPicker } from './EmojiPicker'
 
 type ThreadPanelChatProps = {
   channelName: string
+  channelId: string
 }
 
-export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName }) => {
+export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName, channelId }) => {
   const [messagesByChannel, setMessagesByChannel] = useState(mockMessages)
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [composerHasContent, setComposerHasContent] = useState(false)
+  const [uploadProgressByFile, setUploadProgressByFile] = useState<Record<string, number>>({})
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false)
+  const [composerError, setComposerError] = useState<string | null>(null)
   const inputRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -123,57 +128,52 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
     })
   }
 
-  const onSend = useCallback(() => {
+  const onSend = useCallback(async () => {
     const content = inputRef.current?.innerText.trim() ?? ''
     if (!content && pendingFiles.length === 0) return
+    if (!channelId) return
 
-    const now = new Date()
-    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-    const attachments = pendingFiles.map((file, index) => ({
-      id: `upload-${now.getTime()}-${index}`,
-      type: file.type.startsWith('image/')
-        ? ('image' as const)
-        : file.type.startsWith('video/')
-          ? ('video' as const)
-          : ('file' as const),
-      url: URL.createObjectURL(file),
-      filename: file.name,
-      filesize: file.size,
-      mimeType: file.type || 'application/octet-stream',
-    }))
+    try {
+      setComposerError(null)
+      setIsUploadingFiles(true)
 
-    setMessagesByChannel((prev) => {
-      const currentMessages = prev[activeChannelKey] ?? []
-      return {
-        ...prev,
-        [activeChannelKey]: [
-          ...currentMessages,
-          {
-            id: `m-${now.getTime()}`,
-            authorId: 'you',
-            author: 'you',
-            authorColor: 'text-indigo-300',
-            avatarColor: 'bg-indigo-500',
-            avatarInitials: 'Y',
-            content,
-            timestamp,
-            date: 'Today',
-            attachments,
-          },
-        ],
+      const attachmentIDs = await Promise.all(
+        pendingFiles.map(async (file, index) => {
+          const key = `${file.name}-${file.size}-${index}`
+          const uploaded = await uploadMessageAttachment(file, (progress) => {
+            setUploadProgressByFile((prev) => ({ ...prev, [key]: progress }))
+          })
+          return uploaded.attachmentId
+        })
+      )
+
+      const created = await sendMessage(channelId, content, attachmentIDs)
+      setMessagesByChannel((prev) => {
+        const currentMessages = prev[activeChannelKey] ?? []
+        return {
+          ...prev,
+          [activeChannelKey]: [...currentMessages, created],
+        }
+      })
+
+      if (inputRef.current) {
+        inputRef.current.innerText = ''
       }
-    })
-
-    if (inputRef.current) inputRef.current.innerText = ''
-    setPendingFiles([])
-    setComposerHasContent(false)
-  }, [activeChannelKey, pendingFiles])
+      setPendingFiles([])
+      setComposerHasContent(false)
+    } catch (error) {
+      setComposerError(error instanceof Error ? error.message : 'Failed to send message.')
+    } finally {
+      setUploadProgressByFile({})
+      setIsUploadingFiles(false)
+    }
+  }, [activeChannelKey, channelId, pendingFiles])
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
+    async (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
-        onSend()
+        await onSend()
       }
     },
     [onSend]
@@ -190,7 +190,7 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
     [updateComposerState]
   )
 
-  const canSend = composerHasContent || pendingFiles.length > 0
+  const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles
   const pendingImagePreviewUrls = useMemo(
     () => pendingFiles.map((file) => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null)),
     [pendingFiles]
@@ -327,6 +327,7 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
               const files = Array.from(event.target.files ?? [])
               setPendingFiles((prev) => [...prev, ...files])
             }}
+            disabled={isUploadingFiles}
           />
 
           {pendingFiles.length > 0 && (
@@ -347,6 +348,7 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
                   <button
                     type="button"
                     onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== index))}
+                    disabled={isUploadingFiles}
                     className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white group-hover:flex"
                   >
                     <X className="h-2.5 w-2.5" />
@@ -356,6 +358,26 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
             </div>
           )}
 
+          {isUploadingFiles && (
+            <div className="px-3 pb-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Uploading attachments...</span>
+              </div>
+              {pendingFiles.map((file, index) => {
+                const key = `${file.name}-${file.size}-${index}`
+                const progress = uploadProgressByFile[key] ?? 0
+                return (
+                  <p key={key} className="truncate">
+                    {file.name}: {progress}%
+                  </p>
+                )
+              })}
+            </div>
+          )}
+
+          {composerError && <p className="px-3 pb-2 text-xs text-red-400">{composerError}</p>}
+
           <div className="flex items-end gap-2 px-3">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -363,6 +385,7 @@ export const ThreadPanelChat: React.FC<ThreadPanelChatProps> = ({ channelName })
                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingFiles}
                 >
                   <Plus className="h-5 w-5" />
                 </button>

@@ -1,6 +1,6 @@
 import type { RoleDTO, ServerDTO } from '@goportal/types'
 import { apiClient } from '../lib/api-client'
-import { useAuthStore } from '@goportal/store'
+import { uploadMedia } from './upload'
 
 export type ServerMemberWithRoles = {
   user: {
@@ -14,57 +14,12 @@ export type ServerMemberWithRoles = {
     id: string
     server_id: string
     name: string
+    icon_url?: string | null
     color: string
     position: number
     is_everyone: boolean
     permissions: string[]
   }>
-}
-
-type UploadResponse = {
-  attachment_id: string
-  url: string
-  file_name: string
-  file_type: string
-  file_size: number
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
-
-const getToken = (): string | null => {
-  const token = useAuthStore.getState().token
-  if (token) {
-    return token
-  }
-
-  const direct = localStorage.getItem('auth_token')
-  if (direct) {
-    return direct
-  }
-
-  const legacy = localStorage.getItem('auth-token')
-  if (legacy) {
-    return legacy
-  }
-
-  const persisted = localStorage.getItem('auth-store')
-  if (!persisted) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(persisted) as { state?: { token?: string | null } }
-    return parsed.state?.token ?? null
-  } catch {
-    return null
-  }
-}
-
-const toAbsoluteUrl = (url: string): string => {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  return `${API_BASE_URL}${url}`
 }
 
 export const updateServerProfile = async (
@@ -96,6 +51,7 @@ export const createServerRole = async (
   serverId: string,
   body: {
     name: string
+    icon_url?: string
     color: string
     permissions: string[]
   }
@@ -106,6 +62,7 @@ export const updateServerRole = async (
   roleId: string,
   body: {
     name?: string
+    icon_url?: string
     color?: string
     permissions?: string[]
   }
@@ -128,30 +85,21 @@ export const createServerInvite = async (
 }> => apiClient.post(`/api/v1/servers/${serverId}/invites`, body)
 
 export const uploadServerMedia = async (file: File): Promise<string> => {
-  const token = getToken()
-  if (!token) {
-    throw new Error('Session expired. Please log in again.')
-  }
+  const uploaded = await uploadMedia(file, 'server_icon')
+  return uploaded.url
+}
 
-  const formData = new FormData()
-  formData.append('file', file)
+export const uploadServerBanner = async (file: File): Promise<string> => {
+  const uploaded = await uploadMedia(file, 'server_banner')
+  return uploaded.url
+}
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/upload`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  })
+export const uploadRoleIcon = async (file: File): Promise<string> => {
+  const uploaded = await uploadMedia(file, 'role_icon')
+  return uploaded.url
+}
 
-  const payload = (await response.json()) as {
-    message?: string
-    data?: UploadResponse
-  }
-
-  if (!response.ok || !payload.data) {
-    throw new Error(payload.message ?? 'Không thể tải lên tệp.')
-  }
-
-  return toAbsoluteUrl(payload.data.url)
+export const uploadAvatar = async (file: File): Promise<string> => {
+  const uploaded = await uploadMedia(file, 'avatar')
+  return uploaded.url
 }

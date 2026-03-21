@@ -1,8 +1,8 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Separator, cn, Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
-import { Edit, FileText, Gift, Hash, Image, MoreHorizontal, Plus, Reply, Smile, Trash2, X, } from 'lucide-react';
-import { mockMessages } from '@goportal/app-core';
+import { Edit, FileText, Gift, Hash, Image, MoreHorizontal, Plus, Reply, Smile, Trash2, X, Loader2, } from 'lucide-react';
+import { mockMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core';
 import { TextContent } from './TextContent';
 import { ReplyPreview } from './ReplyPreview';
 import { ImageAttachment } from './ImageAttachment';
@@ -10,11 +10,14 @@ import { FileAttachment } from './FileAttachment';
 import { ReactionBar } from './ReactionBar';
 import { VideoAttachment } from './VideoAttachment';
 import { EmojiPicker } from './EmojiPicker';
-export const ThreadPanelChat = ({ channelName }) => {
+export const ThreadPanelChat = ({ channelName, channelId }) => {
     const [messagesByChannel, setMessagesByChannel] = useState(mockMessages);
     const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
     const [pendingFiles, setPendingFiles] = useState([]);
     const [composerHasContent, setComposerHasContent] = useState(false);
+    const [uploadProgressByFile, setUploadProgressByFile] = useState({});
+    const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+    const [composerError, setComposerError] = useState(null);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
     const activeChannelKey = useMemo(() => (messagesByChannel[channelName] ? channelName : 'general'), [channelName, messagesByChannel]);
@@ -87,54 +90,48 @@ export const ThreadPanelChat = ({ channelName }) => {
             };
         });
     };
-    const onSend = useCallback(() => {
+    const onSend = useCallback(async () => {
         const content = inputRef.current?.innerText.trim() ?? '';
         if (!content && pendingFiles.length === 0)
             return;
-        const now = new Date();
-        const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        const attachments = pendingFiles.map((file, index) => ({
-            id: `upload-${now.getTime()}-${index}`,
-            type: file.type.startsWith('image/')
-                ? 'image'
-                : file.type.startsWith('video/')
-                    ? 'video'
-                    : 'file',
-            url: URL.createObjectURL(file),
-            filename: file.name,
-            filesize: file.size,
-            mimeType: file.type || 'application/octet-stream',
-        }));
-        setMessagesByChannel((prev) => {
-            const currentMessages = prev[activeChannelKey] ?? [];
-            return {
-                ...prev,
-                [activeChannelKey]: [
-                    ...currentMessages,
-                    {
-                        id: `m-${now.getTime()}`,
-                        authorId: 'you',
-                        author: 'you',
-                        authorColor: 'text-indigo-300',
-                        avatarColor: 'bg-indigo-500',
-                        avatarInitials: 'Y',
-                        content,
-                        timestamp,
-                        date: 'Today',
-                        attachments,
-                    },
-                ],
-            };
-        });
-        if (inputRef.current)
-            inputRef.current.innerText = '';
-        setPendingFiles([]);
-        setComposerHasContent(false);
-    }, [activeChannelKey, pendingFiles]);
-    const handleKeyDown = useCallback((event) => {
+        if (!channelId)
+            return;
+        try {
+            setComposerError(null);
+            setIsUploadingFiles(true);
+            const attachmentIDs = await Promise.all(pendingFiles.map(async (file, index) => {
+                const key = `${file.name}-${file.size}-${index}`;
+                const uploaded = await uploadMessageAttachment(file, (progress) => {
+                    setUploadProgressByFile((prev) => ({ ...prev, [key]: progress }));
+                });
+                return uploaded.attachmentId;
+            }));
+            const created = await sendMessage(channelId, content, attachmentIDs);
+            setMessagesByChannel((prev) => {
+                const currentMessages = prev[activeChannelKey] ?? [];
+                return {
+                    ...prev,
+                    [activeChannelKey]: [...currentMessages, created],
+                };
+            });
+            if (inputRef.current) {
+                inputRef.current.innerText = '';
+            }
+            setPendingFiles([]);
+            setComposerHasContent(false);
+        }
+        catch (error) {
+            setComposerError(error instanceof Error ? error.message : 'Failed to send message.');
+        }
+        finally {
+            setUploadProgressByFile({});
+            setIsUploadingFiles(false);
+        }
+    }, [activeChannelKey, channelId, pendingFiles]);
+    const handleKeyDown = useCallback(async (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            onSend();
+            await onSend();
         }
     }, [onSend]);
     const insertEmoji = useCallback((emoji) => {
@@ -145,7 +142,7 @@ export const ThreadPanelChat = ({ channelName }) => {
         document.execCommand('insertText', false, emoji);
         updateComposerState();
     }, [updateComposerState]);
-    const canSend = composerHasContent || pendingFiles.length > 0;
+    const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles;
     const pendingImagePreviewUrls = useMemo(() => pendingFiles.map((file) => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null)), [pendingFiles]);
     return (_jsxs(_Fragment, { children: [_jsxs("section", { className: "flex-1 overflow-y-auto px-3 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "mb-4 h-14 w-14 rounded-full bg-muted p-3 text-muted-foreground" }), _jsxs("h2", { className: "text-xl font-bold text-foreground", children: ["Welcome to #", channelName] }), _jsxs("p", { className: "text-sm text-muted-foreground", children: ["This is the start of #", channelName, " channel."] })] }), _jsxs("div", { className: "my-4 flex items-center gap-3", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "whitespace-nowrap text-xs text-muted-foreground", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
                             const username = msg.author ?? 'unknown';
@@ -161,7 +158,11 @@ export const ThreadPanelChat = ({ channelName }) => {
                         }) })] }), _jsx("footer", { className: "mx-3 mb-3 flex-none", children: _jsxs("div", { className: `relative rounded-lg bg-[hsl(240,3.7%,18%)] ${canSend ? 'ring-1 ring-indigo-500/30' : ''}`, children: [_jsx("input", { ref: fileInputRef, type: "file", className: "hidden", multiple: true, onChange: (event) => {
                                 const files = Array.from(event.target.files ?? []);
                                 setPendingFiles((prev) => [...prev, ...files]);
-                            } }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-14 w-14 rounded-md border border-border object-cover" })) : (_jsx("div", { className: "flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: _jsx(FileText, { className: "h-4 w-4 text-muted-foreground" }) })), _jsx("button", { type: "button", onClick: () => setPendingFiles((prev) => prev.filter((_, i) => i !== index)), className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", onClick: () => fileInputRef.current?.click(), children: _jsx(Plus, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onInput: updateComposerState, className: "min-h-[44px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": `Nhắn #${channelName}` }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
+                            }, disabled: isUploadingFiles }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-14 w-14 rounded-md border border-border object-cover" })) : (_jsx("div", { className: "flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: _jsx(FileText, { className: "h-4 w-4 text-muted-foreground" }) })), _jsx("button", { type: "button", onClick: () => setPendingFiles((prev) => prev.filter((_, i) => i !== index)), disabled: isUploadingFiles, className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), isUploadingFiles && (_jsxs("div", { className: "px-3 pb-2 text-xs text-muted-foreground", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Loader2, { className: "h-3.5 w-3.5 animate-spin" }), _jsx("span", { children: "Uploading attachments..." })] }), pendingFiles.map((file, index) => {
+                                    const key = `${file.name}-${file.size}-${index}`;
+                                    const progress = uploadProgressByFile[key] ?? 0;
+                                    return (_jsxs("p", { className: "truncate", children: [file.name, ": ", progress, "%"] }, key));
+                                })] })), composerError && _jsx("p", { className: "px-3 pb-2 text-xs text-red-400", children: composerError }), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", onClick: () => fileInputRef.current?.click(), disabled: isUploadingFiles, children: _jsx(Plus, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onInput: updateComposerState, className: "min-h-[44px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": `Nhắn #${channelName}` }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
                                             { icon: Gift, label: 'Gift' },
                                             { icon: Image, label: 'GIF' },
                                         ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", children: _jsx(Icon, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsx(EmojiPicker, { align: "end", onSelect: insertEmoji, trigger: (_jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", children: _jsx(Smile, { className: "h-5 w-5" }) })) })] })] })] }) })] }));

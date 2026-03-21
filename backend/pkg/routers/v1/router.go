@@ -66,6 +66,12 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	{
 		channels.GET("/:id", v1.Channel.GetByID)
 		channels.GET("/:id/messages", middlewares.RequireChannelPermission(models.PermissionReadMessages, "id"), v1.Message.ListByChannel)
+		channels.POST("/:id/voice/token", v1.Voice.GenerateToken)
+		channels.POST("/:id/recording/start", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StartRecording)
+		channels.POST("/:id/recording/stop", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StopRecording)
+		channels.GET("/:id/recordings", v1.Voice.ListRecordings)
+		channels.POST("/:id/stream/start", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StartStream)
+		channels.POST("/:id/stream/stop", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StopStream)
 		channels.PATCH("/:id/position", v1.Channel.UpdatePosition)
 		channels.PATCH("/:id/privacy", v1.Channel.UpdatePrivacy)
 		channels.GET("/:id/members", v1.Channel.ListMembers)
@@ -89,5 +95,10 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	upload.Use(middlewares.AuthMiddleware())
 	{
 		upload.POST("", v1.Upload.UploadFile)
+	}
+
+	webhooks := api.Group("/webhooks")
+	{
+		webhooks.POST("/livekit", v1.Voice.LiveKitWebhook)
 	}
 }
