@@ -67,6 +67,50 @@ func NewInviteResponse(invite *models.ServerInvite) InviteResponse {
 	}
 }
 
+type InviteCreateResponse struct {
+	InviteCode string `json:"invite_code"`
+	InviteURL  string `json:"invite_url"`
+	ExpiresAt  *int64 `json:"expires_at,omitempty"`
+}
+
+type InviteServerPreviewResponse struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	IconURL     string `json:"icon_url,omitempty"`
+	MemberCount int64  `json:"member_count"`
+}
+
+type InvitePreviewResponse struct {
+	InviteCode string                      `json:"invite_code"`
+	ExpiresAt  *int64                      `json:"expires_at,omitempty"`
+	Server     InviteServerPreviewResponse `json:"server"`
+}
+
+func NewInviteCreateResponse(inviteCode, inviteURL string, expiresAt *int64) InviteCreateResponse {
+	return InviteCreateResponse{
+		InviteCode: inviteCode,
+		InviteURL:  inviteURL,
+		ExpiresAt:  expiresAt,
+	}
+}
+
+func NewInvitePreviewResponse(invite *models.ServerInvite, server *models.Server, memberCount int64) InvitePreviewResponse {
+	iconURL := ""
+	if server.IconURL != nil {
+		iconURL = *server.IconURL
+	}
+	return InvitePreviewResponse{
+		InviteCode: invite.Code,
+		ExpiresAt:  invite.ExpiresAt,
+		Server: InviteServerPreviewResponse{
+			ID:          server.ID,
+			Name:        server.Name,
+			IconURL:     iconURL,
+			MemberCount: memberCount,
+		},
+	}
+}
+
 type MemberRoleAssignmentRequest struct {
 	RoleIDs []string `json:"role_ids" binding:"required"`
 }

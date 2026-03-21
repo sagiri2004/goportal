@@ -14,6 +14,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Room, RoomEvent, Track } from 'livekit-client'
+import { WS_URL } from '@goportal/config'
 import {
   Group as PanelGroup,
   Panel,
@@ -49,6 +51,10 @@ import {
   getMembers,
   getServerById,
   getServers,
+  getInvitePreview,
+  joinByInviteCode,
+  getVoiceToken,
+  listVoiceParticipants,
   updateServerProfile,
   uploadServerMedia,
   updateMyProfile,
@@ -75,9 +81,187 @@ type VoiceState = {
   channelName: string
   serverId: string
   serverName: string
+  room: Room
+  lastTextChannelId: string | null
+  isMicrophoneEnabled: boolean
+  isCameraEnabled: boolean
+  isScreenShareEnabled: boolean
+}
+
+type VoiceChannelActivity = {
+  activeMembers: Array<{
+    id: string
+    name?: string
+    avatarUrl?: string
+    initials: string
+    color: string
+    isStreaming?: boolean
+  }>
+  liveLabel?: string
+  isLive?: boolean
+}
+
+type VoiceParticipantSummary = {
+  id: string
+  name: string
+  avatarUrl?: string
+  isScreenSharing: boolean
+}
+
+type VoiceChannelActivityParticipant = {
+  user_id: string
+  name?: string
+  avatar_url?: string
+  is_screen_sharing?: boolean
 }
 
 type InviteExpiryOption = '7d' | '1d' | 'never'
+
+const voicePalette = [
+  'bg-indigo-500',
+  'bg-purple-500',
+  'bg-green-500',
+  'bg-orange-500',
+  'bg-cyan-500',
+  'bg-rose-500',
+]
+const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code'
+
+const colorFromId = (id: string): string => {
+  let hash = 0
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash + id.charCodeAt(index)) % 997
+  }
+  return voicePalette[hash % voicePalette.length]
+}
+
+const initialsFromName = (name: string): string =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2)
+
+const parseParticipantMetadata = (metadata?: string): { avatarUrl?: string; displayName?: string } => {
+  if (!metadata) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(metadata) as {
+      avatar_url?: string
+      avatarUrl?: string
+      display_name?: string
+      displayName?: string
+      username?: string
+    }
+    const avatarUrl = parsed.avatar_url ?? parsed.avatarUrl
+    const displayName = parsed.display_name ?? parsed.displayName ?? parsed.username
+    return {
+      avatarUrl: typeof avatarUrl === 'string' && avatarUrl ? avatarUrl : undefined,
+      displayName: typeof displayName === 'string' && displayName ? displayName : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: number | null = null
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        reject(new Error('LiveKit connection timeout'))
+      }, timeoutMs)
+    })
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId)
+    }
+  }
+}
+
+const buildConnectTargets = (url: string): string[] => {
+  const targets = new Set<string>([url])
+  try {
+    const parsed = new URL(url)
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && parsed.protocol === 'ws:') {
+      const secure = new URL(url)
+      secure.protocol = 'wss:'
+      targets.add(secure.toString())
+    }
+    if (parsed.hostname === 'localhost') {
+      const ipv4 = new URL(url)
+      ipv4.hostname = '127.0.0.1'
+      targets.add(ipv4.toString())
+    }
+  } catch {
+    // ignore invalid URL and keep original
+  }
+  return Array.from(targets)
+}
+
+const normalizeNotificationEventType = (raw: unknown): string =>
+  typeof raw === 'string' ? raw.trim().toUpperCase() : ''
+
+const resolveNotificationEventType = (event: any): string => {
+  const topLevelType = normalizeNotificationEventType(event?.type)
+  const payloadType = normalizeNotificationEventType(event?.payload?.event_type ?? event?.payload?.type)
+  if (topLevelType === 'POPUP') {
+    return payloadType || topLevelType
+  }
+  return payloadType || topLevelType
+}
+
+const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: string | null): string[] => {
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    return []
+  }
+
+  if (parsed.protocol === 'http:') {
+    parsed.protocol = 'ws:'
+  } else if (parsed.protocol === 'https:') {
+    parsed.protocol = 'wss:'
+  }
+
+  if (!parsed.pathname || parsed.pathname === '/') {
+    parsed.pathname = '/ws'
+  }
+
+  const setCommonParams = (url: URL) => {
+    url.searchParams.set('user_id', userId)
+    if (token) {
+      url.searchParams.set('token', token)
+    }
+  }
+
+  const targets: URL[] = []
+  const addTarget = (url: URL) => {
+    setCommonParams(url)
+    targets.push(url)
+  }
+
+  if (
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+    parsed.port === '8080'
+  ) {
+    const preferred = new URL(parsed.toString())
+    preferred.port = '8090'
+    addTarget(preferred)
+
+    const fallback = new URL(parsed.toString())
+    fallback.port = '8085'
+    addTarget(fallback)
+  }
+
+  addTarget(parsed)
+  return Array.from(new Set(targets.map((target) => target.toString())))
+}
 
 const InviteMemberDialog: React.FC<{
   open: boolean
@@ -118,7 +302,7 @@ const InviteMemberDialog: React.FC<{
         max_uses: 0,
         expires_at: getExpiresAt(option),
       })
-      const nextLink = `${window.location.origin}/invite/${invite.code}`
+      const nextLink = invite.invite_url || `${window.location.origin}/invite/${invite.invite_code}`
       setInviteLink(nextLink)
       setInviteExpiresAt(invite.expires_at ?? null)
     } catch (createError: any) {
@@ -362,6 +546,7 @@ export const AppShell: React.FC = () => {
   const [showMembers, setShowMembers] = useState(false)
   const [servers, setServers] = useState<MockServer[]>([])
   const [isCreateServerModalOpen, setIsCreateServerModalOpen] = useState(false)
+  const [createServerModalInviteCode, setCreateServerModalInviteCode] = useState<string | null>(null)
   const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false)
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false)
@@ -378,12 +563,19 @@ export const AppShell: React.FC = () => {
   const [channelsByServer, setChannelsByServer] = useState<Record<string, MockCategory[]>>({})
   const [membersByServer, setMembersByServer] = useState<Record<string, MockMember[]>>({})
   const [voiceState, setVoiceState] = useState<VoiceState | null>(null)
+  const [isVoiceConnecting, setIsVoiceConnecting] = useState(false)
+  const [voiceActivityByChannel, setVoiceActivityByChannel] = useState<Record<string, VoiceChannelActivity>>({})
   const currentUser = useAuthStore((state) => state.user)
+  const token = useAuthStore((state) => state.token)
   const currentUsername = currentUser?.username
 
   // Imperative handle — resize main panel when member list toggles
   const mainRef = useRef<PanelImperativeHandle>(null)
   const toastTimerRef = useRef<number | null>(null)
+  const voiceStateRef = useRef<VoiceState | null>(null)
+  const joinVoiceInFlightRef = useRef<string | null>(null)
+  const pendingVoiceRoomRef = useRef<Room | null>(null)
+  const voiceJoinAttemptRef = useRef(0)
 
   const markOnboardingSeen = useCallback(() => {
     setHasSeenOnboarding(true)
@@ -405,6 +597,264 @@ export const AppShell: React.FC = () => {
     pushToast('Tính năng đang phát triển')
   }, [pushToast])
 
+  const openCreateServerModal = useCallback((inviteCode?: string | null) => {
+    setCreateServerModalInviteCode(inviteCode?.trim() || null)
+    setIsCreateServerModalOpen(true)
+  }, [])
+
+  const closeCreateServerModal = useCallback((open: boolean) => {
+    setIsCreateServerModalOpen(open)
+    if (!open) {
+      setCreateServerModalInviteCode(null)
+    }
+  }, [])
+
+  const mapVoiceParticipantsToActivity = useCallback((participants: VoiceParticipantSummary[]): VoiceChannelActivity => {
+    const activeMembers = participants.map((participant) => ({
+      id: participant.id,
+      name: participant.name,
+      avatarUrl: participant.avatarUrl,
+      initials: initialsFromName(participant.name || participant.id || '?'),
+      color: colorFromId(participant.id || participant.name || 'member'),
+      isStreaming: participant.isScreenSharing,
+    }))
+
+    const hasScreenShare = participants.some((participant) => participant.isScreenSharing)
+    return {
+      activeMembers,
+      liveLabel: hasScreenShare ? 'Đang chia sẻ màn hình' : undefined,
+      isLive: hasScreenShare,
+    }
+  }, [])
+
+  const syncVoiceStateFromRoom = useCallback((room: Room) => {
+    const localParticipant = room.localParticipant
+    setVoiceState((prev) => {
+      if (!prev || prev.room !== room) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        isMicrophoneEnabled: localParticipant.isMicrophoneEnabled,
+        isCameraEnabled: localParticipant.isCameraEnabled,
+        isScreenShareEnabled: localParticipant.isScreenShareEnabled,
+      }
+    })
+  }, [])
+
+  const syncCurrentRoomActivity = useCallback((state: VoiceState) => {
+    const remoteParticipants = Array.from(state.room.remoteParticipants.values())
+    const participants: VoiceParticipantSummary[] = [
+      {
+        id: state.room.localParticipant.identity,
+        name: state.room.localParticipant.name || currentUser?.username || 'You',
+        avatarUrl: currentUser?.avatar_url ?? undefined,
+        isScreenSharing: state.room.localParticipant.isScreenShareEnabled,
+      },
+      ...remoteParticipants.map((participant) => {
+        const meta = parseParticipantMetadata(participant.metadata)
+        return {
+          id: participant.identity,
+          name: meta.displayName || participant.name || participant.identity,
+          avatarUrl: meta.avatarUrl,
+          isScreenSharing:
+            participant.getTrackPublication(Track.Source.ScreenShare) != null ||
+            participant.getTrackPublication(Track.Source.ScreenShareAudio) != null,
+        }
+      }),
+    ]
+
+    setVoiceActivityByChannel((prev) => ({
+      ...prev,
+      [state.channelId]: mapVoiceParticipantsToActivity(participants),
+    }))
+  }, [currentUser?.avatar_url, currentUser?.username, mapVoiceParticipantsToActivity])
+
+  const applyVoiceChannelActivityUpdate = useCallback((update: {
+    serverId: string
+    channelId: string
+    participants: VoiceChannelActivityParticipant[]
+  }) => {
+    if (!update.serverId || !update.channelId) {
+      return
+    }
+    if (update.serverId !== activeServerId) {
+      return
+    }
+
+    const participants: VoiceParticipantSummary[] = (update.participants ?? []).map((participant) => {
+      const name = participant.name?.trim() || participant.user_id
+      return {
+        id: participant.user_id,
+        name,
+        avatarUrl: participant.avatar_url,
+        isScreenSharing: Boolean(participant.is_screen_sharing),
+      }
+    })
+
+    setVoiceActivityByChannel((prev) => ({
+      ...prev,
+      [update.channelId]: mapVoiceParticipantsToActivity(participants),
+    }))
+  }, [activeServerId, mapVoiceParticipantsToActivity])
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return
+    }
+
+    let socket: WebSocket | null = null
+    let reconnectTimer: number | null = null
+    let initialConnectTimer: number | null = null
+    let reconnectAttempt = 0
+    let closedByClient = false
+
+    const onSocketMessage = (raw: string) => {
+      let event: any
+      try {
+        event = JSON.parse(raw)
+      } catch {
+        return
+      }
+
+      const eventType = resolveNotificationEventType(event)
+      if (!eventType || eventType === 'CONNECTED') {
+        return
+      }
+      if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' && eventType !== 'VOICE_ACTIVITY_UPDATED') {
+        return
+      }
+
+      const payload = event.payload ?? {}
+      const serverId = typeof payload.server_id === 'string' ? payload.server_id : ''
+      const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : ''
+      const participants = Array.isArray(payload.participants) ? payload.participants : []
+      if (!serverId || !channelId) {
+        return
+      }
+
+      applyVoiceChannelActivityUpdate({
+        serverId,
+        channelId,
+        participants,
+      })
+    }
+
+    const connect = () => {
+      if (closedByClient) {
+        return
+      }
+
+      const targets = buildNotificationSocketTargets(WS_URL, currentUser.id, token)
+      if (targets.length === 0) {
+        return
+      }
+      const target = targets[reconnectAttempt % targets.length]
+      const ws = new WebSocket(target)
+      socket = ws
+
+      ws.onopen = () => {
+        if (socket !== ws) {
+          return
+        }
+        reconnectAttempt = 0
+      }
+
+      ws.onmessage = (event) => {
+        if (socket !== ws) {
+          return
+        }
+        onSocketMessage(String(event.data))
+      }
+
+      ws.onclose = () => {
+        if (socket === ws) {
+          socket = null
+        }
+        if (closedByClient) {
+          return
+        }
+        if (reconnectTimer) {
+          window.clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
+        const delay = Math.min(30000, 1000 * 2 ** reconnectAttempt)
+        reconnectAttempt += 1
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = null
+          connect()
+        }, delay)
+      }
+
+      ws.onerror = () => {
+        if (socket !== ws) {
+          return
+        }
+        ws.close()
+      }
+    }
+
+    initialConnectTimer = window.setTimeout(connect, 150)
+
+    return () => {
+      closedByClient = true
+      if (initialConnectTimer) {
+        window.clearTimeout(initialConnectTimer)
+      }
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer)
+      }
+      socket?.close()
+      socket = null
+    }
+  }, [applyVoiceChannelActivityUpdate, currentUser?.id, token])
+
+  const refreshVoiceSidebarActivity = useCallback(async (serverId: string) => {
+    if (!serverId) {
+      return
+    }
+
+    const categories = channelsByServer[serverId] ?? []
+    const voiceChannels = categories.flatMap((category) =>
+      category.channels.filter((channel) => channel.type === 'voice')
+    )
+    if (voiceChannels.length === 0) {
+      return
+    }
+
+    const results = await Promise.allSettled(
+      voiceChannels.map(async (channel) => {
+        const response = await listVoiceParticipants(channel.id)
+        return { channelId: channel.id, participants: response.items ?? [] }
+      }),
+    )
+
+    setVoiceActivityByChannel((prev) => {
+      const next = { ...prev }
+      voiceChannels.forEach((channel) => {
+        if (!next[channel.id]) {
+          next[channel.id] = mapVoiceParticipantsToActivity([])
+        }
+      })
+
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled') {
+          return
+        }
+        const participants: VoiceParticipantSummary[] = result.value.participants.map((participant) => ({
+          id: participant.user_id,
+          name: participant.name || participant.user_id,
+          avatarUrl: participant.avatar_url,
+          isScreenSharing: Boolean(participant.is_screen_sharing),
+        }))
+        next[result.value.channelId] = mapVoiceParticipantsToActivity(participants)
+      })
+
+      return next
+    })
+  }, [channelsByServer, mapVoiceParticipantsToActivity])
+
   // After showMembers flips, imperatively resize main panel.
   // useEffect runs after render so mainRef is guaranteed to be attached.
   useEffect(() => {
@@ -417,8 +867,18 @@ export const AppShell: React.FC = () => {
       if (toastTimerRef.current) {
         window.clearTimeout(toastTimerRef.current)
       }
+      if (pendingVoiceRoomRef.current) {
+        void pendingVoiceRoomRef.current.disconnect()
+      }
+      if (voiceStateRef.current) {
+        void voiceStateRef.current.room.disconnect()
+      }
     }
   }, [])
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState
+  }, [voiceState])
 
   useEffect(() => {
     if (params.serverId) {
@@ -451,27 +911,13 @@ export const AppShell: React.FC = () => {
   }, [isVoiceMode])
 
   useEffect(() => {
-    if (!isVoiceMode || !activeServerId || !activeChannelId) {
-      setVoiceState(null)
+    const pendingInviteCode = localStorage.getItem(PENDING_INVITE_CODE_KEY)
+    if (!pendingInviteCode) {
       return
     }
-
-    const categories = channelsByServer[activeServerId] ?? []
-    const voiceChannel = categories
-      .flatMap((category) => category.channels)
-      .find((channel) => channel.id === activeChannelId)
-    const serverName =
-      serverDetails[activeServerId]?.name ??
-      servers.find((server) => server.id === activeServerId)?.name ??
-      'Server'
-
-    setVoiceState({
-      channelId: activeChannelId,
-      channelName: voiceChannel?.name ?? activeChannelId,
-      serverId: activeServerId,
-      serverName,
-    })
-  }, [activeChannelId, activeServerId, channelsByServer, isVoiceMode, serverDetails, servers])
+    localStorage.removeItem(PENDING_INVITE_CODE_KEY)
+    openCreateServerModal(pendingInviteCode)
+  }, [openCreateServerModal])
 
   useEffect(() => {
     let isCancelled = false
@@ -579,6 +1025,9 @@ export const AppShell: React.FC = () => {
       const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId)
 
       if (!hasActiveChannel && availableChannels.length > 0) {
+        if (isVoiceMode) {
+          return
+        }
         const fallbackChannel = availableChannels[0]
         setActiveChannelId(fallbackChannel.id)
         navigate(`/app/servers/${activeServerId}/channels/${fallbackChannel.id}`, { replace: true })
@@ -590,7 +1039,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [activeChannelId, activeServerId, navigate])
+  }, [activeChannelId, activeServerId, isVoiceMode, navigate])
 
   useEffect(() => {
     let isCancelled = false
@@ -617,6 +1066,34 @@ export const AppShell: React.FC = () => {
       isCancelled = true
     }
   }, [activeServerId])
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return
+    }
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        await refreshVoiceSidebarActivity(activeServerId)
+      } catch {
+        // keep sidebar usable even if voice participants API is temporarily unavailable
+      }
+    }
+
+    void poll()
+    const timer = window.setInterval(() => {
+      if (cancelled) {
+        return
+      }
+      void poll()
+    }, 30_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activeServerId, refreshVoiceSidebarActivity])
 
   const toggleMembers = useCallback(() => setShowMembers((v) => !v), [])
 
@@ -650,6 +1127,72 @@ export const AppShell: React.FC = () => {
     return refreshed
   }, [])
 
+  const incrementChannelUnread = useCallback((channelId: string) => {
+    if (!channelId) {
+      return
+    }
+
+    setChannelsByServer((prev) => {
+      let hasChanged = false
+      const next: Record<string, MockCategory[]> = {}
+
+      Object.entries(prev).forEach(([serverId, categories]) => {
+        const nextCategories = categories.map((category) => {
+          const nextChannels = category.channels.map((channel) => {
+            if (channel.id !== channelId || channel.type !== 'text') {
+              return channel
+            }
+            hasChanged = true
+            return {
+              ...channel,
+              unread: (channel.unread ?? 0) + 1,
+            }
+          })
+          return {
+            ...category,
+            channels: nextChannels,
+          }
+        })
+        next[serverId] = nextCategories
+      })
+
+      return hasChanged ? next : prev
+    })
+  }, [])
+
+  const resetChannelUnread = useCallback((channelId: string) => {
+    if (!channelId) {
+      return
+    }
+
+    setChannelsByServer((prev) => {
+      let hasChanged = false
+      const next: Record<string, MockCategory[]> = {}
+
+      Object.entries(prev).forEach(([serverId, categories]) => {
+        const nextCategories = categories.map((category) => {
+          const nextChannels = category.channels.map((channel) => {
+            if (channel.id !== channelId || channel.type !== 'text' || (channel.unread ?? 0) === 0) {
+              return channel
+            }
+            hasChanged = true
+            return {
+              ...channel,
+              unread: 0,
+            }
+          })
+          return {
+            ...category,
+            channels: nextChannels,
+          }
+        })
+        next[serverId] = nextCategories
+      })
+
+      return hasChanged ? next : prev
+    })
+  }, [])
+
   const handleCreateChannel = useCallback(async (payload: { name: string; type: 'TEXT' | 'VOICE' }) => {
     if (!activeServerId) {
       return
@@ -659,27 +1202,287 @@ export const AppShell: React.FC = () => {
     await refreshChannels(activeServerId)
   }, [activeServerId, refreshChannels])
 
-  const handleLeaveVoiceChannel = useCallback(async () => {
-    if (!activeServerId) {
-      setVoiceState(null)
+  const resolveFallbackTextChannel = useCallback((serverId: string, preferredChannelId?: string | null) => {
+    const channelData = channelsByServer[serverId] ?? []
+    const availableChannels = channelData.flatMap((category) => category.channels)
+    const preferred = preferredChannelId
+      ? availableChannels.find((channel) => channel.id === preferredChannelId && channel.type === 'text')
+      : null
+    return preferred ?? availableChannels.find((channel) => channel.type === 'text') ?? availableChannels[0] ?? null
+  }, [channelsByServer])
+
+  const handleLeaveVoiceChannel = useCallback(async (opts: { navigateToText?: boolean; invalidateJoinAttempt?: boolean } = {}) => {
+    const shouldNavigate = opts.navigateToText ?? true
+    const shouldInvalidateJoinAttempt = opts.invalidateJoinAttempt ?? true
+
+    if (shouldInvalidateJoinAttempt) {
+      voiceJoinAttemptRef.current += 1
+      joinVoiceInFlightRef.current = null
+    }
+
+    const pendingRoom = pendingVoiceRoomRef.current
+    if (pendingRoom) {
+      pendingVoiceRoomRef.current = null
+      try {
+        await pendingRoom.disconnect()
+      } catch {
+        // no-op
+      }
+    }
+
+    const current = voiceStateRef.current
+    if (!current) {
       return
     }
 
-    const channelData = channelsByServer[activeServerId] ?? []
-    const availableChannels = channelData.flatMap((category) => category.channels)
-    const firstText = availableChannels.find((channel) => channel.type === 'text')
-      ?? availableChannels[0]
+    try {
+      await current.room.disconnect()
+    } catch {
+      // no-op
+    }
 
-    setVoiceState(null)
+    if (current.serverId) {
+      setVoiceActivityByChannel((prev) => ({
+        ...prev,
+        [current.channelId]: {
+          activeMembers: [],
+          isLive: false,
+          liveLabel: undefined,
+        },
+      }))
+    }
 
-    if (!firstText) {
+    setVoiceState((prev) => (prev?.room === current.room ? null : prev))
+
+    if (!shouldNavigate) {
+      return
+    }
+
+    const fallback = resolveFallbackTextChannel(current.serverId, current.lastTextChannelId)
+    if (!fallback) {
       navigate('/app/@me')
       return
     }
 
-    setActiveChannelId(firstText.id)
-    navigate(`/app/servers/${activeServerId}/channels/${firstText.id}`)
-  }, [activeServerId, channelsByServer, navigate])
+    setActiveServerId(current.serverId)
+    setActiveChannelId(fallback.id)
+    navigate(`/app/servers/${current.serverId}/channels/${fallback.id}`)
+  }, [navigate, resolveFallbackTextChannel])
+
+  const joinVoiceChannel = useCallback(async (channelId: string) => {
+    if (!activeServerId) {
+      pushToast('Chưa xác định server hiện tại.')
+      return
+    }
+
+    const joinKey = `${activeServerId}:${channelId}`
+    if (joinVoiceInFlightRef.current === joinKey) {
+      return
+    }
+
+    const currentVoice = voiceStateRef.current
+    if (currentVoice && currentVoice.serverId === activeServerId && currentVoice.channelId === channelId) {
+      if (!location.pathname.includes(`/app/servers/${activeServerId}/voice/${channelId}`)) {
+        navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+      }
+      return
+    }
+
+    if (isVoiceConnecting) {
+      return
+    }
+
+    const categories = channelsByServer[activeServerId] ?? []
+    const selectedChannel = categories
+      .flatMap((category) => category.channels)
+      .find((channel) => channel.id === channelId && channel.type === 'voice')
+    const channelName = selectedChannel?.name ?? channelId
+
+    const serverName =
+      serverDetails[activeServerId]?.name ??
+      servers.find((server) => server.id === activeServerId)?.name ??
+      'Server'
+
+    const previous = voiceStateRef.current
+    const lastTextChannelId = categories
+      .find((category) => category.channels.some((channel) => channel.id === activeChannelId))
+      ?.channels.find((channel) => channel.id === activeChannelId && channel.type === 'text')
+      ? activeChannelId
+      : previous?.lastTextChannelId ?? null
+
+    const joinAttempt = voiceJoinAttemptRef.current + 1
+    voiceJoinAttemptRef.current = joinAttempt
+    setIsVoiceConnecting(true)
+    joinVoiceInFlightRef.current = joinKey
+    try {
+      if (previous) {
+        await handleLeaveVoiceChannel({ navigateToText: false, invalidateJoinAttempt: false })
+      } else if (pendingVoiceRoomRef.current) {
+        try {
+          await pendingVoiceRoomRef.current.disconnect()
+        } catch {
+          // no-op
+        }
+        pendingVoiceRoomRef.current = null
+      }
+
+      if (voiceJoinAttemptRef.current !== joinAttempt) {
+        return
+      }
+
+      const { token, url } = await getVoiceToken(channelId)
+      if (voiceJoinAttemptRef.current !== joinAttempt) {
+        return
+      }
+      const room = new Room()
+      pendingVoiceRoomRef.current = room
+      const connectTargets = buildConnectTargets(url)
+      let connectError: unknown = null
+
+      for (const target of connectTargets) {
+        if (voiceJoinAttemptRef.current !== joinAttempt) {
+          break
+        }
+
+        try {
+          await withTimeout(room.connect(target, token), 7000)
+          connectError = null
+          break
+        } catch (error) {
+          connectError = error
+          try {
+            await room.disconnect()
+          } catch {
+            // no-op
+          }
+        }
+      }
+
+      if (voiceJoinAttemptRef.current !== joinAttempt) {
+        try {
+          await room.disconnect()
+        } catch {
+          // no-op
+        }
+        return
+      }
+
+      if (connectError) {
+        const rawMessage = (connectError as any)?.message ?? 'Không thể kết nối kênh thoại.'
+        const normalized = String(rawMessage).toLowerCase()
+        if (
+          normalized.includes('websocket') ||
+          normalized.includes('ws://') ||
+          normalized.includes('wss://') ||
+          normalized.includes('network')
+        ) {
+          pushToast('Không thể kết nối LiveKit (WS). Kiểm tra URL LiveKit/TLS ở backend.')
+        } else {
+          pushToast(rawMessage)
+        }
+        return
+      }
+
+      pendingVoiceRoomRef.current = null
+
+      const nextVoiceState: VoiceState = {
+        channelId,
+        channelName,
+        serverId: activeServerId,
+        serverName,
+        room,
+        lastTextChannelId,
+        isMicrophoneEnabled: room.localParticipant.isMicrophoneEnabled,
+        isCameraEnabled: room.localParticipant.isCameraEnabled,
+        isScreenShareEnabled: room.localParticipant.isScreenShareEnabled,
+      }
+
+      const onParticipantChanged = () => {
+        syncCurrentRoomActivity(nextVoiceState)
+        syncVoiceStateFromRoom(room)
+      }
+
+      room.on(RoomEvent.ParticipantConnected, onParticipantChanged)
+      room.on(RoomEvent.ParticipantDisconnected, onParticipantChanged)
+      room.on(RoomEvent.LocalTrackPublished, onParticipantChanged)
+      room.on(RoomEvent.LocalTrackUnpublished, onParticipantChanged)
+      room.on(RoomEvent.TrackPublished, onParticipantChanged)
+      room.on(RoomEvent.TrackUnpublished, onParticipantChanged)
+      room.on(RoomEvent.Disconnected, () => {
+        setVoiceState((prev) => (prev?.room === room ? null : prev))
+      })
+
+      setVoiceState(nextVoiceState)
+      syncCurrentRoomActivity(nextVoiceState)
+      syncVoiceStateFromRoom(room)
+      setActiveChannelId(channelId)
+      navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+    } catch (error: any) {
+      const rawMessage = error?.message ?? 'Không thể kết nối kênh thoại.'
+      const normalized = String(rawMessage).toLowerCase()
+      if (
+        normalized.includes('websocket') ||
+        normalized.includes('ws://') ||
+        normalized.includes('wss://') ||
+        normalized.includes('network')
+      ) {
+        pushToast('Không thể kết nối LiveKit (WS). Kiểm tra URL LiveKit/TLS ở backend.')
+      } else {
+        pushToast(rawMessage)
+      }
+    } finally {
+      if (pendingVoiceRoomRef.current && voiceJoinAttemptRef.current === joinAttempt) {
+        pendingVoiceRoomRef.current = null
+      }
+      if (joinVoiceInFlightRef.current === joinKey) {
+        joinVoiceInFlightRef.current = null
+      }
+      if (voiceJoinAttemptRef.current === joinAttempt) {
+        setIsVoiceConnecting(false)
+      }
+    }
+  }, [
+    activeChannelId,
+    activeServerId,
+    channelsByServer,
+    handleLeaveVoiceChannel,
+    isVoiceConnecting,
+    location.pathname,
+    navigate,
+    pushToast,
+    serverDetails,
+    servers,
+    syncCurrentRoomActivity,
+    syncVoiceStateFromRoom,
+  ])
+
+  const toggleMicrophone = useCallback(async () => {
+    if (!voiceState) {
+      return
+    }
+    const next = !voiceState.room.localParticipant.isMicrophoneEnabled
+    await voiceState.room.localParticipant.setMicrophoneEnabled(next)
+    syncVoiceStateFromRoom(voiceState.room)
+  }, [syncVoiceStateFromRoom, voiceState])
+
+  const toggleCamera = useCallback(async () => {
+    if (!voiceState) {
+      return
+    }
+    const next = !voiceState.room.localParticipant.isCameraEnabled
+    await voiceState.room.localParticipant.setCameraEnabled(next)
+    syncVoiceStateFromRoom(voiceState.room)
+  }, [syncVoiceStateFromRoom, voiceState])
+
+  const toggleScreenShare = useCallback(async () => {
+    if (!voiceState) {
+      return
+    }
+    const next = !voiceState.room.localParticipant.isScreenShareEnabled
+    await voiceState.room.localParticipant.setScreenShareEnabled(next)
+    syncVoiceStateFromRoom(voiceState.room)
+    syncCurrentRoomActivity(voiceState)
+  }, [syncCurrentRoomActivity, syncVoiceStateFromRoom, voiceState])
 
   const handleCreateServer = useCallback(async (payload: { name: string; is_public: boolean }, iconFile: File | null) => {
     const created = await createServer(payload)
@@ -711,6 +1514,32 @@ export const AppShell: React.FC = () => {
     navigate(`/app/servers/${created.id}/channels/${createdChannel.id}`)
   }, [getFirstNavigableChannelId, markOnboardingSeen, navigate, pushToast])
 
+  const resolveInvitePreview = useCallback(async (code: string) => {
+    const preview = await getInvitePreview(code)
+    return {
+      code: preview.invite_code,
+      expiresAt: preview.expires_at ?? null,
+      server: {
+        id: preview.server.id,
+        name: preview.server.name,
+        iconUrl: preview.server.icon_url,
+        memberCount: preview.server.member_count,
+      },
+    }
+  }, [])
+
+  const handleJoinByInvite = useCallback(async (code: string) => {
+    const joinedServer = await joinByInviteCode(code)
+    markOnboardingSeen()
+    const refreshedServers = await getServers()
+    setServers(refreshedServers)
+    setServerDetails((prev) => ({
+      ...prev,
+      [joinedServer.id]: joinedServer,
+    }))
+    await navigateToServerFirstChannel(joinedServer.id)
+  }, [markOnboardingSeen, navigateToServerFirstChannel])
+
   const refreshActiveServer = useCallback(async (serverId: string) => {
     const list = await getServers()
     setServers(list)
@@ -734,10 +1563,49 @@ export const AppShell: React.FC = () => {
     () => channelsByServer[activeServerId] ?? [],
     [activeServerId, channelsByServer]
   )
+  const categoriesWithVoiceActivity = useMemo(
+    () =>
+      activeCategories.map((category) => ({
+        ...category,
+        channels: category.channels.map((channel) => {
+          if (channel.type !== 'voice') {
+            return channel
+          }
+          const activity = voiceActivityByChannel[channel.id]
+          if (!activity) {
+            return channel
+          }
+          return {
+            ...channel,
+            activeMembers: activity.activeMembers,
+            liveLabel: activity.liveLabel,
+            isLive: activity.isLive,
+          }
+        }),
+      })),
+    [activeCategories, voiceActivityByChannel]
+  )
   const activeMembers = useMemo(
     () => membersByServer[activeServerId] ?? [],
     [activeServerId, membersByServer]
   )
+  const hasManageVoicePermission = useMemo(() => {
+    if (!currentUser) {
+      return false
+    }
+    if (currentUser.is_admin) {
+      return true
+    }
+    return activeServer?.ownerId === currentUser.id
+  }, [activeServer?.ownerId, currentUser])
+
+  useEffect(() => {
+    if (!voiceState) {
+      return
+    }
+    syncCurrentRoomActivity(voiceState)
+    syncVoiceStateFromRoom(voiceState.room)
+  }, [syncCurrentRoomActivity, syncVoiceStateFromRoom, voiceState])
 
   // Context passed to all child routes via <Outlet>
   const outletContext = useMemo(
@@ -749,23 +1617,48 @@ export const AppShell: React.FC = () => {
       setActiveServerId,
       activeChannelId,
       setActiveChannelId,
-      activeCategories,
+      activeCategories: categoriesWithVoiceActivity,
       serverCount: servers.length,
       shouldShowOnboarding: servers.length === 0 && !hasSeenOnboarding,
       dismissOnboarding: markOnboardingSeen,
-      openCreateServerModal: () => setIsCreateServerModalOpen(true),
+      openCreateServerModal: () => openCreateServerModal(),
       showDevelopingToast,
+      voiceState,
+      isVoiceConnecting,
+      canManageVoiceTools: hasManageVoicePermission,
+      joinVoiceChannel,
+      leaveVoiceChannel: handleLeaveVoiceChannel,
+      toggleMicrophone,
+      toggleCamera,
+      toggleScreenShare,
+      applyVoiceChannelActivityUpdate,
+      pushToast,
+      incrementChannelUnread,
+      resetChannelUnread,
     }),
     [
       showMembers,
       toggleMembers,
       activeServerId,
       activeChannelId,
-      activeCategories,
+      categoriesWithVoiceActivity,
       servers.length,
       hasSeenOnboarding,
       markOnboardingSeen,
+      openCreateServerModal,
       showDevelopingToast,
+      voiceState,
+      isVoiceConnecting,
+      hasManageVoicePermission,
+      joinVoiceChannel,
+      handleLeaveVoiceChannel,
+      toggleMicrophone,
+      toggleCamera,
+      toggleScreenShare,
+      applyVoiceChannelActivityUpdate,
+      pushToast,
+      incrementChannelUnread,
+      resetChannelUnread,
     ],
   )
 
@@ -786,7 +1679,7 @@ export const AppShell: React.FC = () => {
                 navigate('/app/@me')
               }
             }}
-            onCreateServer={() => setIsCreateServerModalOpen(true)}
+            onCreateServer={() => openCreateServerModal()}
           />
         </div>
 
@@ -816,24 +1709,23 @@ export const AppShell: React.FC = () => {
                   serverBannerUrl={activeServer?.bannerUrl}
                   serverIconUrl={activeServer?.iconUrl}
                   serverBoostLevel={activeServer?.boostLevel}
-                  categories={activeCategories}
+                  categories={categoriesWithVoiceActivity}
                   activeChannelId={activeChannelId}
                   onSelectChannel={(channelId, type) => {
-                    setActiveChannelId(channelId)
                     if (type === 'voice') {
-                      const serverName = activeServer?.name ?? 'Server'
-                      const channel = activeCategories.flatMap((category) => category.channels).find((item) => item.id === channelId)
-                      setVoiceState({
-                        channelId,
-                        channelName: channel?.name ?? channelId,
-                        serverId: activeServerId,
-                        serverName,
-                      })
-                      navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+                      void joinVoiceChannel(channelId)
                       return
                     }
-                    setVoiceState(null)
-                    navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
+
+                    const navigateToText = async () => {
+                      if (voiceState) {
+                        await handleLeaveVoiceChannel({ navigateToText: false })
+                      }
+                      setActiveChannelId(channelId)
+                      navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
+                    }
+
+                    void navigateToText()
                   }}
                   onCreateChannel={() => setIsCreateChannelModalOpen(true)}
                   onInviteMember={() => setIsInviteDialogOpen(true)}
@@ -895,9 +1787,12 @@ export const AppShell: React.FC = () => {
 
         <CreateServerModal
           isOpen={isCreateServerModalOpen}
-          onOpenChange={setIsCreateServerModalOpen}
+          onOpenChange={closeCreateServerModal}
           defaultServerName={`Server của ${currentUsername ?? 'bạn'}`}
           onCreate={handleCreateServer}
+          onResolveInvitePreview={resolveInvitePreview}
+          onJoinByInvite={handleJoinByInvite}
+          initialInviteCode={createServerModalInviteCode}
         />
 
         {activeServerId && (

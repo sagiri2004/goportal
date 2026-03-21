@@ -2,6 +2,7 @@ package impl
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 type voiceService struct {
 	serverRepo    repositories.ServerRepository
 	channelRepo   repositories.ChannelRepository
+	userRepo      repositories.UserRepository
 	recordingRepo repositories.RecordingRepository
+	notification  services.NotificationService
 	liveKitSvc    services.LiveKitService
 	egressSvc     services.EgressService
 }
@@ -24,14 +27,18 @@ type voiceService struct {
 func NewVoiceService(
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
+	userRepo repositories.UserRepository,
 	recordingRepo repositories.RecordingRepository,
+	notification services.NotificationService,
 	liveKitSvc services.LiveKitService,
 	egressSvc services.EgressService,
 ) services.VoiceService {
 	return &voiceService{
 		serverRepo:    serverRepo,
 		channelRepo:   channelRepo,
+		userRepo:      userRepo,
 		recordingRepo: recordingRepo,
+		notification:  notification,
 		liveKitSvc:    liveKitSvc,
 		egressSvc:     egressSvc,
 	}
@@ -46,7 +53,22 @@ func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelI
 		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 
-	token, err := s.liveKitSvc.GenerateAccessToken(channel.ID, actorID)
+	actor, err := s.userRepo.FindByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataBytes, err := json.Marshal(map[string]any{
+		"user_id":      actor.ID,
+		"username":     actor.Username,
+		"display_name": actor.Username,
+		"avatar_url":   strings.TrimSpace(stringValue(actor.AvatarURL)),
+	})
+	if err != nil {
+		return nil, apperr.E("INTERNAL_ERROR", err)
+	}
+
+	token, err := s.liveKitSvc.GenerateAccessToken(channel.ID, actorID, actor.Username, string(metadataBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +77,26 @@ func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelI
 		Token: token,
 		URL:   global.Config.LiveKit.URL,
 	}, nil
+}
+
+func (s *voiceService) ListChannelParticipants(ctx context.Context, actorID, channelID string) ([]models.VoiceChannelParticipantSnapshot, error) {
+	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if channel.Type != models.ChannelTypeVoice {
+		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
+	}
+
+	_, participantInfos, err := s.liveKitSvc.GetRoomInfo(ctx, channel.ID)
+	if err != nil {
+		if isAppErrCode(err, "LIVEKIT_ROOM_NOT_FOUND") {
+			return []models.VoiceChannelParticipantSnapshot{}, nil
+		}
+		return nil, err
+	}
+
+	return s.buildParticipantSnapshots(ctx, participantInfos)
 }
 
 func (s *voiceService) StartChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error) {
@@ -195,19 +237,172 @@ func (s *voiceService) StopChannelRTMPStream(ctx context.Context, actorID, chann
 }
 
 func (s *voiceService) HandleWebhookEvent(ctx context.Context, evt *livekit.WebhookEvent) error {
-	if evt == nil || evt.GetEvent() != "egress_ended" || evt.GetEgressInfo() == nil {
+	if evt == nil {
 		return nil
 	}
-	egress := evt.GetEgressInfo()
-	recording, err := s.recordingRepo.FindByEgressID(ctx, egress.GetEgressId())
-	if err != nil {
-		if isAppErrCode(err, "RECORDING_NOT_FOUND") {
+
+	switch evt.GetEvent() {
+	case "egress_ended":
+		if evt.GetEgressInfo() == nil {
 			return nil
 		}
+		egress := evt.GetEgressInfo()
+		recording, err := s.recordingRepo.FindByEgressID(ctx, egress.GetEgressId())
+		if err != nil {
+			if isAppErrCode(err, "RECORDING_NOT_FOUND") {
+				return nil
+			}
+			return err
+		}
+		applyEgressResult(recording, egress)
+		return s.recordingRepo.Update(ctx, recording)
+	case "participant_joined", "participant_left", "track_published", "track_unpublished", "room_started", "room_finished":
+		return s.dispatchVoiceActivityUpdate(ctx, evt)
+	default:
+		return nil
+	}
+}
+
+func (s *voiceService) dispatchVoiceActivityUpdate(ctx context.Context, evt *livekit.WebhookEvent) error {
+	room := evt.GetRoom()
+	if room == nil {
+		return nil
+	}
+
+	channelID := strings.TrimSpace(room.GetName())
+	if channelID == "" {
+		return nil
+	}
+
+	channel, err := s.channelRepo.FindByID(ctx, channelID)
+	if err != nil {
 		return err
 	}
-	applyEgressResult(recording, egress)
-	return s.recordingRepo.Update(ctx, recording)
+	if channel.Type != models.ChannelTypeVoice {
+		return nil
+	}
+
+	_, participantInfos, err := s.liveKitSvc.GetRoomInfo(ctx, channelID)
+	if err != nil && !isAppErrCode(err, "LIVEKIT_ROOM_NOT_FOUND") {
+		return err
+	}
+	participantInfos = participantInfos[:len(participantInfos):len(participantInfos)]
+	participants, err := s.buildParticipantSnapshots(ctx, participantInfos)
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(models.VoiceChannelActivityUpdatedEvent{
+		EventType:    models.VoiceEventTypeActivityUpdated,
+		ServerID:     channel.ServerID,
+		ChannelID:    channel.ID,
+		Participants: participants,
+	})
+	if err != nil {
+		return apperr.E("INTERNAL_ERROR", err)
+	}
+
+	members, err := s.serverRepo.ListMembers(ctx, channel.ServerID)
+	if err != nil {
+		return err
+	}
+
+	for _, member := range members {
+		memberID := strings.TrimSpace(member.ID)
+		if memberID == "" {
+			continue
+		}
+
+		hasViewPerm, err := s.serverRepo.HasPermission(ctx, channel.ServerID, memberID, models.PermissionViewChannel)
+		if err != nil || !hasViewPerm {
+			continue
+		}
+
+		if channel.IsPrivate {
+			isMember, err := s.channelRepo.IsMember(ctx, channel.ID, memberID)
+			if err != nil || !isMember {
+				continue
+			}
+		}
+
+		if s.notification != nil {
+			_, _ = s.notification.Dispatch(
+				ctx,
+				memberID,
+				models.NotificationSourceTypeSystem,
+				models.NotificationEventTypePopup,
+				models.NotificationPriorityNormal,
+				"voice-service",
+				payload,
+				nil,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (s *voiceService) buildParticipantSnapshots(ctx context.Context, participantInfos []*livekit.ParticipantInfo) ([]models.VoiceChannelParticipantSnapshot, error) {
+	userIDs := make([]string, 0, len(participantInfos))
+	userSeen := make(map[string]struct{}, len(participantInfos))
+	for _, p := range participantInfos {
+		userID := strings.TrimSpace(p.GetIdentity())
+		if userID == "" {
+			continue
+		}
+		if _, exists := userSeen[userID]; exists {
+			continue
+		}
+		userSeen[userID] = struct{}{}
+		userIDs = append(userIDs, userID)
+	}
+
+	users, err := s.userRepo.FindByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]models.User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	participants := make([]models.VoiceChannelParticipantSnapshot, 0, len(participantInfos))
+	for _, p := range participantInfos {
+		userID := strings.TrimSpace(p.GetIdentity())
+		if userID == "" {
+			continue
+		}
+		user, ok := userMap[userID]
+		name := strings.TrimSpace(p.GetName())
+		if ok && strings.TrimSpace(user.Username) != "" {
+			name = strings.TrimSpace(user.Username)
+		}
+		if name == "" {
+			name = userID
+		}
+		avatarURL := ""
+		if ok {
+			avatarURL = strings.TrimSpace(stringValue(user.AvatarURL))
+		}
+
+		isScreenSharing := false
+		for _, track := range p.GetTracks() {
+			source := track.GetSource()
+			if source == livekit.TrackSource_SCREEN_SHARE || source == livekit.TrackSource_SCREEN_SHARE_AUDIO {
+				isScreenSharing = true
+				break
+			}
+		}
+
+		participants = append(participants, models.VoiceChannelParticipantSnapshot{
+			UserID:          userID,
+			Name:            name,
+			AvatarURL:       avatarURL,
+			IsScreenSharing: isScreenSharing,
+		})
+	}
+
+	return participants, nil
 }
 
 func (s *voiceService) ensureChannelAccess(ctx context.Context, actorID, channelID string, manageRequired bool) (*models.Channel, error) {
@@ -304,4 +499,11 @@ func normalizeEpochSeconds(ts int64) int64 {
 func isAppErrCode(err error, code string) bool {
 	ae, ok := apperr.From(err)
 	return ok && ae.Code == code
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

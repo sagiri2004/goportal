@@ -21,6 +21,8 @@ const (
 	NotificationStatusDeliveredToServer = "DELIVERED_TO_SERVER"
 	NotificationStatusDeliveredToClient = "DELIVERED_TO_CLIENT"
 	NotificationStatusFailed            = "FAILED"
+
+	VoiceEventTypeActivityUpdated = "VOICE_CHANNEL_ACTIVITY_UPDATED"
 )
 
 type MessageCreatedEvent struct {
@@ -62,6 +64,20 @@ type NotificationEvent struct {
 	Priority      string          `json:"priority"`
 	Payload       json.RawMessage `json:"payload"`
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
+}
+
+type VoiceChannelParticipantSnapshot struct {
+	UserID          string `json:"user_id"`
+	Name            string `json:"name"`
+	AvatarURL       string `json:"avatar_url,omitempty"`
+	IsScreenSharing bool   `json:"is_screen_sharing"`
+}
+
+type VoiceChannelActivityUpdatedEvent struct {
+	EventType    string                            `json:"event_type"`
+	ServerID     string                            `json:"server_id"`
+	ChannelID    string                            `json:"channel_id"`
+	Participants []VoiceChannelParticipantSnapshot `json:"participants"`
 }
 
 type NotificationDeliveryEvent struct {

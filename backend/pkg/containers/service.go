@@ -113,7 +113,9 @@ func VoiceService() services.VoiceService {
 		voiceSvc = svcimpl.NewVoiceService(
 			ServerRepository(),
 			ChannelRepository(),
+			UserRepository(),
 			RecordingRepository(),
+			NotificationService(),
 			LiveKitService(),
 			EgressService(),
 		)

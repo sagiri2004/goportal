@@ -22,6 +22,8 @@ import { getMessages, sendMessage, uploadMessageAttachment } from '@goportal/app
 import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
 import type { Message as ChatMessage } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
+import { useAuthStore } from '@goportal/store'
+import { WS_URL } from '@goportal/config'
 import { useDropzone } from 'react-dropzone'
 import { TextContent } from './components/TextContent'
 import { ReplyPreview } from './components/ReplyPreview'
@@ -46,10 +48,272 @@ type ShellContext = {
       type: 'text' | 'voice'
     }>
   }>
+  incrementChannelUnread?: (channelId: string) => void
+  resetChannelUnread?: (channelId: string) => void
+  applyVoiceChannelActivityUpdate?: (update: {
+    serverId: string
+    channelId: string
+    participants: Array<{
+      user_id: string
+      name?: string
+      avatar_url?: string
+      is_screen_sharing?: boolean
+    }>
+  }) => void
+}
+
+type NotificationSocketEnvelope = {
+  type?: string
+  user_id?: string
+  payload?: any
+  priority?: string
+  timestamp?: string
+  event_id?: string
+}
+
+const MESSAGE_CREATED_EVENT_TYPES = new Set([
+  'CHAT_MESSAGE_CREATED',
+  'MESSAGE_CREATED',
+  'MESSAGE_CREATE',
+  'MESSAGE:CREATE',
+])
+
+const MESSAGE_UPDATED_EVENT_TYPES = new Set([
+  'CHAT_MESSAGE_UPDATED',
+  'MESSAGE_UPDATED',
+  'MESSAGE_UPDATE',
+  'MESSAGE:UPDATE',
+])
+
+const MESSAGE_DELETED_EVENT_TYPES = new Set([
+  'CHAT_MESSAGE_DELETED',
+  'MESSAGE_DELETED',
+  'MESSAGE_DELETE',
+  'MESSAGE:DELETE',
+])
+
+const REACTION_ADDED_EVENT_TYPES = new Set([
+  'MESSAGE_REACTION_ADDED',
+  'REACTION_ADDED',
+  'MESSAGE:REACTION:ADD',
+])
+
+const REACTION_REMOVED_EVENT_TYPES = new Set([
+  'MESSAGE_REACTION_REMOVED',
+  'REACTION_REMOVED',
+  'MESSAGE:REACTION:REMOVE',
+])
+
+const VOICE_ACTIVITY_EVENT_TYPES = new Set([
+  'VOICE_CHANNEL_ACTIVITY_UPDATED',
+  'VOICE_ACTIVITY_UPDATED',
+])
+
+const messagePalette = [
+  'bg-indigo-500',
+  'bg-purple-500',
+  'bg-green-500',
+  'bg-orange-500',
+  'bg-cyan-500',
+  'bg-rose-500',
+]
+
+const messageColorFromId = (id: string): string => {
+  let hash = 0
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash + id.charCodeAt(index)) % 1031
+  }
+  return messagePalette[hash % messagePalette.length]
+}
+
+const messageInitialsFromName = (name: string): string =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2)
+
+const formatSocketTimestamp = (timestamp?: unknown): { timestamp: string; date: string } => {
+  let source: Date
+  if (typeof timestamp === 'number') {
+    source = new Date(timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp)
+  } else if (typeof timestamp === 'string' && timestamp) {
+    source = new Date(timestamp)
+  } else {
+    source = new Date()
+  }
+  const safeSource = Number.isNaN(source.getTime()) ? new Date() : source
+  return {
+    timestamp: safeSource.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    date: safeSource.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+  }
+}
+
+const normalizeEventType = (raw: unknown): string =>
+  typeof raw === 'string' ? raw.trim().toUpperCase() : ''
+
+const resolveEnvelopeEventType = (event: NotificationSocketEnvelope): string => {
+  const topLevelType = normalizeEventType(event.type)
+  const payloadType = normalizeEventType(event.payload?.event_type ?? event.payload?.type)
+  if (topLevelType === 'POPUP') {
+    if (payloadType) {
+      return payloadType
+    }
+    if (event.payload?.message_id && event.payload?.channel_id) {
+      return 'CHAT_MESSAGE_CREATED'
+    }
+  }
+  return payloadType || topLevelType
+}
+
+const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: string | null): string[] => {
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    return []
+  }
+
+  if (parsed.protocol === 'http:') {
+    parsed.protocol = 'ws:'
+  } else if (parsed.protocol === 'https:') {
+    parsed.protocol = 'wss:'
+  }
+
+  if (!parsed.pathname || parsed.pathname === '/') {
+    parsed.pathname = '/ws'
+  }
+
+  const setCommonParams = (url: URL) => {
+    url.searchParams.set('user_id', userId)
+    if (token) {
+      url.searchParams.set('token', token)
+    }
+  }
+
+  const targets: URL[] = []
+  const addTarget = (url: URL) => {
+    setCommonParams(url)
+    targets.push(url)
+  }
+
+  if (
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+    parsed.port === '8080'
+  ) {
+    const preferred = new URL(parsed.toString())
+    preferred.port = '8090'
+    addTarget(preferred)
+
+    const fallback = new URL(parsed.toString())
+    fallback.port = '8085'
+    addTarget(fallback)
+  }
+
+  addTarget(parsed)
+  return Array.from(new Set(targets.map((target) => target.toString())))
+}
+
+const mapSocketAttachments = (attachments: any): ChatMessage['attachments'] => {
+  if (!Array.isArray(attachments)) {
+    return []
+  }
+
+  return attachments.map((item: any, index: number) => {
+    const mimeType = item?.file_type ?? item?.mime_type ?? 'application/octet-stream'
+    return {
+      id: item?.id ?? item?.attachment_id ?? `att-${index}`,
+      type: mimeType.startsWith('image/')
+        ? 'image'
+        : mimeType.startsWith('video/')
+          ? 'video'
+          : mimeType.startsWith('audio/')
+            ? 'audio'
+            : 'file',
+      url: item?.file_url ?? item?.url ?? '',
+      filename: item?.file_name ?? item?.filename ?? 'attachment',
+      filesize: item?.file_size ?? item?.filesize ?? 0,
+      mimeType,
+    }
+  })
+}
+
+const mapSocketReactions = (reactions: any, currentUserId?: string | null): ChatMessage['reactions'] => {
+  if (!Array.isArray(reactions)) {
+    return []
+  }
+
+  const grouped = new Map<string, string[]>()
+  reactions.forEach((reaction: any) => {
+    const emoji = reaction?.emoji
+    if (!emoji) {
+      return
+    }
+
+    const nextUserIds: string[] = Array.isArray(reaction?.user_ids)
+      ? reaction.user_ids.filter((item: unknown): item is string => typeof item === 'string')
+      : typeof reaction?.user_id === 'string'
+        ? [reaction.user_id]
+        : []
+
+    const existing = grouped.get(emoji) ?? []
+    grouped.set(emoji, [...existing, ...nextUserIds])
+  })
+
+  return Array.from(grouped.entries()).map(([emoji, userIds]) => ({
+    emoji,
+    count: userIds.length,
+    hasReacted: !!currentUserId && userIds.includes(currentUserId),
+    userIds,
+  }))
+}
+
+const mapSocketPayloadToMessage = (
+  payload: any,
+  envelopeTimestamp?: string,
+  currentUserId?: string | null,
+): ChatMessage | null => {
+  const messageId = payload?.message_id ?? payload?.id
+  const authorId = payload?.author_id ?? payload?.author?.id
+  const channelId = payload?.channel_id
+  if (!messageId || !authorId || !channelId) {
+    return null
+  }
+
+  const author = payload?.author?.username ?? `user-${String(authorId).slice(0, 6)}`
+  const { timestamp, date } = formatSocketTimestamp(payload?.created_at ?? envelopeTimestamp)
+
+  return {
+    id: messageId,
+    authorId,
+    author,
+    avatarUrl: payload?.author?.avatar_url,
+    avatarColor: payload?.author?.avatar_color ?? messageColorFromId(authorId),
+    avatarInitials: messageInitialsFromName(author),
+    content: payload?.content?.payload ?? payload?.content ?? '',
+    timestamp,
+    date,
+    editedAt: payload?.updated_at
+      ? formatSocketTimestamp(payload.updated_at).timestamp
+      : undefined,
+    attachments: mapSocketAttachments(payload?.attachments),
+    reactions: mapSocketReactions(payload?.reactions, currentUserId),
+  }
 }
 
 export const DashboardView: React.FC = () => {
-  const { showMembers, setShowMembers, activeChannelId, activeCategories } = useOutletContext<ShellContext>()
+  const {
+    showMembers,
+    setShowMembers,
+    activeChannelId,
+    activeCategories,
+    incrementChannelUnread,
+    resetChannelUnread,
+    applyVoiceChannelActivityUpdate,
+  } = useOutletContext<ShellContext>()
+  const currentUser = useAuthStore((state: any) => state.user)
+  const token = useAuthStore((state: any) => state.token)
   const [messagesByChannel, setMessagesByChannel] = useState<Record<string, ChatMessage[]>>({})
   const [pagingByChannel, setPagingByChannel] = useState<
     Record<string, { offset: number; hasMore: boolean; isLoadingMore: boolean }>
@@ -65,6 +329,16 @@ export const DashboardView: React.FC = () => {
   const embedCacheRef = useRef<Record<string, LinkEmbedData | null>>({})
   const embedInFlightRef = useRef<Record<string, boolean>>({})
   const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
+  const activeChannelIdRef = useRef(activeChannelId)
+  const currentUserIdRef = useRef<string | null>(currentUser?.id ?? null)
+
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannelId
+  }, [activeChannelId])
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.id ?? null
+  }, [currentUser?.id])
 
   const activeChannel = useMemo(
     () => {
@@ -146,6 +420,306 @@ export const DashboardView: React.FC = () => {
       isCancelled = true
     }
   }, [activeChannelId])
+
+  useEffect(() => {
+    if (!activeChannelId) {
+      return
+    }
+    resetChannelUnread?.(activeChannelId)
+  }, [activeChannelId, resetChannelUnread])
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return
+    }
+
+    let socket: WebSocket | null = null
+    let reconnectTimer: number | null = null
+    let initialConnectTimer: number | null = null
+    let reconnectAttempt = 0
+    let closedByClient = false
+
+    const updateMessageInChannel = (
+      channelId: string | null,
+      updater: (messages: ChatMessage[]) => ChatMessage[],
+    ) => {
+      setMessagesByChannel((prev) => {
+        if (channelId) {
+          const current = prev[channelId] ?? []
+          return {
+            ...prev,
+            [channelId]: updater(current),
+          }
+        }
+
+        const next: Record<string, ChatMessage[]> = { ...prev }
+        Object.keys(next).forEach((key) => {
+          next[key] = updater(next[key] ?? [])
+        })
+        return next
+      })
+    }
+
+    const applyReactionDelta = (
+      message: ChatMessage,
+      emoji: string,
+      userId: string,
+      mode: 'add' | 'remove',
+    ): ChatMessage => {
+      const reactions = message.reactions ?? []
+      const index = reactions.findIndex((reaction) => reaction.emoji === emoji)
+
+      if (index === -1) {
+        if (mode === 'remove') {
+          return message
+        }
+        return {
+          ...message,
+          reactions: [
+            ...reactions,
+            {
+              emoji,
+              count: 1,
+              hasReacted: currentUserIdRef.current === userId,
+              userIds: [userId],
+            },
+          ],
+        }
+      }
+
+      const target = reactions[index]
+      const currentUserIds = target.userIds ?? []
+      const nextUserIds =
+        mode === 'add'
+          ? Array.from(new Set([...currentUserIds, userId]))
+          : currentUserIds.filter((id) => id !== userId)
+
+      const nextCount = nextUserIds.length
+      const nextReactions = reactions
+        .map((reaction, reactionIndex) => {
+          if (reactionIndex !== index) {
+            return reaction
+          }
+          return {
+            ...reaction,
+            count: nextCount,
+            userIds: nextUserIds,
+            hasReacted: currentUserIdRef.current ? nextUserIds.includes(currentUserIdRef.current) : false,
+          }
+        })
+        .filter((reaction) => reaction.count > 0)
+
+      return {
+        ...message,
+        reactions: nextReactions,
+      }
+    }
+
+    const onSocketMessage = (raw: string) => {
+      let event: NotificationSocketEnvelope
+      try {
+        event = JSON.parse(raw) as NotificationSocketEnvelope
+      } catch {
+        return
+      }
+
+      const eventType = resolveEnvelopeEventType(event)
+      if (!eventType || eventType === 'CONNECTED') {
+        return
+      }
+
+      if (VOICE_ACTIVITY_EVENT_TYPES.has(eventType)) {
+        const payload = event.payload ?? {}
+        const serverId = typeof payload.server_id === 'string' ? payload.server_id : ''
+        const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : ''
+        const participants = Array.isArray(payload.participants) ? payload.participants : []
+
+        if (serverId && channelId && applyVoiceChannelActivityUpdate) {
+          applyVoiceChannelActivityUpdate({
+            serverId,
+            channelId,
+            participants,
+          })
+        }
+        return
+      }
+
+      if (MESSAGE_CREATED_EVENT_TYPES.has(eventType)) {
+        const payload = event.payload ?? {}
+        const message = mapSocketPayloadToMessage(payload, event.timestamp, currentUserIdRef.current)
+        if (!message) {
+          return
+        }
+
+        setMessagesByChannel((prev) => {
+          const channelId = payload.channel_id as string
+          const current = prev[channelId] ?? []
+          if (current.some((item) => item.id === message.id)) {
+            return prev
+          }
+
+          const next = {
+            ...prev,
+            [channelId]: [...current, message],
+          }
+
+          if (activeChannelIdRef.current !== channelId) {
+            incrementChannelUnread?.(channelId)
+          }
+
+          return next
+        })
+        return
+      }
+
+      if (MESSAGE_UPDATED_EVENT_TYPES.has(eventType)) {
+        const payload = event.payload ?? {}
+        const messageId = payload.message_id ?? payload.id
+        if (!messageId) {
+          return
+        }
+
+        const channelId = (payload.channel_id as string | undefined) ?? null
+        updateMessageInChannel(channelId, (messages) =>
+          messages.map((message) => {
+            if (message.id !== messageId) {
+              return message
+            }
+
+            return {
+              ...message,
+              content: payload.content?.payload ?? payload.content ?? message.content,
+              attachments:
+                payload.attachments !== undefined
+                  ? mapSocketAttachments(payload.attachments)
+                  : message.attachments,
+              reactions:
+                payload.reactions !== undefined
+                  ? mapSocketReactions(payload.reactions, currentUserIdRef.current)
+                  : message.reactions,
+              editedAt: formatSocketTimestamp(payload.updated_at ?? event.timestamp).timestamp,
+            }
+          }),
+        )
+        return
+      }
+
+      if (MESSAGE_DELETED_EVENT_TYPES.has(eventType)) {
+        const payload = event.payload ?? {}
+        const messageId = payload.message_id ?? payload.id
+        if (!messageId) {
+          return
+        }
+        const channelId = (payload.channel_id as string | undefined) ?? null
+        updateMessageInChannel(channelId, (messages) => messages.filter((message) => message.id !== messageId))
+        return
+      }
+
+      if (REACTION_ADDED_EVENT_TYPES.has(eventType) || REACTION_REMOVED_EVENT_TYPES.has(eventType)) {
+        const payload = event.payload ?? {}
+        const messageId = payload.message_id ?? payload.id
+        if (!messageId) {
+          return
+        }
+
+        const emoji = payload.emoji as string | undefined
+        const userId = (payload.user_id as string | undefined) ?? event.user_id ?? currentUserIdRef.current
+        const channelId = (payload.channel_id as string | undefined) ?? null
+        const mode: 'add' | 'remove' = REACTION_ADDED_EVENT_TYPES.has(eventType) ? 'add' : 'remove'
+
+        updateMessageInChannel(channelId, (messages) =>
+          messages.map((message) => {
+            if (message.id !== messageId) {
+              return message
+            }
+
+            if (payload.reactions !== undefined) {
+              return {
+                ...message,
+                reactions: mapSocketReactions(payload.reactions, currentUserIdRef.current),
+              }
+            }
+
+            if (!emoji || !userId) {
+              return message
+            }
+
+            return applyReactionDelta(message, emoji, userId, mode)
+          }),
+        )
+      }
+    }
+
+    const connect = () => {
+      if (closedByClient) {
+        return
+      }
+
+      const targets = buildNotificationSocketTargets(WS_URL, currentUser.id, token)
+      if (targets.length === 0) {
+        return
+      }
+      const target = targets[reconnectAttempt % targets.length]
+      const ws = new WebSocket(target)
+      socket = ws
+
+      ws.onopen = () => {
+        if (socket !== ws) {
+          return
+        }
+        reconnectAttempt = 0
+      }
+
+      ws.onmessage = (event) => {
+        if (socket !== ws) {
+          return
+        }
+        onSocketMessage(String(event.data))
+      }
+
+      ws.onclose = () => {
+        if (socket === ws) {
+          socket = null
+        }
+        if (closedByClient) {
+          return
+        }
+        if (reconnectTimer) {
+          window.clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
+        const delay = Math.min(30000, 1000 * 2 ** reconnectAttempt)
+        reconnectAttempt += 1
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = null
+          connect()
+        }, delay)
+      }
+
+      ws.onerror = () => {
+        if (socket !== ws) {
+          return
+        }
+        ws.close()
+      }
+    }
+
+    // Delay initial connect slightly to avoid React StrictMode dev double-mount
+    // from opening/closing a socket while still CONNECTING.
+    initialConnectTimer = window.setTimeout(connect, 120)
+
+    return () => {
+      closedByClient = true
+      if (initialConnectTimer) {
+        window.clearTimeout(initialConnectTimer)
+      }
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer)
+      }
+      socket?.close()
+      socket = null
+    }
+  }, [applyVoiceChannelActivityUpdate, currentUser?.id, incrementChannelUnread, token])
 
   const handleScrollToLoadMore = useCallback(
     async (event: React.UIEvent<HTMLElement>) => {

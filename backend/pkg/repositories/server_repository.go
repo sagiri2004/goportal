@@ -39,6 +39,7 @@ type ServerRepository interface {
 	CreateInvite(ctx context.Context, invite *models.ServerInvite) error
 	FindInviteByCode(ctx context.Context, code string) (*models.ServerInvite, error)
 	FindInviteWithServer(ctx context.Context, code string) (*InviteLookupResult, error)
+	CountActiveMembers(ctx context.Context, serverID string) (int64, error)
 	JoinServerByInvite(ctx context.Context, code, userID string, nowUnix int64) (*models.Server, error)
 	JoinPublicServer(ctx context.Context, serverID, userID string) error
 	AddMemberWithDefaultRole(ctx context.Context, serverID, userID string) error

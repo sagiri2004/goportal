@@ -14,6 +14,7 @@ type VoiceTokenResult struct {
 
 type VoiceService interface {
 	GenerateVoiceToken(ctx context.Context, actorID, channelID string) (*VoiceTokenResult, error)
+	ListChannelParticipants(ctx context.Context, actorID, channelID string) ([]models.VoiceChannelParticipantSnapshot, error)
 	StartChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error)
 	StopChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error)
 	ListChannelRecordings(ctx context.Context, actorID, channelID string, limit, offset int) ([]models.Recording, error)

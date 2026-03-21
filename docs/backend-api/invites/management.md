@@ -21,6 +21,8 @@
 }
 ```
 
+Body is optional; empty body creates unlimited invite with no expiry.
+
 #### Success Response
 
 - Status: `201`
@@ -31,12 +33,8 @@
   "code": "OK",
   "message": "Invite created",
   "data": {
-    "id": "4c77b3f3-aa4f-46f8-a249-e00991a1f2e4",
-    "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
-    "inviter_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
-    "code": "91FD472FCB53",
-    "max_uses": 10,
-    "uses": 0,
+    "invite_code": "91FD472FCB53",
+    "invite_url": "http://localhost:8080/invite/91FD472FCB53",
     "expires_at": 1770000000
   }
 }
@@ -67,7 +65,7 @@
 - Method: `GET`
 - Path: `/api/v1/invites/:code`
 - Auth: `public`
-- Description: Fetch invite metadata and target server summary.
+- Description: Fetch invite metadata and server preview summary.
 
 #### Success Response
 
@@ -79,21 +77,13 @@
   "code": "OK",
   "message": "Invite fetched",
   "data": {
-    "invite": {
-      "id": "4c77b3f3-aa4f-46f8-a249-e00991a1f2e4",
-      "server_id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
-      "inviter_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
-      "code": "91FD472FCB53",
-      "max_uses": 10,
-      "uses": 1,
-      "expires_at": 1770000000
-    },
+    "invite_code": "91FD472FCB53",
+    "expires_at": 1770000000,
     "server": {
       "id": "16b2dfea-11c5-42b1-a587-f07b37b7bc61",
       "name": "Backend Team",
-      "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
-      "is_public": true,
-      "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+      "icon_url": "https://cdn.example.com/server-icons/backend-team.png",
+      "member_count": 42
     }
   }
 }
@@ -109,6 +99,17 @@
   "success": false,
   "code": "INVITE_NOT_FOUND",
   "message": "Invite not found"
+}
+```
+
+- Status: `400`
+- Meaning: Invite code is expired.
+
+```json
+{
+  "success": false,
+  "code": "INVITE_EXPIRED",
+  "message": "Invite expired"
 }
 ```
 
@@ -135,7 +136,9 @@
     "name": "Backend Team",
     "owner_id": "7e034d77-91a3-4de7-a467-2ac8e954dc53",
     "is_public": true,
-    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4"
+    "default_role_id": "1ae79d12-b2d4-4f0f-b6b6-2e09e87f4dd4",
+    "icon_url": "https://cdn.example.com/server-icons/backend-team.png",
+    "banner_url": null
   }
 }
 ```
@@ -156,3 +159,4 @@
 #### Frontend Notes
 
 - Join operation is transactional: `server_members` and `server_member_role` are inserted atomically.
+- If user already belongs to server, endpoint still returns success server payload.

@@ -3,6 +3,7 @@ import type { ChannelDTO, ServerDTO } from '@goportal/types'
 export type MockServer = {
   id: string
   name: string
+  ownerId?: string
   initials: string
   color: string
   bannerUrl?: string

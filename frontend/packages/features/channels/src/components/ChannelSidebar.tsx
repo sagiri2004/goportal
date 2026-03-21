@@ -156,11 +156,17 @@ const ChannelRow: React.FC<{
   return (
     <div className="relative overflow-visible">
       {hasUnread && <span className="absolute -left-1 top-1/2 h-2 w-[3px] -translate-y-1/2 rounded-r-full bg-white" />}
-      <button
-        key={channel.id}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onSelect()
+          }
+        }}
         className={`group relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left text-[14px] font-normal leading-5 transition-colors ${rowClassName}`}
-        type="button"
       >
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <Icon className={`h-4 w-4 flex-shrink-0 ${iconClassName}`} />
@@ -200,7 +206,7 @@ const ChannelRow: React.FC<{
             </Tooltip>
           </div>
         </div>
-      </button>
+      </div>
     </div>
   )
 }
@@ -221,7 +227,7 @@ const VoiceActivityRow: React.FC<{
 
         {channel.isLive && (
           <span className="flex-shrink-0 rounded-sm bg-red-500 px-1.5 py-[2px] text-[10px] font-bold leading-none tracking-wide text-white">
-            TRUC TIEP
+            TRỰC TIẾP
           </span>
         )}
       </div>

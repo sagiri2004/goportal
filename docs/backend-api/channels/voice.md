@@ -55,6 +55,87 @@
 #### Frontend Notes
 
 - Token is short-lived and should be requested right before connecting to LiveKit.
+- LiveKit token now includes:
+  - `identity`: current user id
+  - `name`: current username
+  - `metadata`: JSON string containing `user_id`, `username`, `display_name`, `avatar_url`
+  - Frontend should read `participant.metadata` to render avatar/name consistently.
+
+#### Realtime Voice Activity (Sidebar)
+
+- Backend emits voice activity updates through notification service (`type: POPUP`) when LiveKit room changes:
+  - `participant_joined`
+  - `participant_left`
+  - `track_published`
+  - `track_unpublished`
+  - `room_started`
+  - `room_finished`
+- Payload shape:
+
+```json
+{
+  "event_type": "VOICE_CHANNEL_ACTIVITY_UPDATED",
+  "server_id": "<server-id>",
+  "channel_id": "<voice-channel-id>",
+  "participants": [
+    {
+      "user_id": "<user-id>",
+      "name": "username",
+      "avatar_url": "https://...",
+      "is_screen_sharing": false
+    }
+  ]
+}
+```
+
+- Dispatch filter rules before sending:
+  - user must be server member
+  - user must have `VIEW_CHANNEL` permission
+  - for private voice channels: user must be explicit channel member
+- Online/offline routing is handled by notification service presence.
+
+---
+
+### CHANNELS: List Voice Participants
+
+- Method: `GET`
+- Path: `/api/v1/channels/:id/voice/participants`
+- Auth: `Bearer token`
+- Description: Return current LiveKit participant snapshots for a voice channel (empty list if room has no active participants).
+
+#### Request
+
+- Headers:
+  - `Authorization: Bearer {{token}}`
+- Path params:
+  - `id`: `string` - voice channel ID
+
+#### Success Response
+
+- Status: `200`
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "message": "Voice participants fetched",
+  "data": {
+    "items": [
+      {
+        "user_id": "a5b7793f-77c6-40d9-80aa-0174352952f2",
+        "name": "testuser1",
+        "avatar_url": "https://res.cloudinary.com/...",
+        "is_screen_sharing": false
+      }
+    ]
+  }
+}
+```
+
+#### Notes
+
+- Access checks are identical to voice token endpoint (`VIEW_CHANNEL`, private-channel membership if needed).
+- This endpoint is intended for sidebar voice activity snapshots (polling or fallback when websocket updates are delayed).
 
 ---
 

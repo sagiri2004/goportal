@@ -882,7 +882,7 @@ export const ServerSettingsOverlay: React.FC<Props> = ({
               setIsCreatingInvite(true)
               try {
                 const invite = await createServerInvite(serverId, { max_uses: 0 })
-                setInviteCode(invite.code)
+                setInviteCode(invite.invite_code)
                 onToast('Đã tạo liên kết mời.')
               } catch (error) {
                 setInviteError(error instanceof Error ? error.message : 'Không thể tạo lời mời.')

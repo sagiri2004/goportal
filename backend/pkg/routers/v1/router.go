@@ -67,6 +67,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		channels.GET("/:id", v1.Channel.GetByID)
 		channels.GET("/:id/messages", middlewares.RequireChannelPermission(models.PermissionReadMessages, "id"), v1.Message.ListByChannel)
 		channels.POST("/:id/voice/token", v1.Voice.GenerateToken)
+		channels.GET("/:id/voice/participants", v1.Voice.ListParticipants)
 		channels.POST("/:id/recording/start", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StartRecording)
 		channels.POST("/:id/recording/stop", middlewares.RequireChannelPermission(models.PermissionManageChannels, "id"), v1.Voice.StopRecording)
 		channels.GET("/:id/recordings", v1.Voice.ListRecordings)
