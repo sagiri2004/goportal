@@ -53,6 +53,8 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		servers.DELETE("/:id/members/:userId", v1.Server.KickMember)
 		servers.POST("/:id/channels", middlewares.RequireServerPermission(models.PermissionManageChannels, "id"), v1.Channel.Create)
 		servers.GET("/:id/channels", v1.Channel.ListByServer)
+		servers.POST("/:id/tournaments", middlewares.RequireServerPermission(models.PermissionManageChannels, "id"), v1.Tournament.Create)
+		servers.GET("/:id/tournaments", v1.Tournament.ListByServer)
 	}
 
 	invites := api.Group("/invites")
@@ -100,6 +102,41 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	upload.Use(middlewares.AuthMiddleware())
 	{
 		upload.POST("", v1.Upload.UploadFile)
+	}
+
+	tournaments := api.Group("/tournaments")
+	tournaments.Use(middlewares.AuthMiddleware())
+	{
+		tournaments.GET("/:id", v1.Tournament.GetByID)
+		tournaments.PATCH("/:id", v1.Tournament.Update)
+		tournaments.DELETE("/:id", v1.Tournament.Delete)
+		tournaments.PATCH("/:id/status", v1.Tournament.UpdateStatus)
+		tournaments.POST("/:id/participants", v1.Tournament.RegisterParticipant)
+		tournaments.DELETE("/:id/participants/me", v1.Tournament.CancelMyRegistration)
+		tournaments.POST("/:id/participants/:participantId/checkin", v1.Tournament.CheckInParticipant)
+		tournaments.DELETE("/:id/participants/:participantId", v1.Tournament.RemoveParticipant)
+		tournaments.PATCH("/:id/participants/:participantId/seed", v1.Tournament.UpdateParticipantSeed)
+		tournaments.POST("/:id/participants/bulk", v1.Tournament.BulkParticipants)
+		tournaments.POST("/:id/teams", v1.Tournament.CreateTeam)
+		tournaments.GET("/:id/teams", v1.Tournament.ListTeams)
+		tournaments.POST("/:id/teams/:teamId/members", v1.Tournament.AddTeamMember)
+		tournaments.DELETE("/:id/teams/:teamId/members/:userId", v1.Tournament.RemoveTeamMember)
+		tournaments.DELETE("/:id/teams/:teamId", v1.Tournament.DeleteTeam)
+		tournaments.GET("/:id/bracket", v1.Tournament.GetBracket)
+		tournaments.GET("/:id/matches", v1.Tournament.ListMatches)
+		tournaments.GET("/:id/matches/:matchId", v1.Tournament.GetMatch)
+		tournaments.PATCH("/:id/matches/:matchId/status", v1.Tournament.UpdateMatchStatus)
+		tournaments.POST("/:id/matches/:matchId/result", v1.Tournament.ReportMatchResult)
+		tournaments.POST("/:id/matches/:matchId/dispute", v1.Tournament.DisputeMatch)
+		tournaments.PATCH("/:id/matches/:matchId/override", v1.Tournament.OverrideMatch)
+		tournaments.GET("/:id/standings", v1.Tournament.Standings)
+		tournaments.GET("/:id/participants/:participantId/matches", v1.Tournament.ParticipantMatches)
+	}
+
+	usersHistory := api.Group("/users")
+	usersHistory.Use(middlewares.AuthMiddleware())
+	{
+		usersHistory.GET("/:id/tournaments", v1.Tournament.UserHistory)
 	}
 
 	webhooks := api.Group("/webhooks")
