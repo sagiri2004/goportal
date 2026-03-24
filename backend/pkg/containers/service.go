@@ -30,6 +30,8 @@ var (
 	egressSvc           services.EgressService
 	voiceSvcOnce        sync.Once
 	voiceSvc            services.VoiceService
+	tournamentSvcOnce   sync.Once
+	tournamentSvc       services.TournamentService
 )
 
 // UserService returns the singleton UserService instance.
@@ -121,4 +123,16 @@ func VoiceService() services.VoiceService {
 		)
 	})
 	return voiceSvc
+}
+
+func TournamentService() services.TournamentService {
+	tournamentSvcOnce.Do(func() {
+		tournamentSvc = svcimpl.NewTournamentService(
+			TournamentRepository(),
+			ServerRepository(),
+			UserRepository(),
+			pkgglobal.Publisher,
+		)
+	})
+	return tournamentSvc
 }

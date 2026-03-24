@@ -170,3 +170,5 @@ release/
 .turbo/
 
 dist-electron/
+
+.idea/

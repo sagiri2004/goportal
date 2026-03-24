@@ -170,8 +170,13 @@ func (p *cloudinaryStorageProvider) Upload(ctx context.Context, fileHeader *mult
 		return nil, apperr.E("UPLOAD_FAILED", err)
 	}
 
+	secureURL := strings.TrimSpace(res.SecureURL)
+	if secureURL == "" {
+		return nil, apperr.E("UPLOAD_FAILED", fmt.Errorf("cloudinary response missing secure_url"))
+	}
+
 	return &services.UploadedFile{
-		URL:      res.SecureURL,
+		URL:      secureURL,
 		FileName: fileHeader.Filename,
 		FileType: contentType,
 		FileSize: fileHeader.Size,

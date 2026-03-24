@@ -1,0 +1,23 @@
+### TOURNAMENTS: STANDINGS
+
+- Method: `GET`
+- Path: `/api/v1/tournaments/:id/standings`
+- Auth: `Bearer token`
+- Description: B?ng x?p h?ng hi?n t?i.
+
+---
+
+### TOURNAMENTS: PARTICIPANT MATCH HISTORY
+
+- Method: `GET`
+- Path: `/api/v1/tournaments/:id/participants/:participantId/matches`
+- Auth: `Bearer token`
+
+---
+
+### USERS: TOURNAMENT HISTORY
+
+- Method: `GET`
+- Path: `/api/v1/users/:id/tournaments`
+- Auth: `Bearer token`
+- Description: L?ch s? tournament mà user dã tham gia.

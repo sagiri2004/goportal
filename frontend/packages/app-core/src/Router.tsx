@@ -14,6 +14,7 @@ import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
 import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
+import { TournamentDetailPage, TournamentListPage } from './tournaments'
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react'
 import { useAuthStore } from '@goportal/store'
 import { getChannels, getServers, hydrateSession } from './services'
@@ -289,6 +290,8 @@ export const Router: React.FC = () => {
           <Route path="@me" element={<DMHomePage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<DashboardView />} />
           <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
+          <Route path="servers/:serverId/tournaments" element={<TournamentListPage />} />
+          <Route path="servers/:serverId/tournaments/:tournamentId" element={<TournamentDetailPage />} />
         </Route>
 
         {/* Fallback */}

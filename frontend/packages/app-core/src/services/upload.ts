@@ -17,6 +17,7 @@ export type UploadResult = {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+const API_BASE_URL_NORMALIZED = API_BASE_URL.replace(/\/$/, '')
 
 const getToken = (): string | null => {
   const token = useAuthStore.getState().token
@@ -48,10 +49,20 @@ const getToken = (): string | null => {
 }
 
 const toAbsoluteURL = (fileURL: string): string => {
-  if (fileURL.startsWith('http://') || fileURL.startsWith('https://')) {
-    return fileURL
+  const trimmed = fileURL.trim()
+  if (!trimmed) {
+    throw new Error('Upload completed but file URL is empty. Please verify storage configuration.')
   }
-  return `${API_BASE_URL}${fileURL}`
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith('/')) {
+    return `${API_BASE_URL_NORMALIZED}${trimmed}`
+  }
+
+  return `${API_BASE_URL_NORMALIZED}/${trimmed}`
 }
 
 export const uploadMedia = (
@@ -102,6 +113,11 @@ export const uploadMedia = (
 
       if (xhr.status < 200 || xhr.status >= 300 || !payload?.data) {
         reject(new Error(payload?.message ?? 'Unable to upload file.'))
+        return
+      }
+
+      if (typeof payload.data.url !== 'string' || payload.data.url.trim() === '') {
+        reject(new Error('Upload completed but file URL is missing from server response.'))
         return
       }
 

@@ -320,3 +320,158 @@ export const UPLOAD_ERROR_CODES = {
   FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',
 } as const
 export type UploadErrorCode = typeof UPLOAD_ERROR_CODES[keyof typeof UPLOAD_ERROR_CODES]
+
+// ---------------------------------------------------------------------------
+// TOURNAMENTS
+// ---------------------------------------------------------------------------
+export type TournamentFormatDTO =
+  | 'single_elimination'
+  | 'double_elimination'
+  | 'round_robin'
+  | 'swiss'
+
+export type TournamentStatusDTO =
+  | 'draft'
+  | 'registration'
+  | 'check_in'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+
+export type TournamentParticipantTypeDTO = 'solo' | 'team'
+
+export type TournamentParticipantStatusDTO =
+  | 'registered'
+  | 'checked_in'
+  | 'eliminated'
+  | 'winner'
+  | 'disqualified'
+
+export type TournamentMatchStatusDTO =
+  | 'pending'
+  | 'ready'
+  | 'in_progress'
+  | 'completed'
+  | 'bye'
+
+export type TournamentDTO = {
+  id: string
+  server_id: string
+  name: string
+  description?: string | null
+  game: string
+  format: TournamentFormatDTO
+  status: TournamentStatusDTO
+  max_participants: number
+  participant_type: TournamentParticipantTypeDTO
+  team_size?: number | null
+  registration_deadline?: number | null
+  check_in_duration_minutes: number
+  prize_pool?: string | null
+  rules?: string | null
+  created_by: string
+  started_at?: number | null
+  completed_at?: number | null
+  created_at: number
+  updated_at: number
+}
+
+export type TournamentParticipantDTO = {
+  id: string
+  user?: {
+    id: string
+    username: string
+    is_admin: boolean
+    avatar_url?: string | null
+  } | null
+  team?: {
+    id: string
+    name: string
+    captain_id: string
+  } | null
+  seed?: number | null
+  status: TournamentParticipantStatusDTO
+  final_rank?: number | null
+  registered_at: number
+  checked_in_at?: number | null
+}
+
+export type TournamentDetailDTO = {
+  tournament: TournamentDTO
+  participant_count: number
+  participants: TournamentParticipantDTO[]
+}
+
+export type TournamentListDTO = {
+  items: TournamentDTO[]
+  total: number
+  page: number
+  limit: number
+}
+
+export type CreateTournamentRequest = {
+  name: string
+  description?: string | null
+  game: string
+  format: TournamentFormatDTO
+  max_participants: number
+  participant_type: TournamentParticipantTypeDTO
+  team_size?: number | null
+  registration_deadline?: number | null
+  check_in_duration_minutes?: number | null
+  prize_pool?: string | null
+  rules?: string | null
+}
+
+export type UpdateTournamentRequest = {
+  name?: string
+  description?: string | null
+  rules?: string | null
+  prize_pool?: string | null
+  max_participants?: number
+  registration_deadline?: number | null
+}
+
+export type TournamentMatchDTO = {
+  id: string
+  tournament_id: string
+  round: number
+  match_number: number
+  bracket_side: string
+  participant1?: TournamentParticipantDTO | null
+  participant2?: TournamentParticipantDTO | null
+  score1?: number | null
+  score2?: number | null
+  winner?: TournamentParticipantDTO | null
+  status: TournamentMatchStatusDTO
+  next_match_id?: string | null
+  loser_next_match_id?: string | null
+  scheduled_at?: number | null
+  completed_at?: number | null
+  created_at: number
+}
+
+export type TournamentTeamDTO = {
+  id: string
+  name: string
+  captain_id: string
+  created_at: number
+  members: Array<{
+    id: string
+    username: string
+    is_admin: boolean
+    avatar_url?: string | null
+  }>
+}
+
+export type TournamentMatchReportDTO = {
+  id: string
+  match_id: string
+  reported_by: string
+  winner_id?: string | null
+  score1: number
+  score2: number
+  screenshot_url?: string | null
+  status: 'pending' | 'confirmed' | 'disputed'
+  created_at: number
+}

@@ -37,6 +37,7 @@ import {
 import { CreateServerModal, ServerRail } from '@goportal/feature-servers'
 import { ChannelSidebar, CreateChannelModal } from '@goportal/feature-channels'
 import { DirectMessagesSidebar } from '@goportal/feature-dashboard'
+import { TournamentCreateEditDialog } from '../tournaments'
 import { useAuthStore } from '@goportal/store'
 import { Copy } from 'lucide-react'
 import { MemberListPanel } from './MemberListPanel'
@@ -54,6 +55,7 @@ import {
   getInvitePreview,
   joinByInviteCode,
   getVoiceToken,
+  listTournamentsByServer,
   listVoiceParticipants,
   updateServerProfile,
   uploadServerMedia,
@@ -537,9 +539,13 @@ const UserSettingsDialog: React.FC<{
 export const AppShell: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const params = useParams<{ serverId?: string; channelId?: string }>()
+  const params = useParams<{ serverId?: string; channelId?: string; tournamentId?: string }>()
   const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
   const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname])
+  const isTournamentMode = useMemo(
+    () => location.pathname.includes('/app/servers/') && location.pathname.includes('/tournaments'),
+    [location.pathname],
+  )
 
   const [activeServerId, setActiveServerId] = useState('')
   const [activeChannelId, setActiveChannelId] = useState('')
@@ -562,6 +568,10 @@ export const AppShell: React.FC = () => {
   const [serverDetails, setServerDetails] = useState<Record<string, MockServer>>({})
   const [channelsByServer, setChannelsByServer] = useState<Record<string, MockCategory[]>>({})
   const [membersByServer, setMembersByServer] = useState<Record<string, MockMember[]>>({})
+  const [tournamentsByServer, setTournamentsByServer] = useState<
+    Record<string, Array<{ id: string; name: string; status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled' }>>
+  >({})
+  const [isCreateTournamentModalOpen, setIsCreateTournamentModalOpen] = useState(false)
   const [voiceState, setVoiceState] = useState<VoiceState | null>(null)
   const [isVoiceConnecting, setIsVoiceConnecting] = useState(false)
   const [voiceActivityByChannel, setVoiceActivityByChannel] = useState<Record<string, VoiceChannelActivity>>({})
@@ -596,6 +606,18 @@ export const AppShell: React.FC = () => {
   const showDevelopingToast = useCallback(() => {
     pushToast('Tính năng đang phát triển')
   }, [pushToast])
+
+  const handleLogout = useCallback(() => {
+    try {
+      useAuthStore.getState().logout()
+    } catch {
+      // no-op
+    }
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth-token')
+    localStorage.removeItem('auth-store')
+    window.location.href = '/auth/login'
+  }, [])
 
   const openCreateServerModal = useCallback((inviteCode?: string | null) => {
     setCreateServerModalInviteCode(inviteCode?.trim() || null)
@@ -1025,7 +1047,7 @@ export const AppShell: React.FC = () => {
       const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId)
 
       if (!hasActiveChannel && availableChannels.length > 0) {
-        if (isVoiceMode) {
+        if (isVoiceMode || isTournamentMode) {
           return
         }
         const fallbackChannel = availableChannels[0]
@@ -1039,7 +1061,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [activeChannelId, activeServerId, isVoiceMode, navigate])
+  }, [activeChannelId, activeServerId, isTournamentMode, isVoiceMode, navigate])
 
   useEffect(() => {
     let isCancelled = false
@@ -1126,6 +1148,35 @@ export const AppShell: React.FC = () => {
     }))
     return refreshed
   }, [])
+
+  const refreshTournaments = useCallback(async (serverId: string) => {
+    if (!serverId) {
+      return
+    }
+    try {
+      const response = await listTournamentsByServer(serverId, { limit: 100 })
+      setTournamentsByServer((prev) => ({
+        ...prev,
+        [serverId]: (response.items ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          status: item.status,
+        })),
+      }))
+    } catch {
+      setTournamentsByServer((prev) => ({
+        ...prev,
+        [serverId]: [],
+      }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return
+    }
+    void refreshTournaments(activeServerId)
+  }, [activeServerId, refreshTournaments])
 
   const incrementChannelUnread = useCallback((channelId: string) => {
     if (!channelId) {
@@ -1622,7 +1673,20 @@ export const AppShell: React.FC = () => {
     () => membersByServer[activeServerId] ?? [],
     [activeServerId, membersByServer]
   )
+  const activeTournaments = useMemo(
+    () => tournamentsByServer[activeServerId] ?? [],
+    [activeServerId, tournamentsByServer],
+  )
   const hasManageVoicePermission = useMemo(() => {
+    if (!currentUser) {
+      return false
+    }
+    if (currentUser.is_admin) {
+      return true
+    }
+    return activeServer?.ownerId === currentUser.id
+  }, [activeServer?.ownerId, currentUser])
+  const hasManageTournamentsPermission = useMemo(() => {
     if (!currentUser) {
       return false
     }
@@ -1669,6 +1733,10 @@ export const AppShell: React.FC = () => {
       incrementChannelUnread,
       resetChannelUnread,
       setChannelUnread,
+      canManageTournaments: hasManageTournamentsPermission,
+      openTournamentCreateDialog: () => setIsCreateTournamentModalOpen(true),
+      refreshActiveServerTournaments: () => refreshTournaments(activeServerId),
+      membersByServer,
     }),
     [
       showMembers,
@@ -1694,6 +1762,9 @@ export const AppShell: React.FC = () => {
       incrementChannelUnread,
       resetChannelUnread,
       setChannelUnread,
+      hasManageTournamentsPermission,
+      refreshTournaments,
+      membersByServer,
     ],
   )
 
@@ -1773,8 +1844,15 @@ export const AppShell: React.FC = () => {
                     setIsServerSettingsOpen(true)
                   }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  onLogout={handleLogout}
                   voiceState={voiceState}
                   onLeaveVoiceChannel={() => void handleLeaveVoiceChannel()}
+                  tournaments={activeTournaments}
+                  onSelectTournament={(tournamentId) => {
+                    navigate(`/app/servers/${activeServerId}/tournaments/${tournamentId}`)
+                  }}
+                  onCreateTournament={() => setIsCreateTournamentModalOpen(true)}
+                  canCreateTournament={hasManageTournamentsPermission}
                 />
               )}
             </div>
@@ -1841,6 +1919,16 @@ export const AppShell: React.FC = () => {
               open={isInviteDialogOpen}
               onOpenChange={setIsInviteDialogOpen}
               serverId={activeServerId}
+            />
+            <TournamentCreateEditDialog
+              open={isCreateTournamentModalOpen}
+              onOpenChange={setIsCreateTournamentModalOpen}
+              serverId={activeServerId}
+              onSuccess={(created) => {
+                pushToast('Đã tạo giải đấu.')
+                void refreshTournaments(activeServerId)
+                navigate(`/app/servers/${activeServerId}/tournaments/${created.id}`)
+              }}
             />
           </>
         )}
