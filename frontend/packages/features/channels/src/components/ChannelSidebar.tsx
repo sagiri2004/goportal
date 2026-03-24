@@ -70,6 +70,15 @@ type ChannelSidebarProps = {
     serverName: string
   } | null
   onLeaveVoiceChannel?: () => void
+  onLogout?: () => void
+  tournaments?: Array<{
+    id: string
+    name: string
+    status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled'
+  }>
+  onSelectTournament?: (tournamentId: string) => void
+  onCreateTournament?: () => void
+  canCreateTournament?: boolean
 }
 
 type ChannelMember = {
@@ -93,6 +102,24 @@ type SidebarChannel = {
 
 const sectionLabelClassName =
   'text-[11px] uppercase tracking-[0.04em] font-semibold text-muted-foreground/70 whitespace-nowrap'
+
+const tournamentStatusBadgeClass = (status: string): string => {
+  if (status === 'registration') return 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+  if (status === 'check_in') return 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+  if (status === 'in_progress') return 'bg-rose-500/20 text-rose-300 border-rose-400/30'
+  if (status === 'completed') return 'bg-zinc-500/20 text-zinc-300 border-zinc-400/30'
+  if (status === 'draft') return 'bg-slate-500/20 text-slate-300 border-slate-400/30'
+  return 'bg-zinc-700/30 text-zinc-200 border-zinc-500/40'
+}
+
+const tournamentStatusLabel = (status: string): string => {
+  if (status === 'registration') return 'Đăng ký'
+  if (status === 'check_in') return 'Check-in'
+  if (status === 'in_progress') return 'Đang diễn ra'
+  if (status === 'completed') return 'Hoàn thành'
+  if (status === 'draft') return 'Nháp'
+  return 'Đã huỷ'
+}
 
 const SectionHeader: React.FC<{
   name: string
@@ -277,7 +304,8 @@ const UserPanel: React.FC<{
   } | null
   onLeaveVoiceChannel: () => void
   onOpenUserSettings?: () => void
-}> = ({ voiceState, onLeaveVoiceChannel, onOpenUserSettings }) => {
+  onLogout?: () => void
+}> = ({ voiceState, onLeaveVoiceChannel, onOpenUserSettings, onLogout }) => {
   const [muted, setMuted] = useState(false)
   const [deafened, setDeafened] = useState(false)
   const [isScreenShareOff, setIsScreenShareOff] = useState(false)
@@ -379,7 +407,7 @@ const UserPanel: React.FC<{
             </button>
           </ContextMenuTrigger>
           <ContextMenuContent className="w-40">
-            <ContextMenuItem>Log out</ContextMenuItem>
+            <ContextMenuItem onClick={onLogout}>Log out</ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
 
@@ -456,10 +484,16 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onOpenUserSettings,
   voiceState = null,
   onLeaveVoiceChannel = () => {},
+  onLogout = () => {},
+  tournaments = [],
+  onSelectTournament = () => {},
+  onCreateTournament = () => {},
+  canCreateTournament = false,
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
   const [expandedVoice, setExpandedVoice] = useState(true)
+  const [expandedTournaments, setExpandedTournaments] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
 
   const fromCategories = Array.isArray(categories) && categories.length > 0
@@ -719,12 +753,71 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
             )}
           </div>
         )}
+
+        <div>
+            <div className="mt-4 mb-0.5 flex items-center gap-2 px-2 group">
+              <button
+                type="button"
+                onClick={() => setExpandedTournaments((prev) => !prev)}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              >
+                <ChevronDown
+                  className={`h-3 w-3 flex-shrink-0 text-muted-foreground/70 transition-transform ${
+                    !expandedTournaments ? '-rotate-90' : ''
+                  }`}
+                />
+                <span className={sectionLabelClassName}>GIẢI ĐẤU</span>
+              </button>
+              <div className="h-px flex-1 bg-muted-foreground/20" />
+              {canCreateTournament && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={onCreateTournament}
+                      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                      type="button"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Tạo giải đấu</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+
+            {expandedTournaments && (
+              <div className="space-y-1">
+                {tournaments.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-muted-foreground/70">
+                    Chưa có giải đấu
+                  </p>
+                ) : (
+                  tournaments.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onSelectTournament(item.id)}
+                      className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-[hsl(0,0%,75%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,92%)]"
+                    >
+                      <span className="truncate">{item.name}</span>
+                      <span
+                        className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] ${tournamentStatusBadgeClass(item.status)}`}
+                      >
+                        {tournamentStatusLabel(item.status)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
       </div>
 
       <UserPanel
         voiceState={voiceState}
         onLeaveVoiceChannel={onLeaveVoiceChannel}
         onOpenUserSettings={onOpenUserSettings}
+        onLogout={onLogout}
       />
     </aside>
   )

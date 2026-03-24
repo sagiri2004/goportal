@@ -11,5 +11,7 @@ import (
 func RunSeeders(db *gorm.DB) error {
 	seeders.SeedAdmin(db, global.Logger)
 	seeders.SeedPermissions(db, global.Logger)
+	seeders.SeedDemoServerPopulation(db, global.Logger)
+	seeders.SeedDemoTournaments(db, global.Logger)
 	return nil
 }

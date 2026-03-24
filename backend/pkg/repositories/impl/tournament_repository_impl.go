@@ -280,9 +280,38 @@ func (r *tournamentRepository) ReplaceMatches(ctx context.Context, tournamentID 
 		if len(matches) == 0 {
 			return nil
 		}
-		if err := tx.Create(&matches).Error; err != nil {
+
+		// Insert matches first without cross-match links to avoid FK self-reference failures
+		// when MySQL validates next_match_id / loser_next_match_id during batch insert.
+		baseMatches := make([]models.TournamentMatch, 0, len(matches))
+		for i := range matches {
+			row := matches[i]
+			row.NextMatchID = nil
+			row.LoserNextMatchID = nil
+			baseMatches = append(baseMatches, row)
+		}
+		if err := tx.Create(&baseMatches).Error; err != nil {
 			return apperr.E("DB_ERROR", err)
 		}
+
+		for i := range matches {
+			updates := map[string]any{}
+			if matches[i].NextMatchID != nil {
+				updates["next_match_id"] = *matches[i].NextMatchID
+			}
+			if matches[i].LoserNextMatchID != nil {
+				updates["loser_next_match_id"] = *matches[i].LoserNextMatchID
+			}
+			if len(updates) == 0 {
+				continue
+			}
+			if err := tx.Model(&models.TournamentMatch{}).
+				Where("id = ? AND tournament_id = ?", matches[i].ID, tournamentID).
+				Updates(updates).Error; err != nil {
+				return apperr.E("DB_ERROR", err)
+			}
+		}
+
 		return nil
 	})
 }
