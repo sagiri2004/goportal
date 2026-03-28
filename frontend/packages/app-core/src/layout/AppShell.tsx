@@ -128,6 +128,17 @@ const voicePalette = [
   'bg-rose-500',
 ]
 const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code'
+const VOICE_DEBUG_PREFIX = '[voice-debug]'
+
+const logVoiceDebug = (step: string, data?: Record<string, unknown>) => {
+  if (data) {
+    // eslint-disable-next-line no-console
+    console.info(`${VOICE_DEBUG_PREFIX} ${step}`, data)
+    return
+  }
+  // eslint-disable-next-line no-console
+  console.info(`${VOICE_DEBUG_PREFIX} ${step}`)
+}
 
 const colorFromId = (id: string): string => {
   let hash = 0
@@ -166,22 +177,6 @@ const parseParticipantMetadata = (metadata?: string): { avatarUrl?: string; disp
     }
   } catch {
     return {}
-  }
-}
-
-const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  let timeoutId: number | null = null
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = window.setTimeout(() => {
-        reject(new Error('LiveKit connection timeout'))
-      }, timeoutMs)
-    })
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    if (timeoutId) {
-      window.clearTimeout(timeoutId)
-    }
   }
 }
 
@@ -747,6 +742,10 @@ export const AppShell: React.FC = () => {
       if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' && eventType !== 'VOICE_ACTIVITY_UPDATED') {
         return
       }
+      logVoiceDebug('notification:voice-activity-event', {
+        eventType,
+        rawType: event?.type ?? null,
+      })
 
       const payload = event.payload ?? {}
       const serverId = typeof payload.server_id === 'string' ? payload.server_id : ''
@@ -1298,10 +1297,19 @@ export const AppShell: React.FC = () => {
   const handleLeaveVoiceChannel = useCallback(async (opts: { navigateToText?: boolean; invalidateJoinAttempt?: boolean } = {}) => {
     const shouldNavigate = opts.navigateToText ?? true
     const shouldInvalidateJoinAttempt = opts.invalidateJoinAttempt ?? true
+    logVoiceDebug('leave:start', {
+      shouldNavigate,
+      shouldInvalidateJoinAttempt,
+      hasPendingRoom: Boolean(pendingVoiceRoomRef.current),
+      hasCurrentVoiceState: Boolean(voiceStateRef.current),
+    })
 
     if (shouldInvalidateJoinAttempt) {
       voiceJoinAttemptRef.current += 1
       joinVoiceInFlightRef.current = null
+      logVoiceDebug('leave:invalidate-join-attempt', {
+        nextJoinAttempt: voiceJoinAttemptRef.current,
+      })
     }
 
     const pendingRoom = pendingVoiceRoomRef.current
@@ -1309,20 +1317,31 @@ export const AppShell: React.FC = () => {
       pendingVoiceRoomRef.current = null
       try {
         await pendingRoom.disconnect()
+        logVoiceDebug('leave:pending-room-disconnected')
       } catch {
         // no-op
+        logVoiceDebug('leave:pending-room-disconnect-failed')
       }
     }
 
     const current = voiceStateRef.current
     if (!current) {
+      logVoiceDebug('leave:no-current-voice-state')
       return
     }
 
     try {
       await current.room.disconnect()
+      logVoiceDebug('leave:current-room-disconnected', {
+        serverId: current.serverId,
+        channelId: current.channelId,
+      })
     } catch {
       // no-op
+      logVoiceDebug('leave:current-room-disconnect-failed', {
+        serverId: current.serverId,
+        channelId: current.channelId,
+      })
     }
 
     if (current.serverId) {
@@ -1337,13 +1356,21 @@ export const AppShell: React.FC = () => {
     }
 
     setVoiceState((prev) => (prev?.room === current.room ? null : prev))
+    logVoiceDebug('leave:voice-state-cleared', {
+      serverId: current.serverId,
+      channelId: current.channelId,
+    })
 
     if (!shouldNavigate) {
+      logVoiceDebug('leave:skip-navigation')
       return
     }
 
     const fallback = resolveFallbackTextChannel(current.serverId, current.lastTextChannelId)
     if (!fallback) {
+      logVoiceDebug('leave:no-fallback-channel-navigate-dm', {
+        serverId: current.serverId,
+      })
       navigate('/app/@me')
       return
     }
@@ -1351,28 +1378,47 @@ export const AppShell: React.FC = () => {
     setActiveServerId(current.serverId)
     setActiveChannelId(fallback.id)
     navigate(`/app/servers/${current.serverId}/channels/${fallback.id}`)
+    logVoiceDebug('leave:navigate-fallback-text-channel', {
+      serverId: current.serverId,
+      channelId: fallback.id,
+    })
   }, [navigate, resolveFallbackTextChannel])
 
   const joinVoiceChannel = useCallback(async (channelId: string) => {
+    logVoiceDebug('join:click', {
+      activeServerId,
+      channelId,
+      activeChannelId,
+      pathname: location.pathname,
+      isVoiceConnecting,
+      inFlight: joinVoiceInFlightRef.current,
+      currentVoiceServerId: voiceStateRef.current?.serverId ?? null,
+      currentVoiceChannelId: voiceStateRef.current?.channelId ?? null,
+    })
     if (!activeServerId) {
       pushToast('Chưa xác định server hiện tại.')
+      logVoiceDebug('join:blocked-no-active-server')
       return
     }
 
     const joinKey = `${activeServerId}:${channelId}`
     if (joinVoiceInFlightRef.current === joinKey) {
+      logVoiceDebug('join:blocked-same-join-in-flight', { joinKey })
       return
     }
 
     const currentVoice = voiceStateRef.current
     if (currentVoice && currentVoice.serverId === activeServerId && currentVoice.channelId === channelId) {
+      logVoiceDebug('join:already-in-target-room', { joinKey })
       if (!location.pathname.includes(`/app/servers/${activeServerId}/voice/${channelId}`)) {
         navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+        logVoiceDebug('join:navigate-existing-room-route', { joinKey })
       }
       return
     }
 
     if (isVoiceConnecting) {
+      logVoiceDebug('join:blocked-is-voice-connecting', { joinKey })
       return
     }
 
@@ -1398,46 +1444,96 @@ export const AppShell: React.FC = () => {
     voiceJoinAttemptRef.current = joinAttempt
     setIsVoiceConnecting(true)
     joinVoiceInFlightRef.current = joinKey
+    logVoiceDebug('join:start', {
+      joinAttempt,
+      joinKey,
+      serverName,
+      channelName,
+      hasPreviousVoice: Boolean(previous),
+      lastTextChannelId,
+    })
     try {
       if (previous) {
         await handleLeaveVoiceChannel({ navigateToText: false, invalidateJoinAttempt: false })
+        logVoiceDebug('join:previous-room-left', {
+          joinAttempt,
+          previousServerId: previous.serverId,
+          previousChannelId: previous.channelId,
+        })
       } else if (pendingVoiceRoomRef.current) {
         try {
           await pendingVoiceRoomRef.current.disconnect()
+          logVoiceDebug('join:stale-pending-room-disconnected', { joinAttempt })
         } catch {
           // no-op
+          logVoiceDebug('join:stale-pending-room-disconnect-failed', { joinAttempt })
         }
         pendingVoiceRoomRef.current = null
       }
 
       if (voiceJoinAttemptRef.current !== joinAttempt) {
+        logVoiceDebug('join:aborted-attempt-mismatch-before-token', {
+          joinAttempt,
+          currentAttempt: voiceJoinAttemptRef.current,
+        })
         return
       }
 
       const { token, url } = await getVoiceToken(channelId)
+      logVoiceDebug('join:token-response', {
+        joinAttempt,
+        channelId,
+        url,
+        tokenLength: token?.length ?? 0,
+        tokenPrefix: token?.slice(0, 12) ?? '',
+      })
       if (voiceJoinAttemptRef.current !== joinAttempt) {
+        logVoiceDebug('join:aborted-attempt-mismatch-after-token', {
+          joinAttempt,
+          currentAttempt: voiceJoinAttemptRef.current,
+        })
         return
       }
       const room = new Room()
       pendingVoiceRoomRef.current = room
       const connectTargets = buildConnectTargets(url)
+      logVoiceDebug('join:connect-targets', {
+        joinAttempt,
+        connectTargets,
+      })
       let connectError: unknown = null
 
       for (const target of connectTargets) {
         if (voiceJoinAttemptRef.current !== joinAttempt) {
+          logVoiceDebug('join:break-attempt-mismatch-during-connect-loop', {
+            joinAttempt,
+            currentAttempt: voiceJoinAttemptRef.current,
+          })
           break
         }
 
         try {
-          await withTimeout(room.connect(target, token), 7000)
+          logVoiceDebug('join:connecting-target', { joinAttempt, target })
+          await room.connect(target, token)
           connectError = null
+          logVoiceDebug('join:connected-target', { joinAttempt, target })
           break
         } catch (error) {
           connectError = error
+          logVoiceDebug('join:connect-target-failed', {
+            joinAttempt,
+            target,
+            errorMessage: (error as any)?.message ?? 'unknown',
+            errorName: (error as any)?.name ?? 'unknown',
+          })
           try {
             await room.disconnect()
           } catch {
             // no-op
+            logVoiceDebug('join:room-disconnect-after-failed-target-error', {
+              joinAttempt,
+              target,
+            })
           }
         }
       }
@@ -1447,11 +1543,21 @@ export const AppShell: React.FC = () => {
           await room.disconnect()
         } catch {
           // no-op
+          logVoiceDebug('join:room-disconnect-attempt-mismatch-failed', { joinAttempt })
         }
+        logVoiceDebug('join:aborted-attempt-mismatch-after-connect-loop', {
+          joinAttempt,
+          currentAttempt: voiceJoinAttemptRef.current,
+        })
         return
       }
 
       if (connectError) {
+        logVoiceDebug('join:connect-failed-final', {
+          joinAttempt,
+          errorMessage: (connectError as any)?.message ?? 'unknown',
+          errorName: (connectError as any)?.name ?? 'unknown',
+        })
         const rawMessage = (connectError as any)?.message ?? 'Không thể kết nối kênh thoại.'
         const normalized = String(rawMessage).toLowerCase()
         if (
@@ -1493,6 +1599,11 @@ export const AppShell: React.FC = () => {
       room.on(RoomEvent.TrackPublished, onParticipantChanged)
       room.on(RoomEvent.TrackUnpublished, onParticipantChanged)
       room.on(RoomEvent.Disconnected, () => {
+        logVoiceDebug('join:room-disconnected-event', {
+          joinAttempt,
+          channelId,
+          roomName: room.name,
+        })
         setVoiceState((prev) => (prev?.room === room ? null : prev))
       })
 
@@ -1501,7 +1612,20 @@ export const AppShell: React.FC = () => {
       syncVoiceStateFromRoom(room)
       setActiveChannelId(channelId)
       navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+      logVoiceDebug('join:success', {
+        joinAttempt,
+        channelId,
+        serverId: activeServerId,
+        roomName: room.name,
+      })
     } catch (error: any) {
+      logVoiceDebug('join:exception', {
+        joinAttempt,
+        channelId,
+        errorMessage: error?.message ?? null,
+        errorName: error?.name ?? 'unknown',
+        errorStack: error?.stack ?? null,
+      })
       const rawMessage = error?.message ?? 'Không thể kết nối kênh thoại.'
       const normalized = String(rawMessage).toLowerCase()
       if (
@@ -1524,6 +1648,14 @@ export const AppShell: React.FC = () => {
       if (voiceJoinAttemptRef.current === joinAttempt) {
         setIsVoiceConnecting(false)
       }
+      logVoiceDebug('join:finally', {
+        joinAttempt,
+        joinKey,
+        currentAttempt: voiceJoinAttemptRef.current,
+        isConnectingWillReset: voiceJoinAttemptRef.current === joinAttempt,
+        inFlightNow: joinVoiceInFlightRef.current,
+        hasPendingRoom: Boolean(pendingVoiceRoomRef.current),
+      })
     }
   }, [
     activeChannelId,
@@ -1719,6 +1851,7 @@ export const AppShell: React.FC = () => {
       shouldShowOnboarding: servers.length === 0 && !hasSeenOnboarding,
       dismissOnboarding: markOnboardingSeen,
       openCreateServerModal: () => openCreateServerModal(),
+      openInviteMemberDialog: () => setIsInviteDialogOpen(true),
       showDevelopingToast,
       voiceState,
       isVoiceConnecting,
@@ -1748,6 +1881,7 @@ export const AppShell: React.FC = () => {
       hasSeenOnboarding,
       markOnboardingSeen,
       openCreateServerModal,
+      setIsInviteDialogOpen,
       showDevelopingToast,
       voiceState,
       isVoiceConnecting,
@@ -1819,6 +1953,19 @@ export const AppShell: React.FC = () => {
                   activeChannelId={activeChannelId}
                   onSelectChannel={(channelId, type) => {
                     if (type === 'voice') {
+                      logVoiceDebug('ui:channel-sidebar-click-voice', {
+                        channelId,
+                        activeServerId,
+                        activeChannelId,
+                      })
+                      if (activeServerId) {
+                        setActiveChannelId(channelId)
+                        navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+                        logVoiceDebug('ui:channel-sidebar-navigate-voice-immediate', {
+                          channelId,
+                          activeServerId,
+                        })
+                      }
                       void joinVoiceChannel(channelId)
                       return
                     }
