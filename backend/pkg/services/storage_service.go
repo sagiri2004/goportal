@@ -14,6 +14,7 @@ const (
 	MediaTypeMessageAttachment UploadMediaType = "message_attachment"
 	MediaTypeRoleIcon          UploadMediaType = "role_icon"
 	MediaTypeGameBundle        UploadMediaType = "game_bundle"
+	MediaTypeGameAsset         UploadMediaType = "game_asset"
 )
 
 type UploadOptions struct {

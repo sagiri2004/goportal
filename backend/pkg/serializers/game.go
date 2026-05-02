@@ -6,14 +6,19 @@ import (
 )
 
 type CreateGameRequest struct {
-	Title        string   `json:"title" binding:"required,min=1,max=255"`
-	Slug         string   `json:"slug" binding:"required,min=1,max=255"`
-	Description  *string  `json:"description,omitempty"`
-	Visibility   string   `json:"visibility,omitempty"`
-	ThumbnailURL *string  `json:"thumbnail_url,omitempty"`
-	Category     *string  `json:"category,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
-	AgeRating    *string  `json:"age_rating,omitempty"`
+	Title          string   `json:"title" binding:"required,min=1,max=255"`
+	Slug           string   `json:"slug" binding:"required,min=1,max=255"`
+	Description    *string  `json:"description,omitempty"`
+	Visibility     string   `json:"visibility,omitempty"`
+	ThumbnailURL   *string  `json:"thumbnail_url,omitempty"`
+	IconURL        *string  `json:"icon_url,omitempty"`
+	CapsuleURL     *string  `json:"capsule_image_url,omitempty"`
+	HeroImageURL   *string  `json:"hero_image_url,omitempty"`
+	ScreenshotURLs []string `json:"screenshot_urls,omitempty"`
+	TrailerURL     *string  `json:"trailer_url,omitempty"`
+	Category       *string  `json:"category,omitempty"`
+	Tags           []string `json:"tags,omitempty"`
+	AgeRating      *string  `json:"age_rating,omitempty"`
 }
 
 type CreateGameBuildRequest struct {
@@ -54,27 +59,63 @@ type ModerateReviewRequest struct {
 	Note   string `json:"note,omitempty"`
 }
 
+type StartGameSessionRequest struct {
+	ChannelID *string `json:"channel_id,omitempty"`
+	RoomID    *string `json:"room_id,omitempty"`
+	Metadata  any     `json:"metadata,omitempty"`
+}
+
+type CreateGameEventRequest struct {
+	EventType        string  `json:"event_type" binding:"required"`
+	IdempotencyKey   string  `json:"idempotency_key,omitempty"`
+	Score            *int    `json:"score,omitempty"`
+	AchievementCode  *string `json:"achievement_code,omitempty"`
+	AchievementTitle *string `json:"achievement_title,omitempty"`
+	Payload          any     `json:"payload,omitempty"`
+}
+
+type ShareGameRequest struct {
+	ChannelID   string  `json:"channel_id" binding:"required"`
+	SessionID   *string `json:"session_id,omitempty"`
+	EventID     *string `json:"event_id,omitempty"`
+	ShareType   string  `json:"share_type,omitempty"`
+	Score       *int    `json:"score,omitempty"`
+	Achievement *string `json:"achievement,omitempty"`
+	Comment     *string `json:"comment,omitempty"`
+}
+
+type CreateGameRoomRequest struct {
+	ChannelID  *string `json:"channel_id,omitempty"`
+	RoomName   *string `json:"room_name,omitempty"`
+	MaxPlayers int     `json:"max_players,omitempty"`
+}
+
 type UserGameResponse struct {
-	ID            string   `json:"id"`
-	OwnerUserID   string   `json:"owner_user_id"`
-	SourceType    string   `json:"source_type"`
-	Title         string   `json:"title"`
-	Slug          string   `json:"slug"`
-	Description   *string  `json:"description,omitempty"`
-	Visibility    string   `json:"visibility"`
-	Status        string   `json:"status"`
-	PublishState  string   `json:"publish_state"`
-	Category      *string  `json:"category,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	AgeRating     *string  `json:"age_rating,omitempty"`
-	FeaturedScore float64  `json:"featured_score"`
-	AvgRating     float64  `json:"avg_rating"`
-	RatingCount   int64    `json:"rating_count"`
-	LaunchCount   int64    `json:"launch_count"`
-	TrendingScore float64  `json:"trending_score"`
-	ThumbnailURL  *string  `json:"thumbnail_url,omitempty"`
-	CreatedAt     int64    `json:"created_at"`
-	UpdatedAt     int64    `json:"updated_at"`
+	ID              string   `json:"id"`
+	OwnerUserID     string   `json:"owner_user_id"`
+	SourceType      string   `json:"source_type"`
+	Title           string   `json:"title"`
+	Slug            string   `json:"slug"`
+	Description     *string  `json:"description,omitempty"`
+	Visibility      string   `json:"visibility"`
+	Status          string   `json:"status"`
+	PublishState    string   `json:"publish_state"`
+	Category        *string  `json:"category,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
+	AgeRating       *string  `json:"age_rating,omitempty"`
+	FeaturedScore   float64  `json:"featured_score"`
+	AvgRating       float64  `json:"avg_rating"`
+	RatingCount     int64    `json:"rating_count"`
+	LaunchCount     int64    `json:"launch_count"`
+	TrendingScore   float64  `json:"trending_score"`
+	ThumbnailURL    *string  `json:"thumbnail_url,omitempty"`
+	IconURL         *string  `json:"icon_url,omitempty"`
+	CapsuleImageURL *string  `json:"capsule_image_url,omitempty"`
+	HeroImageURL    *string  `json:"hero_image_url,omitempty"`
+	ScreenshotURLs  []string `json:"screenshot_urls,omitempty"`
+	TrailerURL      *string  `json:"trailer_url,omitempty"`
+	CreatedAt       int64    `json:"created_at"`
+	UpdatedAt       int64    `json:"updated_at"`
 }
 
 type UserGameBuildResponse struct {
@@ -146,28 +187,79 @@ type GameCurationResponse struct {
 	UpdatedAt     int64   `json:"updated_at"`
 }
 
+type GameSessionResponse struct {
+	ID         string  `json:"id"`
+	GameID     string  `json:"game_id"`
+	UserID     string  `json:"user_id"`
+	ChannelID  *string `json:"channel_id,omitempty"`
+	RoomID     *string `json:"room_id,omitempty"`
+	Status     string  `json:"status"`
+	StartedAt  int64   `json:"started_at"`
+	LastSeenAt int64   `json:"last_seen_at"`
+	EndedAt    *int64  `json:"ended_at,omitempty"`
+	CreatedAt  int64   `json:"created_at"`
+	UpdatedAt  int64   `json:"updated_at"`
+}
+
+type GameEventResponse struct {
+	ID               string  `json:"id"`
+	GameID           string  `json:"game_id"`
+	SessionID        string  `json:"session_id"`
+	UserID           string  `json:"user_id"`
+	EventType        string  `json:"event_type"`
+	IdempotencyKey   *string `json:"idempotency_key,omitempty"`
+	Score            *int    `json:"score,omitempty"`
+	AchievementCode  *string `json:"achievement_code,omitempty"`
+	AchievementTitle *string `json:"achievement_title,omitempty"`
+	CreatedAt        int64   `json:"created_at"`
+	UpdatedAt        int64   `json:"updated_at"`
+}
+
+type GameRoomMemberResponse struct {
+	ID         string `json:"id"`
+	RoomID     string `json:"room_id"`
+	UserID     string `json:"user_id"`
+	Role       string `json:"role"`
+	Status     string `json:"status"`
+	JoinedAt   int64  `json:"joined_at"`
+	LeftAt     *int64 `json:"left_at,omitempty"`
+	LastSeenAt int64  `json:"last_seen_at"`
+	CreatedAt  int64  `json:"created_at"`
+	UpdatedAt  int64  `json:"updated_at"`
+}
+
+type GameRoomStateResponse struct {
+	Room    models.GameRoom          `json:"room"`
+	Members []GameRoomMemberResponse `json:"members"`
+}
+
 func NewUserGameResponse(game *models.UserGame) UserGameResponse {
 	return UserGameResponse{
-		ID:            game.ID,
-		OwnerUserID:   game.OwnerUserID,
-		SourceType:    game.SourceType,
-		Title:         game.Title,
-		Slug:          game.Slug,
-		Description:   game.Description,
-		Visibility:    game.Visibility,
-		Status:        game.Status,
-		PublishState:  game.PublishState,
-		Category:      game.Category,
-		Tags:          game.Tags,
-		AgeRating:     game.AgeRating,
-		FeaturedScore: game.FeaturedScore,
-		AvgRating:     game.AvgRating,
-		RatingCount:   game.RatingCount,
-		LaunchCount:   game.LaunchCount,
-		TrendingScore: game.TrendingScore,
-		ThumbnailURL:  game.ThumbnailURL,
-		CreatedAt:     game.CreatedAt,
-		UpdatedAt:     game.UpdatedAt,
+		ID:              game.ID,
+		OwnerUserID:     game.OwnerUserID,
+		SourceType:      game.SourceType,
+		Title:           game.Title,
+		Slug:            game.Slug,
+		Description:     game.Description,
+		Visibility:      game.Visibility,
+		Status:          game.Status,
+		PublishState:    game.PublishState,
+		Category:        game.Category,
+		Tags:            game.Tags,
+		AgeRating:       game.AgeRating,
+		FeaturedScore:   game.FeaturedScore,
+		AvgRating:       game.AvgRating,
+		RatingCount:     game.RatingCount,
+		LaunchCount:     game.LaunchCount,
+		TrendingScore:   game.TrendingScore,
+		ThumbnailURL:    game.ThumbnailURL,
+		IconURL:         game.IconURL,
+		CapsuleImageURL: game.CapsuleImageURL,
+		HeroImageURL:    game.HeroImageURL,
+		ScreenshotURLs:  game.ScreenshotURLs,
+		TrailerURL:      game.TrailerURL,
+		CreatedAt:       game.CreatedAt,
+		UpdatedAt:       game.UpdatedAt,
 	}
 }
 
@@ -253,5 +345,59 @@ func NewGameCurationResponse(curation *models.GameCuration) GameCurationResponse
 		IsActive:      curation.IsActive,
 		CreatedAt:     curation.CreatedAt,
 		UpdatedAt:     curation.UpdatedAt,
+	}
+}
+
+func NewGameSessionResponse(session *models.GameSession) GameSessionResponse {
+	return GameSessionResponse{
+		ID:         session.ID,
+		GameID:     session.GameID,
+		UserID:     session.UserID,
+		ChannelID:  session.ChannelID,
+		RoomID:     session.RoomID,
+		Status:     session.Status,
+		StartedAt:  session.StartedAt,
+		LastSeenAt: session.LastSeenAt,
+		EndedAt:    session.EndedAt,
+		CreatedAt:  session.CreatedAt,
+		UpdatedAt:  session.UpdatedAt,
+	}
+}
+
+func NewGameEventResponse(event *models.GameEvent) GameEventResponse {
+	return GameEventResponse{
+		ID:               event.ID,
+		GameID:           event.GameID,
+		SessionID:        event.SessionID,
+		UserID:           event.UserID,
+		EventType:        event.EventType,
+		IdempotencyKey:   event.IdempotencyKey,
+		Score:            event.Score,
+		AchievementCode:  event.AchievementCode,
+		AchievementTitle: event.AchievementTitle,
+		CreatedAt:        event.CreatedAt,
+		UpdatedAt:        event.UpdatedAt,
+	}
+}
+
+func NewGameRoomStateResponse(state *services.GameRoomResponse) GameRoomStateResponse {
+	members := make([]GameRoomMemberResponse, 0, len(state.Members))
+	for _, member := range state.Members {
+		members = append(members, GameRoomMemberResponse{
+			ID:         member.ID,
+			RoomID:     member.RoomID,
+			UserID:     member.UserID,
+			Role:       member.Role,
+			Status:     member.Status,
+			JoinedAt:   member.JoinedAt,
+			LeftAt:     member.LeftAt,
+			LastSeenAt: member.LastSeenAt,
+			CreatedAt:  member.CreatedAt,
+			UpdatedAt:  member.UpdatedAt,
+		})
+	}
+	return GameRoomStateResponse{
+		Room:    state.Room,
+		Members: members,
 	}
 }

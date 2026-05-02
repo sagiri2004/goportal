@@ -144,6 +144,9 @@ func GameService() services.GameService {
 		gameSvc = svcimpl.NewGameService(
 			GameRepository(),
 			StorageService(),
+			MessageService(),
+			NotificationService(),
+			pkgglobal.Publisher,
 		)
 	})
 	return gameSvc

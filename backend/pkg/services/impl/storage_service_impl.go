@@ -223,6 +223,8 @@ func mediaTypeFolder(mediaType services.UploadMediaType) string {
 		return "messages"
 	case services.MediaTypeGameBundle:
 		return "game-bundles"
+	case services.MediaTypeGameAsset:
+		return "games"
 	default:
 		return "misc"
 	}

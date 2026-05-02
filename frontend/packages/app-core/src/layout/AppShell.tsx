@@ -537,7 +537,6 @@ export const AppShell: React.FC = () => {
   const params = useParams<{ serverId?: string; channelId?: string; tournamentId?: string }>()
   const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
   const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname])
-  const isGamesMode = useMemo(() => location.pathname.includes('/app/games'), [location.pathname])
   const isTournamentMode = useMemo(
     () => location.pathname.includes('/app/servers/') && location.pathname.includes('/tournaments'),
     [location.pathname],
@@ -1010,7 +1009,7 @@ export const AppShell: React.FC = () => {
         return
       }
 
-      if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode && !isGamesMode) {
+      if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode) {
         try {
           const channelData = await getChannels(nextServerId)
           if (isCancelled) {
@@ -1039,7 +1038,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [isDmMode, isGamesMode, location.pathname, navigate, params.serverId])
+  }, [isDmMode, location.pathname, navigate, params.serverId])
 
   useEffect(() => {
     let isCancelled = false
@@ -1089,7 +1088,7 @@ export const AppShell: React.FC = () => {
       const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId)
 
       if (!hasActiveChannel && availableChannels.length > 0) {
-        if (isVoiceMode || isTournamentMode || isGamesMode) {
+        if (isVoiceMode || isTournamentMode) {
           return
         }
         const fallbackChannel = availableChannels[0]
@@ -1103,7 +1102,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [activeChannelId, activeServerId, isGamesMode, isTournamentMode, isVoiceMode, navigate])
+  }, [activeChannelId, activeServerId, isTournamentMode, isVoiceMode, navigate])
 
   useEffect(() => {
     let isCancelled = false
@@ -1966,7 +1965,7 @@ export const AppShell: React.FC = () => {
                 navigate('/app/@me')
               }
             }}
-            onOpenGames={() => navigate('/app/games')}
+            onOpenGames={() => navigate('/games')}
             onCreateServer={() => openCreateServerModal()}
           />
         </div>

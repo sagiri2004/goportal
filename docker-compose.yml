@@ -49,6 +49,27 @@ services:
     networks:
       - goportal-net
 
+  game-realtime-server:
+    build:
+      context: ./game-realtime
+      dockerfile: Dockerfile
+    container_name: goportal-game-realtime
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
+    environment:
+      PORT: "8091"
+      WS_PATH: "/ws/game"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      TOPIC_GAME_ROOM_EVENTS: "game.room.events"
+      JWT_SECRET: "goportal-secret-key-change-me"
+      WS_WRITE_TIMEOUT: "5s"
+    networks:
+      - goportal-net
+
   mysql:
     image: mysql:8.4
     container_name: goportal-mysql

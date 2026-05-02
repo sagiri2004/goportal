@@ -27,7 +27,7 @@ export const DirectMessagesSidebar: React.FC = () => {
           <TooltipTrigger asChild>
             <button
               type="button"
-              onClick={() => navigate('/app/games')}
+              onClick={() => navigate('/games')}
               className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground"
             >
               <Gamepad2 className="w-4 h-4" />

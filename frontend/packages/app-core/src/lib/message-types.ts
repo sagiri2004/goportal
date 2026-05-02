@@ -35,6 +35,19 @@ export type LinkEmbed = {
   color?: string
 }
 
+export type GameShareContent = {
+  share_type?: 'game' | 'score' | 'achievement'
+  game_id: string
+  title?: string
+  thumbnail_url?: string
+  hero_image_url?: string
+  play_url?: string
+  details_url?: string
+  score?: number
+  achievement?: string
+  comment?: string
+}
+
 export type Message = {
   id: string
   authorId: string
@@ -43,7 +56,10 @@ export type Message = {
   avatarUrl?: string
   avatarColor?: string
   avatarInitials?: string
+  contentType?: string
   content: string
+  contentData?: unknown
+  gameShare?: GameShareContent
   timestamp: string
   date: string
   editedAt?: string

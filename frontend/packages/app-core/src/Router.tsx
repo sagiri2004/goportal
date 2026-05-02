@@ -15,7 +15,7 @@ import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
 import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
 import { TournamentDetailPage, TournamentListPage } from './tournaments'
-import { GamePlayerPage, GamesCatalogPage } from './games/GameViews'
+import { GameDetailPage, GamePlayerPage, GamesCatalogPage, GamesDeveloperPage } from './games/GameViews'
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react'
 import { useAuthStore } from '@goportal/store'
 import { getChannels, getServers, hydrateSession } from './services'
@@ -293,9 +293,40 @@ export const Router: React.FC = () => {
           <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
           <Route path="servers/:serverId/tournaments" element={<TournamentListPage />} />
           <Route path="servers/:serverId/tournaments/:tournamentId" element={<TournamentDetailPage />} />
-          <Route path="games" element={<GamesCatalogPage />} />
-          <Route path="games/:gameId/play" element={<GamePlayerPage />} />
         </Route>
+
+        <Route
+          path="/games"
+          element={
+            <PrivateRoute>
+              <GamesCatalogPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/developer"
+          element={
+            <PrivateRoute>
+              <GamesDeveloperPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/:gameId/play"
+          element={
+            <PrivateRoute>
+              <GamePlayerPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/:gameId"
+          element={
+            <PrivateRoute>
+              <GameDetailPage />
+            </PrivateRoute>
+          }
+        />
 
         {/* Fallback */}
         <Route path="/" element={<Navigate to="/app" replace />} />

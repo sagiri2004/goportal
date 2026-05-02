@@ -111,3 +111,17 @@ Use these endpoints to manage creator inventory and submit game to moderation qu
 - `PATCH /api/v1/admin/reviews/:reviewId/moderate`
 
 All admin endpoints require `Bearer token` with role `admin`.
+
+---
+
+### Games: Social Chat + Room MVP
+
+- `POST /api/v1/games/:id/session/start`
+- `POST /api/v1/games/:id/sessions/:sessionId/events`
+- `POST /api/v1/games/:id/share`
+- `POST /api/v1/games/:id/rooms`
+- `POST /api/v1/games/:id/rooms/:roomId/join`
+- `POST /api/v1/games/:id/rooms/:roomId/leave`
+- `GET /api/v1/games/:id/rooms/:roomId/state`
+
+This flow powers chat game cards, score/achievement sharing, and lightweight multiplayer room state sync (`<=8` users).
