@@ -2,6 +2,10 @@ port: 7880
 bind_addresses:
   - "0.0.0.0"
 rtc:
+  # Local dev on same machine: advertise loopback instead of Docker bridge IP.
+  # This prevents browser from trying unreachable 172.x container candidates.
+  node_ip: 127.0.0.1
+  use_external_ip: false
   tcp_port: 7881
   port_range_start: 50100
   port_range_end: 50200

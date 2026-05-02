@@ -81,7 +81,8 @@ func parseMediaType(raw string) (services.UploadMediaType, error) {
 		services.MediaTypeServerIcon,
 		services.MediaTypeServerBanner,
 		services.MediaTypeMessageAttachment,
-		services.MediaTypeRoleIcon:
+		services.MediaTypeRoleIcon,
+		services.MediaTypeGameBundle:
 		return services.UploadMediaType(strings.TrimSpace(raw)), nil
 	default:
 		return "", apperr.E("INVALID_MEDIA_TYPE", nil)

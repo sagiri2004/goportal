@@ -7,12 +7,13 @@ import {
   TooltipTrigger,
 } from '@goportal/ui'
 import { getServerInitials } from '../mockData'
-import { Plus, Compass, Download } from 'lucide-react'
+import { Plus, Compass, Download, Gamepad2 } from 'lucide-react'
 
 type ServerRailProps = {
   activeServerId?: string
   onSelectServer?: (serverId: string) => void
   onCreateServer?: () => void
+  onOpenGames?: () => void
   servers?: Array<{ id: string; name: string; initials?: string; color?: string; iconUrl?: string }>
 }
 
@@ -28,6 +29,7 @@ export const ServerRail: React.FC<ServerRailProps> = ({
   activeServerId,
   onSelectServer = () => {},
   onCreateServer = () => {},
+  onOpenGames = () => {},
   servers: serversProp,
 }) => {
   const servers = serversProp ?? []
@@ -107,6 +109,20 @@ export const ServerRail: React.FC<ServerRailProps> = ({
 
       <div className="flex flex-col items-center gap-2 py-3">
         <Separator className="w-8 mx-auto my-1" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenGames}
+              className="cursor-pointer w-12 h-12 rounded-[24px] hover:rounded-[16px] hover:bg-indigo-500 hover:text-white text-foreground transition-all duration-200"
+            >
+              <Gamepad2 className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Games</TooltipContent>
+        </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>

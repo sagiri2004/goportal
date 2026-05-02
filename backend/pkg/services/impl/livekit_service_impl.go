@@ -2,6 +2,7 @@ package impl
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -35,10 +36,13 @@ func (s *liveKitService) GenerateAccessToken(channelID, userID, displayName, met
 	userID = strings.TrimSpace(userID)
 	displayName = strings.TrimSpace(displayName)
 	metadata = strings.TrimSpace(metadata)
+	log.Printf("[voice-debug] livekit-generate-token:start channel_id=%s user_id=%s display_name=%s metadata_len=%d", channelID, userID, displayName, len(metadata))
 	if channelID == "" || userID == "" {
+		log.Printf("[voice-debug] livekit-generate-token:missing-fields channel_id=%s user_id=%s", channelID, userID)
 		return "", apperr.E("MISSING_FIELDS", nil)
 	}
 	if s.apiKey == "" || s.apiSecret == "" {
+		log.Printf("[voice-debug] livekit-generate-token:not-configured channel_id=%s user_id=%s", channelID, userID)
 		return "", apperr.E("LIVEKIT_NOT_CONFIGURED", nil)
 	}
 
@@ -61,8 +65,10 @@ func (s *liveKitService) GenerateAccessToken(channelID, userID, displayName, met
 	})
 	jwt, err := token.ToJWT()
 	if err != nil {
+		log.Printf("[voice-debug] livekit-generate-token:to-jwt-failed channel_id=%s user_id=%s err=%v", channelID, userID, err)
 		return "", apperr.E("LIVEKIT_TOKEN_FAILED", err)
 	}
+	log.Printf("[voice-debug] livekit-generate-token:success channel_id=%s user_id=%s token_len=%d", channelID, userID, len(jwt))
 	return jwt, nil
 }
 

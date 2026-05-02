@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	repoimpl "github.com/sagiri2004/goportal/pkg/repositories/impl"
-	svcimpl "github.com/sagiri2004/goportal/pkg/services/impl"
 	"github.com/sagiri2004/goportal/pkg/models"
+	repoimpl "github.com/sagiri2004/goportal/pkg/repositories/impl"
 	"github.com/sagiri2004/goportal/pkg/services"
+	svcimpl "github.com/sagiri2004/goportal/pkg/services/impl"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

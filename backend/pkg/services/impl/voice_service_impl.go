@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 	"time"
 
@@ -45,16 +46,20 @@ func NewVoiceService(
 }
 
 func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelID string) (*services.VoiceTokenResult, error) {
+	log.Printf("[voice-debug] generate-token:start actor_id=%s channel_id=%s", strings.TrimSpace(actorID), strings.TrimSpace(channelID))
 	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
 	if err != nil {
+		log.Printf("[voice-debug] generate-token:ensure-access-failed actor_id=%s channel_id=%s err=%v", strings.TrimSpace(actorID), strings.TrimSpace(channelID), err)
 		return nil, err
 	}
 	if channel.Type != models.ChannelTypeVoice {
+		log.Printf("[voice-debug] generate-token:channel-not-voice actor_id=%s channel_id=%s actual_type=%s", strings.TrimSpace(actorID), channel.ID, channel.Type)
 		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 
 	actor, err := s.userRepo.FindByID(ctx, actorID)
 	if err != nil {
+		log.Printf("[voice-debug] generate-token:load-actor-failed actor_id=%s channel_id=%s err=%v", strings.TrimSpace(actorID), channel.ID, err)
 		return nil, err
 	}
 
@@ -70,8 +75,10 @@ func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelI
 
 	token, err := s.liveKitSvc.GenerateAccessToken(channel.ID, actorID, actor.Username, string(metadataBytes))
 	if err != nil {
+		log.Printf("[voice-debug] generate-token:livekit-generate-failed actor_id=%s channel_id=%s err=%v", strings.TrimSpace(actorID), channel.ID, err)
 		return nil, err
 	}
+	log.Printf("[voice-debug] generate-token:success actor_id=%s channel_id=%s server_id=%s token_len=%d livekit_url=%s", strings.TrimSpace(actorID), channel.ID, channel.ServerID, len(token), strings.TrimSpace(global.Config.LiveKit.URL))
 
 	return &services.VoiceTokenResult{
 		Token: token,
@@ -408,14 +415,18 @@ func (s *voiceService) buildParticipantSnapshots(ctx context.Context, participan
 func (s *voiceService) ensureChannelAccess(ctx context.Context, actorID, channelID string, manageRequired bool) (*models.Channel, error) {
 	actorID = strings.TrimSpace(actorID)
 	channelID = strings.TrimSpace(channelID)
+	log.Printf("[voice-debug] ensure-access:start actor_id=%s channel_id=%s manage_required=%t", actorID, channelID, manageRequired)
 	if actorID == "" || channelID == "" {
+		log.Printf("[voice-debug] ensure-access:missing-fields actor_id=%s channel_id=%s", actorID, channelID)
 		return nil, apperr.E("MISSING_FIELDS", nil)
 	}
 	channel, err := s.channelRepo.FindByID(ctx, channelID)
 	if err != nil {
+		log.Printf("[voice-debug] ensure-access:channel-not-found actor_id=%s channel_id=%s err=%v", actorID, channelID, err)
 		return nil, err
 	}
 	if _, err := s.serverRepo.FindMember(ctx, channel.ServerID, actorID); err != nil {
+		log.Printf("[voice-debug] ensure-access:not-server-member actor_id=%s channel_id=%s server_id=%s err=%v", actorID, channelID, channel.ServerID, err)
 		return nil, apperr.E("NOT_SERVER_MEMBER", err)
 	}
 
@@ -425,20 +436,25 @@ func (s *voiceService) ensureChannelAccess(ctx context.Context, actorID, channel
 	}
 	hasPerm, err := s.serverRepo.HasPermission(ctx, channel.ServerID, actorID, perm)
 	if err != nil {
+		log.Printf("[voice-debug] ensure-access:permission-check-failed actor_id=%s channel_id=%s server_id=%s perm=%d err=%v", actorID, channelID, channel.ServerID, perm, err)
 		return nil, err
 	}
 	if !hasPerm {
+		log.Printf("[voice-debug] ensure-access:permission-denied actor_id=%s channel_id=%s server_id=%s perm=%d", actorID, channelID, channel.ServerID, perm)
 		return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
 	}
 	if channel.IsPrivate {
 		isMember, err := s.channelRepo.IsMember(ctx, channel.ID, actorID)
 		if err != nil {
+			log.Printf("[voice-debug] ensure-access:private-membership-check-failed actor_id=%s channel_id=%s err=%v", actorID, channel.ID, err)
 			return nil, err
 		}
 		if !isMember {
+			log.Printf("[voice-debug] ensure-access:private-membership-denied actor_id=%s channel_id=%s", actorID, channel.ID)
 			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
 		}
 	}
+	log.Printf("[voice-debug] ensure-access:success actor_id=%s channel_id=%s server_id=%s channel_type=%s private=%t", actorID, channel.ID, channel.ServerID, channel.Type, channel.IsPrivate)
 	return channel, nil
 }
 

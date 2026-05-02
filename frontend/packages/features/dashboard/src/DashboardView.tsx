@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Separator, cn } from '@goportal/ui'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Separator, cn } from '@goportal/ui'
 import { ChannelHeader } from '@goportal/feature-channels'
 import {
   Edit,
   FileText,
   Gift,
+  Gamepad2,
   Hash,
   Image,
   Loader2,
@@ -16,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 import {
   addReaction,
@@ -27,12 +28,12 @@ import {
   sendMessage,
   updateMessage,
   uploadMessageAttachment,
+  listTrendingGames,
 } from '@goportal/app-core'
 import type { LinkEmbed as LinkEmbedData } from '@goportal/app-core'
 import type { Message as ChatMessage } from '@goportal/app-core'
 import type { ChannelDTO } from '@goportal/types'
 import { useAuthStore } from '@goportal/store'
-import { WS_URL } from '@goportal/config'
 import { useDropzone } from 'react-dropzone'
 import { TextContent } from './components/TextContent'
 import { ReplyPreview } from './components/ReplyPreview'
@@ -70,6 +71,10 @@ type ShellContext = {
       is_screen_sharing?: boolean
     }>
   }) => void
+  subscribeNotificationEvents?: (
+    listener: (event: NotificationSocketEnvelope) => void,
+  ) => () => void
+  sendNotificationSocketMessage?: (payload: unknown) => boolean
 }
 
 type NotificationSocketEnvelope = {
@@ -81,7 +86,13 @@ type NotificationSocketEnvelope = {
   event_id?: string
 }
 
-const MESSAGE_CREATED_EVENT_TYPES = new Set([
+const canonicalizeEventType = (eventType: string): string =>
+  eventType.replace(/[.\-:]/g, '_').replace(/__+/g, '_').toUpperCase()
+
+const createCanonicalEventSet = (types: string[]): Set<string> =>
+  new Set(types.map(canonicalizeEventType))
+
+const MESSAGE_CREATED_EVENT_TYPES = createCanonicalEventSet([
   'CHAT_MESSAGE_CREATED',
   'MESSAGE_CREATED',
   'MESSAGE_CREATE',
@@ -89,7 +100,7 @@ const MESSAGE_CREATED_EVENT_TYPES = new Set([
   'MESSAGE.CREATED',
 ])
 
-const MESSAGE_UPDATED_EVENT_TYPES = new Set([
+const MESSAGE_UPDATED_EVENT_TYPES = createCanonicalEventSet([
   'CHAT_MESSAGE_UPDATED',
   'MESSAGE_UPDATED',
   'MESSAGE_UPDATE',
@@ -97,7 +108,7 @@ const MESSAGE_UPDATED_EVENT_TYPES = new Set([
   'MESSAGE.UPDATED',
 ])
 
-const MESSAGE_DELETED_EVENT_TYPES = new Set([
+const MESSAGE_DELETED_EVENT_TYPES = createCanonicalEventSet([
   'CHAT_MESSAGE_DELETED',
   'MESSAGE_DELETED',
   'MESSAGE_DELETE',
@@ -105,21 +116,23 @@ const MESSAGE_DELETED_EVENT_TYPES = new Set([
   'MESSAGE.DELETED',
 ])
 
-const REACTION_ADDED_EVENT_TYPES = new Set([
+const REACTION_ADDED_EVENT_TYPES = createCanonicalEventSet([
   'MESSAGE_REACTION_ADDED',
+  'MESSAGE_REACTION_ADD',
   'REACTION_ADDED',
   'MESSAGE:REACTION:ADD',
   'REACTION.ADDED',
 ])
 
-const REACTION_REMOVED_EVENT_TYPES = new Set([
+const REACTION_REMOVED_EVENT_TYPES = createCanonicalEventSet([
   'MESSAGE_REACTION_REMOVED',
+  'MESSAGE_REACTION_REMOVE',
   'REACTION_REMOVED',
   'MESSAGE:REACTION:REMOVE',
   'REACTION.REMOVED',
 ])
 
-const VOICE_ACTIVITY_EVENT_TYPES = new Set([
+const VOICE_ACTIVITY_EVENT_TYPES = createCanonicalEventSet([
   'VOICE_CHANNEL_ACTIVITY_UPDATED',
   'VOICE_ACTIVITY_UPDATED',
 ])
@@ -180,54 +193,6 @@ const resolveEnvelopeEventType = (event: NotificationSocketEnvelope): string => 
     }
   }
   return payloadType || topLevelType
-}
-
-const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: string | null): string[] => {
-  let parsed: URL
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    return []
-  }
-
-  if (parsed.protocol === 'http:') {
-    parsed.protocol = 'ws:'
-  } else if (parsed.protocol === 'https:') {
-    parsed.protocol = 'wss:'
-  }
-
-  if (!parsed.pathname || parsed.pathname === '/') {
-    parsed.pathname = '/ws'
-  }
-
-  const setCommonParams = (url: URL) => {
-    url.searchParams.set('user_id', userId)
-    if (token) {
-      url.searchParams.set('token', token)
-    }
-  }
-
-  const targets: URL[] = []
-  const addTarget = (url: URL) => {
-    setCommonParams(url)
-    targets.push(url)
-  }
-
-  if (
-    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
-    parsed.port === '8080'
-  ) {
-    const preferred = new URL(parsed.toString())
-    preferred.port = '8090'
-    addTarget(preferred)
-
-    const fallback = new URL(parsed.toString())
-    fallback.port = '8085'
-    addTarget(fallback)
-  }
-
-  addTarget(parsed)
-  return Array.from(new Set(targets.map((target) => target.toString())))
 }
 
 const mapSocketAttachments = (attachments: any): ChatMessage['attachments'] => {
@@ -325,6 +290,7 @@ const mapSocketPayloadToMessage = (
 }
 
 export const DashboardView: React.FC = () => {
+  const navigate = useNavigate()
   const {
     showMembers,
     setShowMembers,
@@ -334,9 +300,10 @@ export const DashboardView: React.FC = () => {
     resetChannelUnread,
     setChannelUnread,
     applyVoiceChannelActivityUpdate,
+    subscribeNotificationEvents,
+    sendNotificationSocketMessage,
   } = useOutletContext<ShellContext>()
   const currentUser = useAuthStore((state: any) => state.user)
-  const token = useAuthStore((state: any) => state.token)
   const [messagesByChannel, setMessagesByChannel] = useState<Record<string, ChatMessage[]>>({})
   const [pagingByChannel, setPagingByChannel] = useState<
     Record<string, { offset: number; hasMore: boolean; isLoadingMore: boolean }>
@@ -347,14 +314,17 @@ export const DashboardView: React.FC = () => {
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [composerHasContent, setComposerHasContent] = useState(false)
   const [uploadProgressByFile, setUploadProgressByFile] = useState<Record<string, number>>({})
-  const [isUploadingFiles, setIsUploadingFiles] = useState(false)
+  const [inFlightUploadCount, setInFlightUploadCount] = useState(0)
   const [composerError, setComposerError] = useState<string | null>(null)
   const embedCacheRef = useRef<Record<string, LinkEmbedData | null>>({})
   const embedInFlightRef = useRef<Record<string, boolean>>({})
   const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState<Record<string, LinkEmbedData>>({})
   const activeChannelIdRef = useRef(activeChannelId)
   const currentUserIdRef = useRef<string | null>(currentUser?.id ?? null)
-  const socketRef = useRef<WebSocket | null>(null)
+  const incrementChannelUnreadRef = useRef(incrementChannelUnread)
+  const resetChannelUnreadRef = useRef(resetChannelUnread)
+  const setChannelUnreadRef = useRef(setChannelUnread)
+  const applyVoiceChannelActivityUpdateRef = useRef(applyVoiceChannelActivityUpdate)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const isNearBottomRef = useRef(true)
   const [newMessageCount, setNewMessageCount] = useState(0)
@@ -364,6 +334,12 @@ export const DashboardView: React.FC = () => {
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingDraft, setEditingDraft] = useState('')
+  const [pendingMessageIds, setPendingMessageIds] = useState<Record<string, true>>({})
+  const [failedMessageIds, setFailedMessageIds] = useState<Record<string, true>>({})
+  const [isGamesLauncherOpen, setIsGamesLauncherOpen] = useState(false)
+  const [quickGames, setQuickGames] = useState<Array<{ id: string; title: string; source: string; rating: number }>>([])
+  const isPrependingHistoryRef = useRef(false)
+  const lastRenderedMessageIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId
@@ -378,11 +354,66 @@ export const DashboardView: React.FC = () => {
   }, [currentUser?.id])
 
   useEffect(() => {
+    incrementChannelUnreadRef.current = incrementChannelUnread
+  }, [incrementChannelUnread])
+
+  useEffect(() => {
+    resetChannelUnreadRef.current = resetChannelUnread
+  }, [resetChannelUnread])
+
+  useEffect(() => {
+    setChannelUnreadRef.current = setChannelUnread
+  }, [setChannelUnread])
+
+  useEffect(() => {
+    applyVoiceChannelActivityUpdateRef.current = applyVoiceChannelActivityUpdate
+  }, [applyVoiceChannelActivityUpdate])
+
+  const scrollToBottom = useCallback(() => {
+    const list = messageListRef.current
+    if (!list) {
+      return
+    }
+    list.scrollTop = list.scrollHeight
+    setNewMessageCount(0)
+    setIsNearBottom(true)
+  }, [])
+
+  useEffect(() => {
     return () => {
       Object.values(typingTimersRef.current).forEach((timer) => window.clearTimeout(timer))
       typingTimersRef.current = {}
     }
   }, [])
+
+  useEffect(() => {
+    if (!isGamesLauncherOpen) {
+      return
+    }
+    let cancelled = false
+    void listTrendingGames({ limit: 8 })
+      .then((items) => {
+        if (cancelled) {
+          return
+        }
+        setQuickGames(
+          items.map((item) => ({
+            id: item.game.id,
+            title: item.game.title,
+            source: item.game.source_type,
+            rating: item.game.avg_rating,
+          }))
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQuickGames([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isGamesLauncherOpen])
 
   const activeChannel = useMemo(
     () => {
@@ -470,15 +501,25 @@ export const DashboardView: React.FC = () => {
       return
     }
     requestAnimationFrame(() => {
-      const list = messageListRef.current
-      if (!list) {
-        return
-      }
-      list.scrollTop = list.scrollHeight
-      setNewMessageCount(0)
-      setIsNearBottom(true)
+      scrollToBottom()
     })
-  }, [activeChannelId])
+  }, [activeChannelId, scrollToBottom])
+
+  useEffect(() => {
+    const lastMessageId = activeMessages[activeMessages.length - 1]?.id ?? null
+    if (!lastMessageId) {
+      lastRenderedMessageIdRef.current = null
+      return
+    }
+    const changed = lastRenderedMessageIdRef.current !== lastMessageId
+    lastRenderedMessageIdRef.current = lastMessageId
+    if (!changed || isPrependingHistoryRef.current) {
+      return
+    }
+    requestAnimationFrame(() => {
+      scrollToBottom()
+    })
+  }, [activeMessages, scrollToBottom])
 
   useEffect(() => {
     if (!activeChannelId) {
@@ -486,14 +527,11 @@ export const DashboardView: React.FC = () => {
     }
     resetChannelUnread?.(activeChannelId)
     void markChannelRead(activeChannelId).catch(() => {})
-    const socket = socketRef.current
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'channel.focus',
-        data: { channel_id: activeChannelId },
-      }))
-    }
-  }, [activeChannelId, resetChannelUnread])
+    sendNotificationSocketMessage?.({
+      type: 'channel.focus',
+      data: { channel_id: activeChannelId },
+    })
+  }, [activeChannelId, resetChannelUnread, sendNotificationSocketMessage])
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') {
@@ -503,15 +541,9 @@ export const DashboardView: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (!currentUser?.id) {
+    if (!subscribeNotificationEvents) {
       return
     }
-
-    let socket: WebSocket | null = null
-    let reconnectTimer: number | null = null
-    let initialConnectTimer: number | null = null
-    let reconnectAttempt = 0
-    let closedByClient = false
 
     const updateMessageInChannel = (
       channelId: string | null,
@@ -589,27 +621,22 @@ export const DashboardView: React.FC = () => {
       }
     }
 
-    const onSocketMessage = (raw: string) => {
-      let event: NotificationSocketEnvelope
-      try {
-        event = JSON.parse(raw) as NotificationSocketEnvelope
-      } catch {
-        return
-      }
+    const onSocketMessage = (event: NotificationSocketEnvelope) => {
 
       const eventType = resolveEnvelopeEventType(event)
-      if (!eventType || eventType === 'CONNECTED') {
+      const canonicalEventType = canonicalizeEventType(eventType)
+      if (!canonicalEventType || canonicalEventType === 'CONNECTED') {
         return
       }
 
-      if (VOICE_ACTIVITY_EVENT_TYPES.has(eventType)) {
+      if (VOICE_ACTIVITY_EVENT_TYPES.has(canonicalEventType)) {
         const payload = event.payload ?? {}
         const serverId = typeof payload.server_id === 'string' ? payload.server_id : ''
         const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : ''
         const participants = Array.isArray(payload.participants) ? payload.participants : []
 
-        if (serverId && channelId && applyVoiceChannelActivityUpdate) {
-          applyVoiceChannelActivityUpdate({
+        if (serverId && channelId && applyVoiceChannelActivityUpdateRef.current) {
+          applyVoiceChannelActivityUpdateRef.current({
             serverId,
             channelId,
             participants,
@@ -618,7 +645,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (eventType === 'CHANNEL.UNREAD') {
+      if (canonicalEventType === 'CHANNEL_UNREAD') {
         const payload = event.payload ?? {}
         const channelId = payload.channel_id as string | undefined
         const unreadCount = Number(payload.unread_count ?? 0)
@@ -626,14 +653,14 @@ export const DashboardView: React.FC = () => {
           return
         }
         if (channelId !== activeChannelIdRef.current) {
-          setChannelUnread?.(channelId, unreadCount)
+          setChannelUnreadRef.current?.(channelId, unreadCount)
         } else if (unreadCount > 0) {
-          resetChannelUnread?.(channelId)
+          resetChannelUnreadRef.current?.(channelId)
         }
         return
       }
 
-      if (eventType === 'MENTION') {
+      if (canonicalEventType === 'MENTION') {
         const payload = event.payload ?? {}
         if (
           typeof window !== 'undefined' &&
@@ -649,7 +676,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (eventType === 'TYPING' || eventType === 'TYPING.START') {
+      if (canonicalEventType === 'TYPING' || canonicalEventType === 'TYPING_START') {
         const payload = event.payload ?? {}
         const channelId = payload.channel_id as string | undefined
         const userId = payload.user_id as string | undefined
@@ -679,7 +706,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (eventType === 'TYPING.STOP') {
+      if (canonicalEventType === 'TYPING_STOP') {
         const payload = event.payload ?? {}
         const channelId = payload.channel_id as string | undefined
         const userId = payload.user_id as string | undefined
@@ -699,7 +726,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (MESSAGE_CREATED_EVENT_TYPES.has(eventType)) {
+      if (MESSAGE_CREATED_EVENT_TYPES.has(canonicalEventType)) {
         const payload = event.payload ?? {}
         const message = mapSocketPayloadToMessage(payload, event.timestamp, currentUserIdRef.current)
         if (!message) {
@@ -719,20 +746,12 @@ export const DashboardView: React.FC = () => {
           }
 
           if (activeChannelIdRef.current !== channelId) {
-            incrementChannelUnread?.(channelId)
+            incrementChannelUnreadRef.current?.(channelId)
           } else {
             void markChannelRead(channelId).catch(() => {})
-            if (isNearBottomRef.current) {
-              requestAnimationFrame(() => {
-                const list = messageListRef.current
-                if (!list) {
-                  return
-                }
-                list.scrollTop = list.scrollHeight
-              })
-            } else {
-              setNewMessageCount((count) => count + 1)
-            }
+            requestAnimationFrame(() => {
+              scrollToBottom()
+            })
           }
 
           return next
@@ -750,7 +769,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (MESSAGE_UPDATED_EVENT_TYPES.has(eventType)) {
+      if (MESSAGE_UPDATED_EVENT_TYPES.has(canonicalEventType)) {
         const payload = event.payload ?? {}
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
@@ -782,7 +801,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (MESSAGE_DELETED_EVENT_TYPES.has(eventType)) {
+      if (MESSAGE_DELETED_EVENT_TYPES.has(canonicalEventType)) {
         const payload = event.payload ?? {}
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
@@ -793,7 +812,7 @@ export const DashboardView: React.FC = () => {
         return
       }
 
-      if (REACTION_ADDED_EVENT_TYPES.has(eventType) || REACTION_REMOVED_EVENT_TYPES.has(eventType)) {
+      if (REACTION_ADDED_EVENT_TYPES.has(canonicalEventType) || REACTION_REMOVED_EVENT_TYPES.has(canonicalEventType)) {
         const payload = event.payload ?? {}
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
@@ -803,7 +822,7 @@ export const DashboardView: React.FC = () => {
         const emoji = payload.emoji as string | undefined
         const userId = (payload.user_id as string | undefined) ?? event.user_id ?? currentUserIdRef.current
         const channelId = (payload.channel_id as string | undefined) ?? null
-        const mode: 'add' | 'remove' = REACTION_ADDED_EVENT_TYPES.has(eventType) ? 'add' : 'remove'
+        const mode: 'add' | 'remove' = REACTION_ADDED_EVENT_TYPES.has(canonicalEventType) ? 'add' : 'remove'
 
         updateMessageInChannel(channelId, (messages) =>
           messages.map((message) => {
@@ -827,86 +846,11 @@ export const DashboardView: React.FC = () => {
         )
       }
     }
-
-    const connect = () => {
-      if (closedByClient) {
-        return
-      }
-
-      const targets = buildNotificationSocketTargets(WS_URL, currentUser.id, token)
-      if (targets.length === 0) {
-        return
-      }
-      const target = targets[reconnectAttempt % targets.length]
-      const ws = new WebSocket(target)
-      socket = ws
-      socketRef.current = ws
-
-      ws.onopen = () => {
-        if (socket !== ws) {
-          return
-        }
-        reconnectAttempt = 0
-        if (activeChannelIdRef.current) {
-          ws.send(JSON.stringify({
-            type: 'channel.focus',
-            data: { channel_id: activeChannelIdRef.current },
-          }))
-        }
-      }
-
-      ws.onmessage = (event) => {
-        if (socket !== ws) {
-          return
-        }
-        onSocketMessage(String(event.data))
-      }
-
-      ws.onclose = () => {
-        if (socket === ws) {
-          socket = null
-          socketRef.current = null
-        }
-        if (closedByClient) {
-          return
-        }
-        if (reconnectTimer) {
-          window.clearTimeout(reconnectTimer)
-          reconnectTimer = null
-        }
-        const delay = Math.min(30000, 1000 * 2 ** reconnectAttempt)
-        reconnectAttempt += 1
-        reconnectTimer = window.setTimeout(() => {
-          reconnectTimer = null
-          connect()
-        }, delay)
-      }
-
-      ws.onerror = () => {
-        if (socket !== ws) {
-          return
-        }
-        ws.close()
-      }
-    }
-
-    // Delay initial connect slightly to avoid React StrictMode dev double-mount
-    // from opening/closing a socket while still CONNECTING.
-    initialConnectTimer = window.setTimeout(connect, 120)
-
+    const unsubscribe = subscribeNotificationEvents(onSocketMessage)
     return () => {
-      closedByClient = true
-      if (initialConnectTimer) {
-        window.clearTimeout(initialConnectTimer)
-      }
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer)
-      }
-      socket?.close()
-      socket = null
-      socketRef.current = null
+      unsubscribe()
     }
-  }, [applyVoiceChannelActivityUpdate, currentUser?.id, incrementChannelUnread, resetChannelUnread, setChannelUnread, token])
+  }, [scrollToBottom, subscribeNotificationEvents])
 
   const handleScrollToLoadMore = useCallback(
     async (event: React.UIEvent<HTMLElement>) => {
@@ -935,37 +879,53 @@ export const DashboardView: React.FC = () => {
       }))
 
       const previousHeight = container.scrollHeight
-      const page = await getMessages(activeChannelId, {
-        limit: 50,
-        offset: pageState.offset,
-      })
+      isPrependingHistoryRef.current = true
 
-      setMessagesByChannel((prev) => {
-        const current = prev[activeChannelId] ?? []
-        const next = [...page.items, ...current]
-        const deduped = next.filter(
-          (message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index
-        )
+      try {
+        const page = await getMessages(activeChannelId, {
+          limit: 50,
+          offset: pageState.offset,
+        })
 
-        return {
+        setMessagesByChannel((prev) => {
+          const current = prev[activeChannelId] ?? []
+          const next = [...page.items, ...current]
+          const deduped = next.filter(
+            (message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index
+          )
+
+          return {
+            ...prev,
+            [activeChannelId]: deduped,
+          }
+        })
+
+        setPagingByChannel((prev) => ({
           ...prev,
-          [activeChannelId]: deduped,
-        }
-      })
+          [activeChannelId]: {
+            offset: pageState.offset + page.items.length,
+            hasMore: page.items.length === 50,
+            isLoadingMore: false,
+          },
+        }))
 
-      setPagingByChannel((prev) => ({
-        ...prev,
-        [activeChannelId]: {
-          offset: pageState.offset + page.items.length,
-          hasMore: page.items.length === 50,
-          isLoadingMore: false,
-        },
-      }))
-
-      requestAnimationFrame(() => {
-        const updatedHeight = container.scrollHeight
-        container.scrollTop = updatedHeight - previousHeight + container.scrollTop
-      })
+        requestAnimationFrame(() => {
+          const updatedHeight = container.scrollHeight
+          container.scrollTop = updatedHeight - previousHeight + container.scrollTop
+        })
+      } catch {
+        setPagingByChannel((prev) => ({
+          ...prev,
+          [activeChannelId]: {
+            ...pageState,
+            isLoadingMore: false,
+          },
+        }))
+      } finally {
+        requestAnimationFrame(() => {
+          isPrependingHistoryRef.current = false
+        })
+      }
     },
     [activeChannelId, newMessageCount, pagingByChannel]
   )
@@ -1134,6 +1094,10 @@ export const DashboardView: React.FC = () => {
     () => pendingFiles.map((file) => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null)),
     [pendingFiles]
   )
+  const inFlightUploadEntries = useMemo(
+    () => Object.entries(uploadProgressByFile),
+    [uploadProgressByFile]
+  )
 
   useEffect(() => {
     return () => {
@@ -1157,35 +1121,96 @@ export const DashboardView: React.FC = () => {
     if (now - lastSentAt < 2000) {
       return
     }
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    if (!sendNotificationSocketMessage) {
       return
     }
-    socket.send(JSON.stringify({
+    const sent = sendNotificationSocketMessage({
       type: 'typing.start',
       data: {
         channel_id: activeChannelId,
         username: currentUser?.username ?? '',
       },
-    }))
+    })
+    if (!sent) {
+      return
+    }
     lastTypingSentAtRef.current[key] = now
-  }, [activeChannelId, currentUser?.username])
+  }, [activeChannelId, currentUser?.username, sendNotificationSocketMessage])
 
   const onSend = useCallback(
-    async ({ content, files }: { content: string; files: File[] }): Promise<boolean> => {
+    async ({
+      content,
+      files,
+      replyTo,
+    }: {
+      content: string
+      files: File[]
+      replyTo: ChatMessage | null
+    }): Promise<boolean> => {
       if (!activeChannelId) {
         return false
       }
+
+      const now = new Date()
+      const optimisticId = `local-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`
+      const optimisticTimestamp = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+      const optimisticMessage: ChatMessage = {
+        id: optimisticId,
+        authorId: currentUser?.id ?? 'you',
+        author: currentUser?.username ?? 'you',
+        avatarUrl: currentUser?.avatar_url,
+        avatarColor: 'bg-indigo-500',
+        avatarInitials: (currentUser?.username?.[0] ?? 'Y').toUpperCase(),
+        content,
+        timestamp: optimisticTimestamp,
+        date: now.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      }
+      const optimisticWithReply = replyTo
+        ? {
+            ...optimisticMessage,
+            replyTo: {
+              messageId: replyTo.id,
+              authorName: replyTo.author,
+              authorColor: replyTo.authorColor,
+              content: replyTo.content,
+              hasAttachment: (replyTo.attachments ?? []).length > 0,
+            },
+          }
+        : optimisticMessage
+
+      setMessagesByChannel((prev) => {
+        const currentMessages = prev[activeChannelKey] ?? []
+        return {
+          ...prev,
+          [activeChannelKey]: [...currentMessages, optimisticWithReply],
+        }
+      })
+      setPendingMessageIds((prev) => ({ ...prev, [optimisticId]: true }))
+      setFailedMessageIds((prev) => {
+        if (!prev[optimisticId]) {
+          return prev
+        }
+        const next = { ...prev }
+        delete next[optimisticId]
+        return next
+      })
+      requestAnimationFrame(() => {
+        scrollToBottom()
+      })
 
       try {
         setComposerError(null)
         const attachmentIds: string[] = []
 
         if (files.length > 0) {
-          setIsUploadingFiles(true)
+          setInFlightUploadCount((count) => count + 1)
           const uploaded = await Promise.all(
             files.map(async (file, index) => {
-              const uploadKey = `${file.name}-${file.size}-${index}`
+              const uploadKey = `${optimisticId}:${index}:${file.name}`
               const result = await uploadMessageAttachment(file, (progress) => {
                 setUploadProgressByFile((prev) => ({ ...prev, [uploadKey]: progress }))
               })
@@ -1195,58 +1220,90 @@ export const DashboardView: React.FC = () => {
           attachmentIds.push(...uploaded)
         }
 
-        const message = await sendMessage(activeChannelId, content, attachmentIds, replyToMessage?.id)
-        const nextMessage = replyToMessage
+        const message = await sendMessage(activeChannelId, content, attachmentIds, replyTo?.id)
+        const nextMessage = replyTo
           ? {
               ...message,
               replyTo: {
-                messageId: replyToMessage.id,
-                authorName: replyToMessage.author,
-                authorColor: replyToMessage.authorColor,
-                content: replyToMessage.content,
-                hasAttachment: (replyToMessage.attachments ?? []).length > 0,
+                messageId: replyTo.id,
+                authorName: replyTo.author,
+                authorColor: replyTo.authorColor,
+                content: replyTo.content,
+                hasAttachment: (replyTo.attachments ?? []).length > 0,
               },
             }
           : message
         setMessagesByChannel((prev) => {
           const currentMessages = prev[activeChannelKey] ?? []
+          const withoutOptimistic = currentMessages.filter((item) => item.id !== optimisticId)
           return {
             ...prev,
-            [activeChannelKey]: [...currentMessages, nextMessage],
+            [activeChannelKey]: [...withoutOptimistic, nextMessage],
           }
         })
-        setReplyToMessage(null)
+        setPendingMessageIds((prev) => {
+          if (!prev[optimisticId]) {
+            return prev
+          }
+          const next = { ...prev }
+          delete next[optimisticId]
+          return next
+        })
         return true
       } catch (error) {
         setComposerError(error instanceof Error ? error.message : 'Failed to send message.')
+        setPendingMessageIds((prev) => {
+          if (!prev[optimisticId]) {
+            return prev
+          }
+          const next = { ...prev }
+          delete next[optimisticId]
+          return next
+        })
+        setFailedMessageIds((prev) => ({ ...prev, [optimisticId]: true }))
         return false
       } finally {
-        setIsUploadingFiles(false)
-        setUploadProgressByFile({})
+        setInFlightUploadCount((count) => Math.max(0, count - (files.length > 0 ? 1 : 0)))
+        setUploadProgressByFile((prev) => {
+          const next = { ...prev }
+          Object.keys(next).forEach((key) => {
+            if (key.startsWith(`${optimisticId}:`)) {
+              delete next[key]
+            }
+          })
+          return next
+        })
       }
     },
-    [activeChannelId, activeChannelKey, replyToMessage?.id]
+    [activeChannelId, activeChannelKey, currentUser?.avatar_url, currentUser?.id, currentUser?.username, scrollToBottom]
   )
 
+  const submitComposer = useCallback(() => {
+    const content = inputRef.current?.innerText.trim() ?? ''
+    const filesToSend = pendingFiles
+    if (!content && filesToSend.length === 0) {
+      return
+    }
+
+    const replySnapshot = replyToMessage
+
+    if (inputRef.current) {
+      inputRef.current.innerText = ''
+    }
+    setPendingFiles([])
+    setComposerHasContent(false)
+    setReplyToMessage(null)
+    void onSend({ content, files: filesToSend, replyTo: replySnapshot })
+  }, [onSend, pendingFiles, replyToMessage])
+
   const handleKeyDown = useCallback(
-    async (event: React.KeyboardEvent<HTMLDivElement>) => {
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
-        const content = inputRef.current?.innerText.trim() ?? ''
-        if (!content && pendingFiles.length === 0) {
-          return
-        }
-        const sent = await onSend({ content, files: pendingFiles })
-        if (sent) {
-          if (inputRef.current) {
-            inputRef.current.innerText = ''
-          }
-          setPendingFiles([])
-          setComposerHasContent(false)
-        }
+        submitComposer()
       }
     },
-    [onSend, pendingFiles]
+    [submitComposer]
   )
 
   const handlePaste = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -1284,7 +1341,7 @@ export const DashboardView: React.FC = () => {
     noKeyboard: true,
   })
 
-  const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles
+  const canSend = composerHasContent || pendingFiles.length > 0
 
   const composerPlaceholder = `Message #${activeChannel?.name ?? 'general'}`
   const typingUsers = Object.values(typingUsersByChannel[activeChannelId] ?? {})
@@ -1401,6 +1458,8 @@ export const DashboardView: React.FC = () => {
               (currentUser?.username && msg.content.includes(`@${currentUser.username}`)) ||
               msg.content.includes('@everyone')
             )
+            const isPending = !!pendingMessageIds[msg.id]
+            const isFailed = !!failedMessageIds[msg.id]
 
             if (msg.startsGroup) {
               return (
@@ -1436,6 +1495,12 @@ export const DashboardView: React.FC = () => {
                         <span className="text-xs text-muted-foreground ml-2">
                           {msg.timestamp}
                         </span>
+                        {isPending && (
+                          <span className="ml-2 text-xs text-amber-400">đang gửi...</span>
+                        )}
+                        {isFailed && (
+                          <span className="ml-2 text-xs text-red-400">gửi thất bại</span>
+                        )}
                         {msg.editedAt && (
                           <span className="text-xs text-muted-foreground ml-2">(đã chỉnh sửa)</span>
                         )}
@@ -1549,6 +1614,12 @@ export const DashboardView: React.FC = () => {
                   />
                 ) : (
                   <TextContent content={msg.content} className="text-foreground" />
+                )}
+                {(isPending || isFailed) && (
+                  <div className="mt-0.5 text-xs">
+                    {isPending && <span className="text-amber-400">đang gửi...</span>}
+                    {!isPending && isFailed && <span className="text-red-400">gửi thất bại</span>}
+                  </div>
                 )}
                 {imageAttachments.length > 0 && <ImageAttachment attachments={imageAttachments} />}
                 {videoAttachments.map((attachment) => (
@@ -1664,7 +1735,6 @@ export const DashboardView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => removePendingFile(index)}
-                    disabled={isUploadingFiles}
                     className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                   >
                     <X className="h-2.5 w-2.5" />
@@ -1674,18 +1744,17 @@ export const DashboardView: React.FC = () => {
             </div>
           )}
 
-          {isUploadingFiles && (
+          {inFlightUploadCount > 0 && (
             <div className="px-3 pb-2 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>Uploading attachments...</span>
               </div>
-              {pendingFiles.map((file, index) => {
-                const key = `${file.name}-${file.size}-${index}`
-                const progress = uploadProgressByFile[key] ?? 0
+              {inFlightUploadEntries.map(([key, progress]) => {
+                const fileLabel = key.split(':').slice(2).join(':') || 'file'
                 return (
                   <p key={key} className="truncate">
-                    {file.name}: {progress}%
+                    {fileLabel}: {progress}%
                   </p>
                 )
               })}
@@ -1724,7 +1793,6 @@ export const DashboardView: React.FC = () => {
                   className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
                   type="button"
                   onClick={open}
-                  disabled={isUploadingFiles}
                 >
                   <Plus className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                 </button>
@@ -1747,12 +1815,18 @@ export const DashboardView: React.FC = () => {
               {[
                 { icon: Gift, label: 'Gift' },
                 { icon: Image, label: 'GIF' },
+                { icon: Gamepad2, label: 'Games' },
               ].map(({ icon: Icon, label }) => (
                 <Tooltip key={label}>
                   <TooltipTrigger asChild>
                     <button
                       className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground"
                       type="button"
+                      onClick={() => {
+                        if (label === 'Games') {
+                          setIsGamesLauncherOpen(true)
+                        }
+                      }}
                     >
                       <Icon className="w-5 h-5 text-muted-foreground hover:text-foreground" />
                     </button>
@@ -1781,6 +1855,34 @@ export const DashboardView: React.FC = () => {
           )}
         </div>
       </footer>
+      <Dialog open={isGamesLauncherOpen} onOpenChange={setIsGamesLauncherOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gamepad2 className="h-4 w-4" />
+              Quick launcher
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {quickGames.map((game) => (
+              <button
+                key={game.id}
+                type="button"
+                onClick={() => {
+                  setIsGamesLauncherOpen(false)
+                  void navigate(`/app/games/${game.id}/play`)
+                }}
+                className="rounded-md border border-border bg-background p-3 text-left hover:bg-accent"
+              >
+                <div className="text-sm font-medium">{game.title}</div>
+                <div className="text-xs text-muted-foreground">
+                  {game.source} • {game.rating.toFixed(1)} stars
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

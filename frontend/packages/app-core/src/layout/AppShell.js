@@ -1302,10 +1302,14 @@ export const AppShell = () => {
                                 navigate('/app/@me');
                             }
                         }, onCreateServer: () => openCreateServerModal() }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: categoriesWithVoiceActivity, activeChannelId: activeChannelId, onSelectChannel: (channelId, type) => {
-                                        if (type === 'voice') {
-                                            void joinVoiceChannel(channelId);
-                                            return;
+                                    if (type === 'voice') {
+                                        if (activeServerId) {
+                                            setActiveChannelId(channelId);
+                                            navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
                                         }
+                                        void joinVoiceChannel(channelId);
+                                        return;
+                                    }
                                         const navigateToText = async () => {
                                             if (voiceState) {
                                                 await handleLeaveVoiceChannel({ navigateToText: false });

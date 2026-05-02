@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -23,8 +24,10 @@ func (ctrl *voiceController) GenerateToken(c *gin.Context) {
 	}
 
 	channelID := c.Param("id")
+	log.Printf("[voice-debug] controller-generate-token:start user_id=%s channel_id=%s", userID, channelID)
 	result, err := containers.VoiceService().GenerateVoiceToken(c.Request.Context(), userID, channelID)
 	if err != nil {
+		log.Printf("[voice-debug] controller-generate-token:failed user_id=%s channel_id=%s err=%v", userID, channelID, err)
 		if ae, ok := apperr.From(err); ok {
 			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
 			return
@@ -33,6 +36,7 @@ func (ctrl *voiceController) GenerateToken(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[voice-debug] controller-generate-token:success user_id=%s channel_id=%s livekit_url=%s token_len=%d", userID, channelID, result.URL, len(result.Token))
 	c.JSON(http.StatusOK, serializers.Success("OK", "Voice token generated", serializers.NewVoiceTokenResponse(result.Token, result.URL)))
 }
 

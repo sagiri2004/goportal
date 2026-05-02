@@ -221,6 +221,8 @@ func mediaTypeFolder(mediaType services.UploadMediaType) string {
 		return "roles"
 	case services.MediaTypeMessageAttachment:
 		return "messages"
+	case services.MediaTypeGameBundle:
+		return "game-bundles"
 	default:
 		return "misc"
 	}

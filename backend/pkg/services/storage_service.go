@@ -13,6 +13,7 @@ const (
 	MediaTypeServerBanner      UploadMediaType = "server_banner"
 	MediaTypeMessageAttachment UploadMediaType = "message_attachment"
 	MediaTypeRoleIcon          UploadMediaType = "role_icon"
+	MediaTypeGameBundle        UploadMediaType = "game_bundle"
 )
 
 type UploadOptions struct {

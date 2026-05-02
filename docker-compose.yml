@@ -1,22 +1,22 @@
 services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: goportal-backend
-    restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    command: ["-config", "configs/config.yaml", "-migrate"]
-    ports:
-      - "8080:8080"
-    networks:
-      - goportal-net
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: goportal-backend
+  #   restart: unless-stopped
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   command: ["-config", "configs/config.yaml", "-migrate"]
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - goportal-net
 
   notification-server:
     build:
@@ -116,7 +116,10 @@ services:
     image: livekit/egress:latest
     container_name: goportal-livekit-egress
     restart: unless-stopped
-    command: ["--config", "/etc/egress/egress.yaml"]
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress/egress.yaml
+    cap_add:
+      - SYS_ADMIN
     depends_on:
       redis:
         condition: service_healthy
