@@ -1,96 +1,98 @@
-# GoPortal Game SDK
+# GoPortal Game SDK (v2)
 
-SDK nay dung cho game HTML chay trong `iframe` tren GoPortal, giup game goi len app shell de:
+SDK nay dung cho game chay trong `iframe` tren GoPortal. Kien truc v2 theo huong command + handshake, ho tro:
 
-- Tao session cho luot choi
-- Share diem (`score`) len chat
-- Share thanh tuu (`achievement`) len chat
-- Tao/tham gia/roi room multiplayer nhe (toi da 8 nguoi)
-- Dong bo state room co ban
+- Browser script (`window.GoPortalGameSDK`) cho HTML game zip
+- NPM/ESM (`@goportal/game-sdk`) cho React/Vite va bundler hien dai
 
-## 1) Cai dat nhanh
+## 1) Cai dat
 
-Ban co the copy file:
+### A. Browser script (HTML game)
+
+Copy file:
 
 - `game-sdk/browser/goportal-game-sdk.js`
 
-Sau do nhung vao game HTML:
+Nhung vao game:
 
 ```html
 <script src="./goportal-game-sdk.js"></script>
 ```
 
-SDK se expose global object: `window.GoPortalGameSDK`.
+### B. NPM package (React/Vite)
 
-## 2) Cac ham chinh
-
-- `init(payload)`
-  - Tao session ban dau.
-  - `payload` co the gom: `channel_id`, `room_id`, `metadata`.
-
-- `shareScore(score, payload?)`
-  - Gui diem va co the share len chat.
-  - `payload` thuong dung: `channel_id`, `comment`.
-
-- `shareAchievement(payload)`
-  - Gui thanh tuu.
-  - `payload`: `achievement_code`, `achievement_title`, `channel_id`, `comment`.
-
-- `shareGame(payload)`
-  - Share game card thong thuong len chat.
-  - `payload`: `channel_id`, `comment`.
-
-- `createRoom(payload?)`
-  - Tao room moi.
-  - `payload`: `channel_id`, `room_name`, `max_players`.
-
-- `joinRoom(roomId)`
-  - Tham gia room.
-
-- `leaveRoom(roomId)`
-  - Roi room.
-
-- `subscribeRoom(roomId)`
-  - Dang ky nhan realtime event cho room.
-
-- `getRoomState(roomId)`
-  - Lay state hien tai cua room.
-
-- `sendState(roomId, state, stateVersion?)`
-  - Day snapshot state moi len backend.
-
-- `on(eventType, handler)`
-  - Lang nghe event realtime tu host app.
-  - Co the dung `eventType = '*'` de nghe tat ca.
-
-## 3) Vi du su dung
-
-```html
-<script>
-  async function bootGame() {
-    await window.GoPortalGameSDK.init({
-      channel_id: 'your-channel-id',
-      metadata: { source: 'demo-html-game' }
-    })
-
-    // Khi nguoi choi dat diem moi
-    await window.GoPortalGameSDK.shareScore(1200, {
-      comment: 'Vua pha ky luc!'
-    })
-
-    // Join room va bat realtime
-    await window.GoPortalGameSDK.subscribeRoom('room-id')
-    window.GoPortalGameSDK.on('GAME_ROOM_STATE_UPDATED', (event) => {
-      console.log('state update', event)
-    })
-  }
-
-  bootGame().catch(console.error)
-</script>
+```bash
+npm install @goportal/game-sdk
 ```
 
-## 4) Luu y
+```ts
+import { createGoPortalSDK } from '@goportal/game-sdk'
 
-- SDK nay hoat dong qua `postMessage` giua game iframe va GoPortal app shell.
-- Neu game chay doc lap ngoai GoPortal, cac ham se khong co backend de xu ly.
-- Nen goi `init()` som ngay sau khi game start de dam bao co `session_id`.
+const sdk = createGoPortalSDK()
+await sdk.ready()
+```
+
+## 2) Lifecycle v2
+
+1. `await sdk.ready()` de handshake host, lay `protocol_version`, `capabilities`, `context`.
+2. `await sdk.init(...)` de tao session.
+3. Goi `sdk.commands.*` hoac API legacy methods tuy nhu cau.
+
+## 3) API chinh
+
+### Command-style (khuyen dung)
+
+- `sdk.commands.init(payload)`
+- `sdk.commands.shareScore(payload)`
+- `sdk.commands.shareAchievement(payload)`
+- `sdk.commands.shareGame(payload)`
+- `sdk.commands.createRoom(payload)`
+- `sdk.commands.joinRoom({ room_id })`
+- `sdk.commands.leaveRoom({ room_id })`
+- `sdk.commands.subscribeRoom({ room_id })`
+- `sdk.commands.getRoomState({ room_id })`
+- `sdk.commands.sendState({ room_id, state, state_version, idempotency_key })`
+
+### Legacy-style (tuong thich nguoc)
+
+- `sdk.init(payload)`
+- `sdk.shareScore(score, payload?)`
+- `sdk.shareAchievement(payload?)`
+- `sdk.shareGame(payload?)`
+- `sdk.createRoom(payload?)`
+- `sdk.joinRoom(roomId)`
+- `sdk.leaveRoom(roomId)`
+- `sdk.subscribeRoom(roomId)`
+- `sdk.getRoomState(roomId)`
+- `sdk.sendState(roomId, state, stateVersion?, idempotencyKey?)`
+
+## 4) Event realtime
+
+```ts
+sdk.on('*', (event) => {
+  console.log(event.event_type, event)
+})
+```
+
+SDK nhan event qua `postMessage` tu host app shell (`GOPORTAL_GAME_EVENT`).
+
+## 5) Error model
+
+Loi command tra ve `GoPortalSDKError` co:
+
+- `message`
+- `code`: `ERR_BAD_REQUEST | ERR_TIMEOUT | ERR_UNAUTHORIZED | ERR_CHANNEL_REQUIRED | ERR_ROOM_REQUIRED | ERR_NOT_READY | ERR_UNSUPPORTED_ACTION | ERR_INTERNAL`
+- `retryable`
+
+## 6) Build artifacts
+
+- ESM: `dist/esm/index.js`
+- Types: `dist/index.d.ts`
+- Browser global: `dist/browser/goportal-game-sdk.global.js`
+- Backward-compatible copy: `browser/goportal-game-sdk.js`
+
+## 7) Luu y
+
+- SDK v2 tiep tuc dung `postMessage` giua iframe game va app shell.
+- Neu game chay doc lap ngoai GoPortal, request se timeout do khong co host bridge.
+- Khuyen nghi pin version SDK va theo migration guide khi nang cap major.

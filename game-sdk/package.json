@@ -1,11 +1,29 @@
 {
   "name": "@goportal/game-sdk",
-  "version": "0.1.0",
-  "private": true,
-  "description": "GoPortal browser SDK for HTML game integration",
-  "main": "browser/goportal-game-sdk.js",
+  "version": "0.2.0",
+  "description": "GoPortal browser and npm SDK for embedded games",
+  "type": "module",
+  "main": "dist/esm/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js"
+    },
+    "./browser": "./dist/browser/goportal-game-sdk.global.js"
+  },
   "files": [
-    "browser",
+    "dist",
     "README.md"
-  ]
+  ],
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "build:browser-compat": "node ./scripts/sync-browser-compat.mjs",
+    "build:all": "npm run build && npm run build:browser-compat"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3"
+  }
 }
