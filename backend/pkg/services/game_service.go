@@ -2,21 +2,27 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"mime/multipart"
 
 	"github.com/sagiri2004/goportal/pkg/models"
 )
 
 type GameCreateInput struct {
-	Title        string
-	Slug         string
-	Description  *string
-	Visibility   string
-	ThumbnailURL *string
-	SourceType   string
-	Category     *string
-	Tags         []string
-	AgeRating    *string
+	Title          string
+	Slug           string
+	Description    *string
+	Visibility     string
+	ThumbnailURL   *string
+	IconURL        *string
+	CapsuleURL     *string
+	HeroImageURL   *string
+	ScreenshotURLs []string
+	TrailerURL     *string
+	SourceType     string
+	Category       *string
+	Tags           []string
+	AgeRating      *string
 }
 
 type GameBuildCreateInput struct {
@@ -75,6 +81,47 @@ type GameCurationInput struct {
 	IsActive      bool
 }
 
+type GameSessionStartInput struct {
+	GameID    string
+	ChannelID *string
+	RoomID    *string
+	Metadata  json.RawMessage
+}
+
+type GameEventInput struct {
+	GameID           string
+	SessionID        string
+	EventType        string
+	IdempotencyKey   string
+	Score            *int
+	AchievementCode  *string
+	AchievementTitle *string
+	Payload          json.RawMessage
+}
+
+type GameShareInput struct {
+	GameID      string
+	ChannelID   string
+	SessionID   *string
+	EventID     *string
+	ShareType   string
+	Score       *int
+	Achievement *string
+	Comment     *string
+}
+
+type GameRoomCreateInput struct {
+	GameID     string
+	ChannelID  *string
+	RoomName   *string
+	MaxPlayers int
+}
+
+type GameRoomResponse struct {
+	Room    models.GameRoom         `json:"room"`
+	Members []models.GameRoomMember `json:"members"`
+}
+
 type GameService interface {
 	CreateGame(ctx context.Context, actorID string, input GameCreateInput) (*models.UserGame, error)
 	CreateSystemGame(ctx context.Context, actorID string, input GameCreateInput) (*models.UserGame, error)
@@ -95,4 +142,11 @@ type GameService interface {
 	ListReviews(ctx context.Context, actorID, gameID, status string, limit, offset int) ([]models.GameReview, error)
 	ReportGame(ctx context.Context, actorID string, input GameReportInput) (*models.GameReport, error)
 	CreatePlaySession(ctx context.Context, actorID, gameID string) (*GamePlaySession, error)
+	StartSession(ctx context.Context, actorID string, input GameSessionStartInput) (*models.GameSession, error)
+	RecordEvent(ctx context.Context, actorID string, input GameEventInput) (*models.GameEvent, error)
+	ShareToChannel(ctx context.Context, actorID string, input GameShareInput) error
+	CreateRoom(ctx context.Context, actorID string, input GameRoomCreateInput) (*GameRoomResponse, error)
+	JoinRoom(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)
+	LeaveRoom(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)
+	GetRoomState(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)
 }

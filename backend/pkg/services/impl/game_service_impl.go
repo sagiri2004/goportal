@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"github.com/sagiri2004/goportal/pkg/apperr"
 	"github.com/sagiri2004/goportal/pkg/models"
@@ -25,10 +26,14 @@ const (
 	gamesStorageDir              = "uploads/games"
 	maxExtractedFiles            = 2000
 	maxExtractedTotal            = int64(300 * 1024 * 1024)
+	maxGameScreenshots           = 8
+	defaultRoomTTLSeconds        = int64(60 * 60)
+	maxRoomPlayers               = 8
 	reviewRateLimitWindowSeconds = int64(60)
 	reviewRateLimitCount         = int64(5)
 	ratingRateLimitCount         = int64(20)
 	reportRateLimitCount         = int64(10)
+	gameRoomRealtimeTopic        = "game.room.events"
 )
 
 var allowedGameAssetExtensions = map[string]struct{}{
@@ -39,14 +44,26 @@ var allowedGameAssetExtensions = map[string]struct{}{
 }
 
 type gameService struct {
-	repo    repositories.GameRepository
-	storage services.StorageService
+	repo       repositories.GameRepository
+	storage    services.StorageService
+	messageSvc services.MessageService
+	notifySvc  services.NotificationService
+	publisher  message.Publisher
 }
 
-func NewGameService(repo repositories.GameRepository, storage services.StorageService) services.GameService {
+func NewGameService(
+	repo repositories.GameRepository,
+	storage services.StorageService,
+	messageSvc services.MessageService,
+	notifySvc services.NotificationService,
+	publisher message.Publisher,
+) services.GameService {
 	return &gameService{
-		repo:    repo,
-		storage: storage,
+		repo:       repo,
+		storage:    storage,
+		messageSvc: messageSvc,
+		notifySvc:  notifySvc,
+		publisher:  publisher,
 	}
 }
 
@@ -91,22 +108,42 @@ func (s *gameService) createGameInternal(ctx context.Context, actorID string, in
 	category := normalizeOptionalText(input.Category)
 	ageRating := normalizeOptionalText(input.AgeRating)
 	tags := normalizeTags(input.Tags)
+	iconURL := normalizeOptionalText(input.IconURL)
+	capsuleURL := normalizeOptionalText(input.CapsuleURL)
+	heroImageURL := normalizeOptionalText(input.HeroImageURL)
+	trailerURL := normalizeOptionalText(input.TrailerURL)
+	screenshotURLs := normalizeMediaURLs(input.ScreenshotURLs, maxGameScreenshots)
+	thumbnailURL := normalizeOptionalText(input.ThumbnailURL)
+	if thumbnailURL == nil {
+		thumbnailURL = capsuleURL
+	}
+
+	if sourceType == models.GameSourceTypeCommunity {
+		if iconURL == nil || capsuleURL == nil || heroImageURL == nil || len(screenshotURLs) == 0 {
+			return nil, apperr.E("GAME_ASSET_REQUIRED", nil)
+		}
+	}
 
 	game := &models.UserGame{
-		OwnerUserID:   actorID,
-		SourceType:    sourceType,
-		Title:         title,
-		Slug:          slug,
-		Description:   normalizeOptionalText(input.Description),
-		Visibility:    visibility,
-		Status:        models.GameStatusPublished,
-		PublishState:  publishState,
-		Category:      category,
-		Tags:          tags,
-		AgeRating:     ageRating,
-		FeaturedScore: 0,
-		CreatedBy:     actorID,
-		ThumbnailURL:  normalizeOptionalText(input.ThumbnailURL),
+		OwnerUserID:     actorID,
+		SourceType:      sourceType,
+		Title:           title,
+		Slug:            slug,
+		Description:     normalizeOptionalText(input.Description),
+		Visibility:      visibility,
+		Status:          models.GameStatusPublished,
+		PublishState:    publishState,
+		Category:        category,
+		Tags:            tags,
+		AgeRating:       ageRating,
+		FeaturedScore:   0,
+		CreatedBy:       actorID,
+		ThumbnailURL:    thumbnailURL,
+		IconURL:         iconURL,
+		CapsuleImageURL: capsuleURL,
+		HeroImageURL:    heroImageURL,
+		ScreenshotURLs:  screenshotURLs,
+		TrailerURL:      trailerURL,
 	}
 	if sourceType == models.GameSourceTypeSystem {
 		now := time.Now().Unix()
@@ -534,6 +571,323 @@ func (s *gameService) CreatePlaySession(ctx context.Context, actorID, gameID str
 	}, nil
 }
 
+func (s *gameService) StartSession(ctx context.Context, actorID string, input services.GameSessionStartInput) (*models.GameSession, error) {
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(input.GameID))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertGameVisibleForActor(game, actorID); err != nil {
+		return nil, err
+	}
+	now := time.Now().Unix()
+	session := &models.GameSession{
+		GameID:     game.ID,
+		UserID:     actorID,
+		ChannelID:  input.ChannelID,
+		RoomID:     input.RoomID,
+		Status:     models.GameSessionStatusActive,
+		StartedAt:  now,
+		LastSeenAt: now,
+		Metadata:   input.Metadata,
+	}
+	if err := s.repo.CreateSession(ctx, session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (s *gameService) RecordEvent(ctx context.Context, actorID string, input services.GameEventInput) (*models.GameEvent, error) {
+	session, err := s.repo.FindSessionByID(ctx, strings.TrimSpace(input.SessionID))
+	if err != nil {
+		return nil, err
+	}
+	if session.UserID != actorID || session.GameID != strings.TrimSpace(input.GameID) {
+		return nil, apperr.E("GAME_FORBIDDEN", nil)
+	}
+	if session.Status != models.GameSessionStatusActive {
+		return nil, apperr.E("GAME_SESSION_EXPIRED", nil)
+	}
+
+	eventType := strings.TrimSpace(strings.ToLower(input.EventType))
+	switch eventType {
+	case models.GameEventTypeScore, models.GameEventTypeAchievement, models.GameEventTypeState, models.GameEventTypeSessionEnd:
+	default:
+		return nil, apperr.E("GAME_EVENT_TYPE_INVALID", nil)
+	}
+
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey != "" {
+		existing, err := s.repo.FindEventByIdempotency(ctx, session.ID, idempotencyKey)
+		if err == nil && existing != nil {
+			return existing, nil
+		}
+		if ae, ok := apperr.From(err); ok && ae.Code != "GAME_EVENT_NOT_FOUND" {
+			return nil, err
+		}
+	}
+
+	event := &models.GameEvent{
+		GameID:           session.GameID,
+		SessionID:        session.ID,
+		UserID:           actorID,
+		EventType:        eventType,
+		Score:            input.Score,
+		AchievementCode:  normalizeOptionalText(input.AchievementCode),
+		AchievementTitle: normalizeOptionalText(input.AchievementTitle),
+		Payload:          input.Payload,
+	}
+	if idempotencyKey != "" {
+		event.IdempotencyKey = &idempotencyKey
+	}
+	if err := s.repo.CreateEvent(ctx, event); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().Unix()
+	session.LastSeenAt = now
+	if eventType == models.GameEventTypeSessionEnd {
+		session.Status = models.GameSessionStatusEnded
+		session.EndedAt = &now
+	}
+	_ = s.repo.UpdateSession(ctx, session)
+
+	if eventType == models.GameEventTypeState {
+		s.handleRoomStateSnapshot(ctx, actorID, event)
+	}
+	return event, nil
+}
+
+func (s *gameService) ShareToChannel(ctx context.Context, actorID string, input services.GameShareInput) error {
+	if s.messageSvc == nil {
+		return apperr.E("INTERNAL_ERROR", nil)
+	}
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(input.GameID))
+	if err != nil {
+		return err
+	}
+	if err := assertGameVisibleForActor(game, actorID); err != nil {
+		return err
+	}
+	channelID := strings.TrimSpace(input.ChannelID)
+	if channelID == "" {
+		return apperr.E("MISSING_FIELDS", nil)
+	}
+
+	shareType := strings.TrimSpace(strings.ToLower(input.ShareType))
+	if shareType == "" {
+		shareType = "game"
+	}
+	payload := map[string]any{
+		"share_type":     shareType,
+		"game_id":        game.ID,
+		"title":          game.Title,
+		"thumbnail_url":  game.ThumbnailURL,
+		"hero_image_url": game.HeroImageURL,
+		"play_url":       "/games/" + game.ID + "/play",
+		"details_url":    "/games/" + game.ID,
+	}
+	if input.Score != nil {
+		payload["score"] = *input.Score
+	}
+	if v := normalizeOptionalText(input.Achievement); v != nil {
+		payload["achievement"] = *v
+	}
+	if v := normalizeOptionalText(input.Comment); v != nil {
+		payload["comment"] = *v
+	}
+	if input.SessionID != nil {
+		payload["session_id"] = strings.TrimSpace(*input.SessionID)
+	}
+	if input.EventID != nil {
+		payload["event_id"] = strings.TrimSpace(*input.EventID)
+	}
+	contentRaw, err := json.Marshal(payload)
+	if err != nil {
+		return apperr.E("INTERNAL_ERROR", err)
+	}
+	_, err = s.messageSvc.CreateMessage(ctx, services.CreateMessageInput{
+		ChannelID:      channelID,
+		AuthorID:       actorID,
+		ContentType:    "game/share",
+		ContentPayload: contentRaw,
+		Encoding:       "utf-8",
+	})
+	return err
+}
+
+func (s *gameService) CreateRoom(ctx context.Context, actorID string, input services.GameRoomCreateInput) (*services.GameRoomResponse, error) {
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(input.GameID))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertGameVisibleForActor(game, actorID); err != nil {
+		return nil, err
+	}
+	now := time.Now().Unix()
+	_ = s.repo.CloseExpiredRooms(ctx, now)
+
+	maxPlayers := input.MaxPlayers
+	if maxPlayers <= 1 || maxPlayers > maxRoomPlayers {
+		maxPlayers = maxRoomPlayers
+	}
+	room := &models.GameRoom{
+		GameID:       game.ID,
+		ChannelID:    input.ChannelID,
+		HostUserID:   actorID,
+		RoomCode:     strings.ToUpper(uuid.NewString()[:8]),
+		RoomName:     normalizeOptionalText(input.RoomName),
+		Status:       models.GameRoomStatusOpen,
+		MaxPlayers:   maxPlayers,
+		StateVersion: 1,
+		ExpiresAt:    now + defaultRoomTTLSeconds,
+		LastActiveAt: now,
+	}
+	if err := s.repo.CreateRoom(ctx, room); err != nil {
+		return nil, err
+	}
+	member := &models.GameRoomMember{
+		RoomID:     room.ID,
+		UserID:     actorID,
+		Role:       models.GameRoomMemberRoleHost,
+		Status:     models.GameRoomMemberStatusJoined,
+		JoinedAt:   now,
+		LastSeenAt: now,
+	}
+	if err := s.repo.UpsertRoomMember(ctx, member); err != nil {
+		return nil, err
+	}
+	s.emitRoomMemberEvent(ctx, room, []models.GameRoomMember{*member}, "GAME_ROOM_CREATED", actorID)
+	return &services.GameRoomResponse{Room: *room, Members: []models.GameRoomMember{*member}}, nil
+}
+
+func (s *gameService) JoinRoom(ctx context.Context, actorID, gameID, roomID string) (*services.GameRoomResponse, error) {
+	now := time.Now().Unix()
+	_ = s.repo.CloseExpiredRooms(ctx, now)
+
+	room, err := s.repo.FindRoomByID(ctx, strings.TrimSpace(roomID))
+	if err != nil {
+		return nil, err
+	}
+	if room.GameID != strings.TrimSpace(gameID) {
+		return nil, apperr.E("GAME_ROOM_NOT_FOUND", nil)
+	}
+	if room.Status != models.GameRoomStatusOpen || room.ExpiresAt <= now {
+		return nil, apperr.E("GAME_ROOM_CLOSED", nil)
+	}
+
+	activeCount, err := s.repo.CountActiveRoomMembers(ctx, room.ID)
+	if err != nil {
+		return nil, err
+	}
+	existingMembers, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		UserID:     actorID,
+		Limit:      1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	alreadyJoined := len(existingMembers) > 0
+	if !alreadyJoined && activeCount >= int64(room.MaxPlayers) {
+		return nil, apperr.E("GAME_ROOM_FULL", nil)
+	}
+
+	member := &models.GameRoomMember{
+		RoomID:     room.ID,
+		UserID:     actorID,
+		Role:       models.GameRoomMemberRolePlayer,
+		Status:     models.GameRoomMemberStatusJoined,
+		JoinedAt:   now,
+		LastSeenAt: now,
+	}
+	if actorID == room.HostUserID {
+		member.Role = models.GameRoomMemberRoleHost
+	}
+	if err := s.repo.UpsertRoomMember(ctx, member); err != nil {
+		return nil, err
+	}
+
+	room.LastActiveAt = now
+	room.ExpiresAt = now + defaultRoomTTLSeconds
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return nil, err
+	}
+	members, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		Limit:      100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.emitRoomMemberEvent(ctx, room, members, "GAME_ROOM_MEMBER_JOINED", actorID)
+	return &services.GameRoomResponse{Room: *room, Members: members}, nil
+}
+
+func (s *gameService) LeaveRoom(ctx context.Context, actorID, gameID, roomID string) (*services.GameRoomResponse, error) {
+	now := time.Now().Unix()
+	room, err := s.repo.FindRoomByID(ctx, strings.TrimSpace(roomID))
+	if err != nil {
+		return nil, err
+	}
+	if room.GameID != strings.TrimSpace(gameID) {
+		return nil, apperr.E("GAME_ROOM_NOT_FOUND", nil)
+	}
+	if err := s.repo.SetRoomMemberLeft(ctx, room.ID, actorID, now); err != nil {
+		return nil, err
+	}
+	members, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		Limit:      100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	room.LastActiveAt = now
+	room.ExpiresAt = now + defaultRoomTTLSeconds
+	if len(members) == 0 {
+		room.Status = models.GameRoomStatusClosed
+	}
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return nil, err
+	}
+	s.emitRoomMemberEvent(ctx, room, members, "GAME_ROOM_MEMBER_LEFT", actorID)
+	return &services.GameRoomResponse{Room: *room, Members: members}, nil
+}
+
+func (s *gameService) GetRoomState(ctx context.Context, actorID, gameID, roomID string) (*services.GameRoomResponse, error) {
+	room, err := s.repo.FindRoomByID(ctx, strings.TrimSpace(roomID))
+	if err != nil {
+		return nil, err
+	}
+	if room.GameID != strings.TrimSpace(gameID) {
+		return nil, apperr.E("GAME_ROOM_NOT_FOUND", nil)
+	}
+	membership, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		UserID:     actorID,
+		Limit:      1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(membership) == 0 {
+		return nil, apperr.E("GAME_FORBIDDEN", nil)
+	}
+	members, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		Limit:      100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &services.GameRoomResponse{Room: *room, Members: members}, nil
+}
+
 func (s *gameService) extractBundle(fileHeader *multipart.FileHeader, gameID, buildID string) error {
 	zipFile, err := fileHeader.Open()
 	if err != nil {
@@ -686,6 +1040,29 @@ func normalizeTags(tags []string) []string {
 	return out
 }
 
+func normalizeMediaURLs(values []string, maxItems int) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, raw := range values {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+		if maxItems > 0 && len(out) >= maxItems {
+			break
+		}
+	}
+	return out
+}
+
 func normalizeOptionalText(value *string) *string {
 	if value == nil {
 		return nil
@@ -786,6 +1163,141 @@ func (s *gameService) appendAuditLog(ctx context.Context, gameID, actorID, actio
 		log.Payload = &rawPayload
 	}
 	return s.repo.CreateAuditLog(ctx, log)
+}
+
+func assertGameVisibleForActor(game *models.UserGame, actorID string) error {
+	if game == nil {
+		return apperr.E("GAME_NOT_FOUND", nil)
+	}
+	if game.Status != models.GameStatusPublished {
+		return apperr.E("GAME_NOT_AVAILABLE", nil)
+	}
+	if game.PublishState != models.GamePublishStatePublished && game.OwnerUserID != actorID {
+		return apperr.E("GAME_NOT_AVAILABLE", nil)
+	}
+	if game.Visibility == models.GameVisibilityPrivate && game.OwnerUserID != actorID {
+		return apperr.E("GAME_FORBIDDEN", nil)
+	}
+	return nil
+}
+
+func (s *gameService) handleRoomStateSnapshot(ctx context.Context, actorID string, event *models.GameEvent) {
+	if event == nil || len(event.Payload) == 0 {
+		return
+	}
+	var payload struct {
+		RoomID       string          `json:"room_id"`
+		State        json.RawMessage `json:"state"`
+		StateVersion *int64          `json:"state_version"`
+	}
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return
+	}
+	roomID := strings.TrimSpace(payload.RoomID)
+	if roomID == "" {
+		return
+	}
+	room, err := s.repo.FindRoomByID(ctx, roomID)
+	if err != nil || room.GameID != event.GameID {
+		return
+	}
+	membership, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		UserID:     actorID,
+		Limit:      1,
+	})
+	if err != nil || len(membership) == 0 {
+		return
+	}
+	now := time.Now().Unix()
+	room.LastActiveAt = now
+	room.ExpiresAt = now + defaultRoomTTLSeconds
+	if len(payload.State) > 0 {
+		room.CurrentState = payload.State
+	}
+	if payload.StateVersion != nil && *payload.StateVersion > room.StateVersion {
+		room.StateVersion = *payload.StateVersion
+	} else {
+		room.StateVersion += 1
+	}
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return
+	}
+	members, err := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+		RoomID:     room.ID,
+		OnlyJoined: true,
+		Limit:      100,
+	})
+	if err != nil {
+		return
+	}
+	s.emitRoomMemberEvent(ctx, room, members, "GAME_ROOM_STATE_UPDATED", actorID)
+}
+
+func (s *gameService) emitRoomMemberEvent(
+	ctx context.Context,
+	room *models.GameRoom,
+	members []models.GameRoomMember,
+	eventType string,
+	actorID string,
+) {
+	if room == nil || len(members) == 0 {
+		return
+	}
+	memberIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		memberIDs = append(memberIDs, member.UserID)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"event_type":    eventType,
+		"game_id":       room.GameID,
+		"room_id":       room.ID,
+		"actor_user_id": actorID,
+		"channel_id":    room.ChannelID,
+		"room_status":   room.Status,
+		"state_version": room.StateVersion,
+		"state":         room.CurrentState,
+	})
+	if err != nil {
+		return
+	}
+	if s.notifySvc != nil {
+		for _, member := range members {
+			_, _ = s.notifySvc.Dispatch(
+				ctx,
+				member.UserID,
+				"game_room",
+				eventType,
+				models.NotificationPriorityNormal,
+				"game_service",
+				payload,
+				nil,
+			)
+		}
+	}
+	if s.publisher != nil {
+		roomEvent := models.GameRoomRealtimeEvent{
+			EventID:       uuid.NewString(),
+			EventType:     eventType,
+			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+			GameID:        room.GameID,
+			RoomID:        room.ID,
+			ActorUserID:   actorID,
+			MemberUserIDs: memberIDs,
+			ChannelID:     room.ChannelID,
+			RoomStatus:    room.Status,
+			StateVersion:  room.StateVersion,
+			State:         room.CurrentState,
+		}
+		raw, err := json.Marshal(roomEvent)
+		if err != nil {
+			return
+		}
+		msg := message.NewMessage(roomEvent.EventID, raw)
+		msg.SetContext(ctx)
+		_ = s.publisher.Publish(gameRoomRealtimeTopic, msg)
+	}
 }
 
 func sanitizeSlug(raw string) string {

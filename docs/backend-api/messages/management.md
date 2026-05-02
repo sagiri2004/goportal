@@ -166,6 +166,25 @@
 - `content` is stored in envelope format: `type`, `payload`, `encoding`.
 - `attachment_ids` must come from `POST /api/v1/upload` with `media_type=message_attachment`.
 - `reply_to_id` is optional and must belong to a message in the same channel.
+- `content_type = "game/share"` is supported for game card messages published by game social endpoints.
+
+#### `game/share` Payload Example
+
+```json
+{
+  "type": "game/share",
+  "payload": {
+    "share_type": "score",
+    "game_id": "f8c7b44e-1d9b-4f8d-84cc-6d0a12f5a7a2",
+    "title": "Chess Arena",
+    "thumbnail_url": "https://cdn.example.com/chess-thumb.png",
+    "play_url": "/games/f8c7b44e-1d9b-4f8d-84cc-6d0a12f5a7a2/play",
+    "details_url": "/games/f8c7b44e-1d9b-4f8d-84cc-6d0a12f5a7a2",
+    "score": 1200
+  },
+  "encoding": "utf-8"
+}
+```
 
 ---
 

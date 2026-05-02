@@ -1606,6 +1606,222 @@
             },
             "description": "Get iframe play URL for current user."
           }
+        },
+        {
+          "name": "Start Game Session (Social)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/session/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "session",
+                "start"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel_id\": \"{{channel_id}}\",\n  \"metadata\": {\n    \"source\": \"postman\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Session Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/sessions/{{session_id}}/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "sessions",
+                "{{session_id}}",
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_type\": \"score\",\n  \"idempotency_key\": \"score-1\",\n  \"score\": 999,\n  \"payload\": {\n    \"level\": 2\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Share Game To Channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/share",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "share"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel_id\": \"{{channel_id}}\",\n  \"share_type\": \"game\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Game Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/rooms",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "rooms"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel_id\": \"{{channel_id}}\",\n  \"room_name\": \"Room 1\",\n  \"max_players\": 8\n}"
+            }
+          }
+        },
+        {
+          "name": "Join Game Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/rooms/{{room_id}}/join",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "rooms",
+                "{{room_id}}",
+                "join"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leave Game Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/rooms/{{room_id}}/leave",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "rooms",
+                "{{room_id}}",
+                "leave"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Game Room State",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/rooms/{{room_id}}/state",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "rooms",
+                "{{room_id}}",
+                "state"
+              ]
+            }
+          }
         }
       ]
     },

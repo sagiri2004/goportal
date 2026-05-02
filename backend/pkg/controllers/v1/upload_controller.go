@@ -82,6 +82,7 @@ func parseMediaType(raw string) (services.UploadMediaType, error) {
 		services.MediaTypeServerBanner,
 		services.MediaTypeMessageAttachment,
 		services.MediaTypeRoleIcon,
+		services.MediaTypeGameAsset,
 		services.MediaTypeGameBundle:
 		return services.UploadMediaType(strings.TrimSpace(raw)), nil
 	default:

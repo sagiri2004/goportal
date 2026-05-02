@@ -20,6 +20,11 @@ export type GameDTO = {
   launch_count: number
   trending_score: number
   thumbnail_url?: string
+  icon_url?: string
+  capsule_image_url?: string
+  hero_image_url?: string
+  screenshot_urls?: string[]
+  trailer_url?: string
   created_at: number
   updated_at: number
 }
@@ -91,6 +96,68 @@ export type GameCurationDTO = {
   updated_at: number
 }
 
+export type GameSessionDTO = {
+  id: string
+  game_id: string
+  user_id: string
+  channel_id?: string
+  room_id?: string
+  status: 'active' | 'ended' | 'expired'
+  started_at: number
+  last_seen_at: number
+  ended_at?: number
+  created_at: number
+  updated_at: number
+}
+
+export type GameEventDTO = {
+  id: string
+  game_id: string
+  session_id: string
+  user_id: string
+  event_type: 'score' | 'achievement' | 'state' | 'session_end'
+  idempotency_key?: string
+  score?: number
+  achievement_code?: string
+  achievement_title?: string
+  created_at: number
+  updated_at: number
+}
+
+export type GameRoomMemberDTO = {
+  id: string
+  room_id: string
+  user_id: string
+  role: 'host' | 'player'
+  status: 'joined' | 'left'
+  joined_at: number
+  left_at?: number
+  last_seen_at: number
+  created_at: number
+  updated_at: number
+}
+
+export type GameRoomStateDTO = {
+  room: {
+    id: string
+    game_id: string
+    channel_id?: string
+    host_user_id: string
+    room_code: string
+    room_name?: string
+    status: 'open' | 'closed'
+    max_players: number
+    current_state?: unknown
+    state_version: number
+    expires_at: number
+    last_active_at: number
+    created_at: number
+    updated_at: number
+    deleted_at: number
+  }
+  members: GameRoomMemberDTO[]
+}
+
 export type GameMarketFilter = {
   source_type?: 'system' | 'community'
   q?: string
@@ -137,6 +204,11 @@ export const createGame = async (payload: {
   description?: string
   visibility?: 'public' | 'private'
   thumbnail_url?: string
+  icon_url?: string
+  capsule_image_url?: string
+  hero_image_url?: string
+  screenshot_urls?: string[]
+  trailer_url?: string
   category?: string
   tags?: string[]
   age_rating?: string
@@ -148,6 +220,11 @@ export const createSystemGame = async (payload: {
   description?: string
   visibility?: 'public' | 'private'
   thumbnail_url?: string
+  icon_url?: string
+  capsule_image_url?: string
+  hero_image_url?: string
+  screenshot_urls?: string[]
+  trailer_url?: string
   category?: string
   tags?: string[]
   age_rating?: string
@@ -259,6 +336,53 @@ export const reportGame = async (gameId: string, payload: { reason: string; deta
   status: string
   created_at: number
 }> => apiClient.post(`/api/v1/games/${gameId}/reports`, payload)
+
+export const startGameSession = async (
+  gameId: string,
+  payload: { channel_id?: string; room_id?: string; metadata?: unknown } = {},
+): Promise<GameSessionDTO> => apiClient.post(`/api/v1/games/${gameId}/session/start`, payload)
+
+export const createGameEvent = async (
+  gameId: string,
+  sessionId: string,
+  payload: {
+    event_type: 'score' | 'achievement' | 'state' | 'session_end'
+    idempotency_key?: string
+    score?: number
+    achievement_code?: string
+    achievement_title?: string
+    payload?: unknown
+  },
+): Promise<GameEventDTO> => apiClient.post(`/api/v1/games/${gameId}/sessions/${sessionId}/events`, payload)
+
+export const shareGameToChannel = async (
+  gameId: string,
+  payload: {
+    channel_id: string
+    session_id?: string
+    event_id?: string
+    share_type?: 'game' | 'score' | 'achievement'
+    score?: number
+    achievement?: string
+    comment?: string
+  },
+): Promise<void> => {
+  await apiClient.post(`/api/v1/games/${gameId}/share`, payload)
+}
+
+export const createGameRoom = async (
+  gameId: string,
+  payload: { channel_id?: string; room_name?: string; max_players?: number } = {},
+): Promise<GameRoomStateDTO> => apiClient.post(`/api/v1/games/${gameId}/rooms`, payload)
+
+export const joinGameRoom = async (gameId: string, roomId: string): Promise<GameRoomStateDTO> =>
+  apiClient.post(`/api/v1/games/${gameId}/rooms/${roomId}/join`, {})
+
+export const leaveGameRoom = async (gameId: string, roomId: string): Promise<GameRoomStateDTO> =>
+  apiClient.post(`/api/v1/games/${gameId}/rooms/${roomId}/leave`, {})
+
+export const getGameRoomState = async (gameId: string, roomId: string): Promise<GameRoomStateDTO> =>
+  apiClient.get(`/api/v1/games/${gameId}/rooms/${roomId}/state`)
 
 const getToken = (): string | null => {
   const token = useAuthStore.getState().token

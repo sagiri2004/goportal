@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,14 +33,19 @@ func (ctrl *gameController) Create(c *gin.Context) {
 	}
 
 	game, err := containers.GameService().CreateGame(c.Request.Context(), actorID, services.GameCreateInput{
-		Title:        req.Title,
-		Slug:         req.Slug,
-		Description:  req.Description,
-		Visibility:   req.Visibility,
-		ThumbnailURL: req.ThumbnailURL,
-		Category:     req.Category,
-		Tags:         req.Tags,
-		AgeRating:    req.AgeRating,
+		Title:          req.Title,
+		Slug:           req.Slug,
+		Description:    req.Description,
+		Visibility:     req.Visibility,
+		ThumbnailURL:   req.ThumbnailURL,
+		IconURL:        req.IconURL,
+		CapsuleURL:     req.CapsuleURL,
+		HeroImageURL:   req.HeroImageURL,
+		ScreenshotURLs: req.ScreenshotURLs,
+		TrailerURL:     req.TrailerURL,
+		Category:       req.Category,
+		Tags:           req.Tags,
+		AgeRating:      req.AgeRating,
 	})
 	if err != nil {
 		ctrl.respondError(c, err)
@@ -285,15 +291,20 @@ func (ctrl *gameController) AdminCreateSystemGame(c *gin.Context) {
 		return
 	}
 	game, err := containers.GameService().CreateSystemGame(c.Request.Context(), actorID, services.GameCreateInput{
-		Title:        req.Title,
-		Slug:         req.Slug,
-		Description:  req.Description,
-		Visibility:   req.Visibility,
-		ThumbnailURL: req.ThumbnailURL,
-		Category:     req.Category,
-		Tags:         req.Tags,
-		AgeRating:    req.AgeRating,
-		SourceType:   models.GameSourceTypeSystem,
+		Title:          req.Title,
+		Slug:           req.Slug,
+		Description:    req.Description,
+		Visibility:     req.Visibility,
+		ThumbnailURL:   req.ThumbnailURL,
+		IconURL:        req.IconURL,
+		CapsuleURL:     req.CapsuleURL,
+		HeroImageURL:   req.HeroImageURL,
+		ScreenshotURLs: req.ScreenshotURLs,
+		TrailerURL:     req.TrailerURL,
+		Category:       req.Category,
+		Tags:           req.Tags,
+		AgeRating:      req.AgeRating,
+		SourceType:     models.GameSourceTypeSystem,
 	})
 	if err != nil {
 		ctrl.respondError(c, err)
@@ -419,6 +430,169 @@ func (ctrl *gameController) PlaySession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, serializers.Success("OK", "Play session created", session))
+}
+
+func (ctrl *gameController) StartSession(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var req serializers.StartGameSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	metadata := json.RawMessage(nil)
+	if req.Metadata != nil {
+		raw, err := json.Marshal(req.Metadata)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid metadata payload"))
+			return
+		}
+		metadata = raw
+	}
+	session, err := containers.GameService().StartSession(c.Request.Context(), actorID, services.GameSessionStartInput{
+		GameID:    c.Param("id"),
+		ChannelID: req.ChannelID,
+		RoomID:    req.RoomID,
+		Metadata:  metadata,
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Game session started", serializers.NewGameSessionResponse(session)))
+}
+
+func (ctrl *gameController) AddSessionEvent(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var req serializers.CreateGameEventRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	payload := json.RawMessage(nil)
+	if req.Payload != nil {
+		raw, err := json.Marshal(req.Payload)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid payload"))
+			return
+		}
+		payload = raw
+	}
+	event, err := containers.GameService().RecordEvent(c.Request.Context(), actorID, services.GameEventInput{
+		GameID:           c.Param("id"),
+		SessionID:        c.Param("sessionId"),
+		EventType:        req.EventType,
+		IdempotencyKey:   req.IdempotencyKey,
+		Score:            req.Score,
+		AchievementCode:  req.AchievementCode,
+		AchievementTitle: req.AchievementTitle,
+		Payload:          payload,
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Game event stored", serializers.NewGameEventResponse(event)))
+}
+
+func (ctrl *gameController) ShareToChannel(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var req serializers.ShareGameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	if err := containers.GameService().ShareToChannel(c.Request.Context(), actorID, services.GameShareInput{
+		GameID:      c.Param("id"),
+		ChannelID:   req.ChannelID,
+		SessionID:   req.SessionID,
+		EventID:     req.EventID,
+		ShareType:   req.ShareType,
+		Score:       req.Score,
+		Achievement: req.Achievement,
+		Comment:     req.Comment,
+	}); err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Game content shared to channel", nil))
+}
+
+func (ctrl *gameController) CreateRoom(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var req serializers.CreateGameRoomRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	state, err := containers.GameService().CreateRoom(c.Request.Context(), actorID, services.GameRoomCreateInput{
+		GameID:     c.Param("id"),
+		ChannelID:  req.ChannelID,
+		RoomName:   req.RoomName,
+		MaxPlayers: req.MaxPlayers,
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Game room created", serializers.NewGameRoomStateResponse(state)))
+}
+
+func (ctrl *gameController) JoinRoom(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	state, err := containers.GameService().JoinRoom(c.Request.Context(), actorID, c.Param("id"), c.Param("roomId"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Joined room", serializers.NewGameRoomStateResponse(state)))
+}
+
+func (ctrl *gameController) LeaveRoom(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	state, err := containers.GameService().LeaveRoom(c.Request.Context(), actorID, c.Param("id"), c.Param("roomId"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Left room", serializers.NewGameRoomStateResponse(state)))
+}
+
+func (ctrl *gameController) RoomState(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	state, err := containers.GameService().GetRoomState(c.Request.Context(), actorID, c.Param("id"), c.Param("roomId"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Room state fetched", serializers.NewGameRoomStateResponse(state)))
 }
 
 func (ctrl *gameController) respondError(c *gin.Context, err error) {

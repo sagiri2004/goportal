@@ -24,6 +24,15 @@ Compress-Archive -Path "samples\demo-html-game\index.html" -DestinationPath "dem
 
 Do **not** zip the whole `demo-html-game` folder unless your tool puts `index.html` at zip root (some tools add a parent folder — that will fail validation).
 
+## SDK cho game HTML
+
+SDK da duoc tach rieng tai:
+
+- `game-sdk/browser/goportal-game-sdk.js`
+- Tai lieu: `game-sdk/README.md`
+
+Ban co the copy file SDK vao project game cua minh de goi `window.GoPortalGameSDK`.
+
 ## Test in GoPortal
 
 1. Open `/app/games`.

@@ -120,6 +120,13 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	{
 		gamesAuth.POST("", v1.Game.Create)
 		gamesAuth.POST("/:id/builds", v1.Game.CreateBuild)
+		gamesAuth.POST("/:id/session/start", v1.Game.StartSession)
+		gamesAuth.POST("/:id/sessions/:sessionId/events", v1.Game.AddSessionEvent)
+		gamesAuth.POST("/:id/share", v1.Game.ShareToChannel)
+		gamesAuth.POST("/:id/rooms", v1.Game.CreateRoom)
+		gamesAuth.POST("/:id/rooms/:roomId/join", v1.Game.JoinRoom)
+		gamesAuth.POST("/:id/rooms/:roomId/leave", v1.Game.LeaveRoom)
+		gamesAuth.GET("/:id/rooms/:roomId/state", v1.Game.RoomState)
 		gamesAuth.POST("/:id/submit-review", v1.Game.SubmitForReview)
 		gamesAuth.POST("/:id/ratings", v1.Game.Rate)
 		gamesAuth.POST("/:id/reviews", v1.Game.AddReview)

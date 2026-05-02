@@ -16,7 +16,7 @@
   - None
 - Body form-data:
   - `file`: binary file
-  - `media_type`: `avatar | server_icon | server_banner | role_icon | message_attachment` (optional, default `message_attachment`)
+  - `media_type`: `avatar | server_icon | server_banner | role_icon | message_attachment | game_asset` (optional, default `message_attachment`)
 
 #### Success Response
 
@@ -29,7 +29,7 @@
   "message": "File uploaded",
   "data": {
     "attachment_id": "9dd2151d-a31f-4f33-b9f3-7a46a8092222",
-    "media_type": "message_attachment",
+    "media_type": "game_asset",
     "url": "https://res.cloudinary.com/<cloud>/image/upload/v1742165419/goportal/messages/06f3395f.png",
     "file_name": "image.png",
     "file_type": "image/png",

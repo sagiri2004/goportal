@@ -19,6 +19,14 @@
   "description": "Realtime chess game built with Vite",
   "visibility": "public",
   "thumbnail_url": "https://cdn.example.com/chess-thumb.png",
+  "icon_url": "https://cdn.example.com/chess-icon.png",
+  "capsule_image_url": "https://cdn.example.com/chess-capsule.png",
+  "hero_image_url": "https://cdn.example.com/chess-hero.png",
+  "screenshot_urls": [
+    "https://cdn.example.com/chess-shot-1.png",
+    "https://cdn.example.com/chess-shot-2.png"
+  ],
+  "trailer_url": "https://www.youtube.com/watch?v=demo",
   "category": "board",
   "tags": ["chess", "multiplayer"],
   "age_rating": "everyone"
@@ -43,6 +51,12 @@
     "status": "published",
     "source_type": "community",
     "publish_state": "draft",
+    "icon_url": "https://cdn.example.com/chess-icon.png",
+    "capsule_image_url": "https://cdn.example.com/chess-capsule.png",
+    "hero_image_url": "https://cdn.example.com/chess-hero.png",
+    "screenshot_urls": [
+      "https://cdn.example.com/chess-shot-1.png"
+    ],
     "created_at": 1713420000,
     "updated_at": 1713420000
   }
@@ -66,6 +80,7 @@
 
 - `slug` is normalized to lower-case kebab-case on backend.
 - `visibility` supports `public` and `private`.
+- For community games, backend requires Steam-like assets: `icon_url`, `capsule_image_url`, `hero_image_url`, and at least 1 `screenshot_urls`.
 - New community games start as `publish_state=draft` and should call `POST /api/v1/games/:id/submit-review` after build upload.
 
 ---
@@ -218,3 +233,120 @@
 
 - Render `data.play_url` directly into `<iframe src="...">`.
 - This MVP uses static URL; signed short-lived URLs can be added later.
+
+---
+
+### Games: Start Social Session
+
+- Method: `POST`
+- Path: `/api/v1/games/:id/session/start`
+- Auth: `Bearer token`
+- Description: Start a social game session for score/achievement/room state events.
+
+#### Request JSON
+
+```json
+{
+  "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
+  "room_id": "optional-room-id",
+  "metadata": {
+    "allow_score_share": true,
+    "allow_achievement_share": true
+  }
+}
+```
+
+---
+
+### Games: Append Session Event
+
+- Method: `POST`
+- Path: `/api/v1/games/:id/sessions/:sessionId/events`
+- Auth: `Bearer token`
+- Description: Store lightweight social events (`score`, `achievement`, `state`, `session_end`).
+
+#### Request JSON
+
+```json
+{
+  "event_type": "score",
+  "idempotency_key": "score-1200",
+  "score": 1200,
+  "payload": {
+    "level": 3
+  }
+}
+```
+
+#### Common Errors
+
+- `GAME_EVENT_TYPE_INVALID`
+- `GAME_SESSION_EXPIRED`
+- `GAME_SESSION_NOT_FOUND`
+
+---
+
+### Games: Share To Channel
+
+- Method: `POST`
+- Path: `/api/v1/games/:id/share`
+- Auth: `Bearer token`
+- Description: Publish a chat message with `content.type = "game/share"` and card actions (`Play`, `Details`).
+
+#### Request JSON
+
+```json
+{
+  "channel_id": "12bb9026-4dfb-49f2-9035-bc2eb67f7f0a",
+  "session_id": "6f3f9a67-caf4-4aa5-a68a-d26f39a5f2d9",
+  "event_id": "6f3f9a67-caf4-4aa5-a68a-d26f39a5f2d9",
+  "share_type": "achievement",
+  "achievement": "First Win",
+  "comment": "GG!"
+}
+```
+
+---
+
+### Games: Room APIs
+
+- `POST /api/v1/games/:id/rooms`
+- `POST /api/v1/games/:id/rooms/:roomId/join`
+- `POST /api/v1/games/:id/rooms/:roomId/leave`
+- `GET /api/v1/games/:id/rooms/:roomId/state`
+
+Room constraints:
+- max `8` players
+- idle TTL auto-close via `expires_at`
+- realtime notifications use:
+  - `GAME_ROOM_STATE_UPDATED`
+  - `GAME_ROOM_MEMBER_JOINED`
+  - `GAME_ROOM_MEMBER_LEFT`
+
+### Game Realtime WS (separate service)
+
+- Endpoint: `ws://<host>:8091/ws/game?token=<jwt>`
+- Service: `game-realtime-server` (deploy independent from backend + notification-server)
+- Subscribe room from client:
+
+```json
+{
+  "type": "subscribe.room",
+  "room_id": "room-uuid"
+}
+```
+
+- Server push envelope:
+
+```json
+{
+  "type": "game.room.event",
+  "event_id": "uuid",
+  "payload": {
+    "event_type": "GAME_ROOM_STATE_UPDATED",
+    "game_id": "game-uuid",
+    "room_id": "room-uuid",
+    "state_version": 12
+  }
+}
+```

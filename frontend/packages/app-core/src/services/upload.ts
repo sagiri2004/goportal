@@ -6,6 +6,7 @@ export type UploadMediaType =
   | 'server_banner'
   | 'message_attachment'
   | 'role_icon'
+  | 'game_asset'
 
 export type UploadResult = {
   attachment_id?: string

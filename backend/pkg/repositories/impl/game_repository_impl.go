@@ -447,6 +447,185 @@ func (r *gameRepository) CountRecentReportsByUser(ctx context.Context, userID st
 	return count, nil
 }
 
+func (r *gameRepository) CreateSession(ctx context.Context, session *models.GameSession) error {
+	if err := r.db.WithContext(ctx).Create(session).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) FindSessionByID(ctx context.Context, sessionID string) (*models.GameSession, error) {
+	var session models.GameSession
+	if err := r.db.WithContext(ctx).
+		Where("id = ? AND deleted_at = 0", sessionID).
+		First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("GAME_SESSION_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &session, nil
+}
+
+func (r *gameRepository) UpdateSession(ctx context.Context, session *models.GameSession) error {
+	if err := r.db.WithContext(ctx).Save(session).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) CreateEvent(ctx context.Context, event *models.GameEvent) error {
+	if err := r.db.WithContext(ctx).Create(event).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) FindEventByID(ctx context.Context, eventID string) (*models.GameEvent, error) {
+	var event models.GameEvent
+	if err := r.db.WithContext(ctx).
+		Where("id = ? AND deleted_at = 0", eventID).
+		First(&event).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("GAME_EVENT_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &event, nil
+}
+
+func (r *gameRepository) FindEventByIdempotency(ctx context.Context, sessionID, idempotencyKey string) (*models.GameEvent, error) {
+	var event models.GameEvent
+	if err := r.db.WithContext(ctx).
+		Where("session_id = ? AND idempotency_key = ? AND deleted_at = 0", sessionID, idempotencyKey).
+		First(&event).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("GAME_EVENT_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &event, nil
+}
+
+func (r *gameRepository) CreateRoom(ctx context.Context, room *models.GameRoom) error {
+	if err := r.db.WithContext(ctx).Create(room).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) FindRoomByID(ctx context.Context, roomID string) (*models.GameRoom, error) {
+	var room models.GameRoom
+	if err := r.db.WithContext(ctx).
+		Where("id = ? AND deleted_at = 0", roomID).
+		First(&room).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("GAME_ROOM_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &room, nil
+}
+
+func (r *gameRepository) UpdateRoom(ctx context.Context, room *models.GameRoom) error {
+	if err := r.db.WithContext(ctx).Save(room).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) CloseExpiredRooms(ctx context.Context, nowUnix int64) error {
+	if err := r.db.WithContext(ctx).
+		Model(&models.GameRoom{}).
+		Where("deleted_at = 0 AND status = ? AND expires_at <= ?", models.GameRoomStatusOpen, nowUnix).
+		Updates(map[string]any{
+			"status":         models.GameRoomStatusClosed,
+			"last_active_at": nowUnix,
+		}).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) UpsertRoomMember(ctx context.Context, member *models.GameRoomMember) error {
+	var existing models.GameRoomMember
+	err := r.db.WithContext(ctx).
+		Where("room_id = ? AND user_id = ? AND deleted_at = 0", member.RoomID, member.UserID).
+		First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := r.db.WithContext(ctx).Create(member).Error; err != nil {
+				return apperr.E("DB_ERROR", err)
+			}
+			return nil
+		}
+		return apperr.E("DB_ERROR", err)
+	}
+	existing.Status = member.Status
+	existing.Role = member.Role
+	existing.LeftAt = member.LeftAt
+	existing.LastSeenAt = member.LastSeenAt
+	if member.JoinedAt > 0 {
+		existing.JoinedAt = member.JoinedAt
+	}
+	if err := r.db.WithContext(ctx).Save(&existing).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	member.ID = existing.ID
+	member.CreatedAt = existing.CreatedAt
+	member.UpdatedAt = existing.UpdatedAt
+	return nil
+}
+
+func (r *gameRepository) SetRoomMemberLeft(ctx context.Context, roomID, userID string, leftAt int64) error {
+	if err := r.db.WithContext(ctx).
+		Model(&models.GameRoomMember{}).
+		Where("room_id = ? AND user_id = ? AND deleted_at = 0", roomID, userID).
+		Updates(map[string]any{
+			"status":       models.GameRoomMemberStatusLeft,
+			"left_at":      leftAt,
+			"last_seen_at": leftAt,
+		}).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) ListRoomMembers(ctx context.Context, filter repositories.GameRoomMemberFilter) ([]models.GameRoomMember, error) {
+	members := make([]models.GameRoomMember, 0)
+	query := r.db.WithContext(ctx).
+		Where("room_id = ? AND deleted_at = 0", filter.RoomID)
+	if filter.OnlyJoined {
+		query = query.Where("status = ?", models.GameRoomMemberStatusJoined)
+	}
+	if filter.UserID != "" {
+		query = query.Where("user_id = ?", filter.UserID)
+	}
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if err := query.Order("joined_at ASC").Limit(limit).Offset(offset).Find(&members).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return members, nil
+}
+
+func (r *gameRepository) CountActiveRoomMembers(ctx context.Context, roomID string) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&models.GameRoomMember{}).
+		Where("room_id = ? AND deleted_at = 0 AND status = ?", roomID, models.GameRoomMemberStatusJoined).
+		Count(&count).Error; err != nil {
+		return 0, apperr.E("DB_ERROR", err)
+	}
+	return count, nil
+}
+
 func max64(a, b int64) int64 {
 	if a > b {
 		return a

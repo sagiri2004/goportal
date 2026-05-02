@@ -17,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
 import {
   addReaction,
@@ -263,6 +263,14 @@ const mapSocketPayloadToMessage = (
 
   const author = payload?.author?.username ?? `user-${String(authorId).slice(0, 6)}`
   const { timestamp, date } = formatSocketTimestamp(payload?.created_at ?? envelopeTimestamp)
+  const contentType = payload?.content?.type ?? 'text/plain'
+  const rawContentPayload = payload?.content?.payload ?? payload?.content ?? ''
+  const normalizedContent =
+    typeof rawContentPayload === 'string'
+      ? rawContentPayload
+      : rawContentPayload !== undefined && rawContentPayload !== null
+        ? JSON.stringify(rawContentPayload)
+        : ''
 
   return {
     id: messageId,
@@ -271,7 +279,13 @@ const mapSocketPayloadToMessage = (
     avatarUrl: payload?.author?.avatar_url,
     avatarColor: payload?.author?.avatar_color ?? messageColorFromId(authorId),
     avatarInitials: messageInitialsFromName(author),
-    content: payload?.content?.payload ?? payload?.content ?? '',
+    contentType,
+    content: normalizedContent,
+    contentData: rawContentPayload,
+    gameShare:
+      contentType === 'game/share' && rawContentPayload && typeof rawContentPayload === 'object'
+        ? (rawContentPayload as ChatMessage['gameShare'])
+        : undefined,
     timestamp,
     date,
     editedAt: payload?.updated_at
@@ -785,7 +799,20 @@ export const DashboardView: React.FC = () => {
 
             return {
               ...message,
-              content: payload.content?.payload ?? payload.content ?? message.content,
+              contentType: payload.content?.type ?? message.contentType ?? 'text/plain',
+              content:
+                typeof (payload.content?.payload ?? payload.content) === 'string'
+                  ? (payload.content?.payload ?? payload.content)
+                  : payload.content?.payload ?? payload.content
+                    ? JSON.stringify(payload.content?.payload ?? payload.content)
+                    : message.content,
+              contentData: payload.content?.payload ?? payload.content ?? message.contentData,
+              gameShare:
+                (payload.content?.type ?? message.contentType) === 'game/share' &&
+                payload.content?.payload &&
+                typeof payload.content.payload === 'object'
+                  ? (payload.content.payload as ChatMessage['gameShare'])
+                  : message.gameShare,
               attachments:
                 payload.attachments !== undefined
                   ? mapSocketAttachments(payload.attachments)
@@ -1406,6 +1433,48 @@ export const DashboardView: React.FC = () => {
     }
   }
 
+  const renderMessageContent = (msg: ChatMessage) => {
+    if (msg.contentType !== 'game/share' || !msg.gameShare) {
+      return <TextContent content={msg.content} className="text-foreground" />
+    }
+
+    const share = msg.gameShare
+    const detailsHref = share.details_url ?? `/games/${share.game_id}`
+    const playHref = share.play_url ?? `/games/${share.game_id}/play`
+    return (
+      <div className="mt-1 overflow-hidden rounded-lg border border-indigo-500/40 bg-indigo-500/5">
+        <div className="flex items-center gap-3 p-3">
+          <div className="h-14 w-14 overflow-hidden rounded-md bg-zinc-900">
+            {share.thumbnail_url || share.hero_image_url ? (
+              <img src={share.thumbnail_url ?? share.hero_image_url} alt={share.title ?? 'Game'} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Gamepad2 className="h-5 w-5 text-indigo-300" />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="line-clamp-1 text-sm font-semibold text-zinc-100">{share.title ?? 'Shared game'}</div>
+            <div className="mt-1 text-xs text-zinc-300">
+              {share.share_type === 'score' && share.score !== undefined ? `Score: ${share.score}` : null}
+              {share.share_type === 'achievement' && share.achievement ? `Achievement: ${share.achievement}` : null}
+              {(share.comment ?? '').trim() ? ` • ${share.comment}` : ''}
+              {share.share_type === 'game' ? 'Shared a game card' : ''}
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 border-t border-indigo-500/20 px-3 py-2">
+          <Link to={playHref} className="rounded-md bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-400">
+            Play
+          </Link>
+          <Link to={detailsHref} className="rounded-md border border-zinc-600 px-2.5 py-1 text-xs font-medium text-zinc-100 hover:bg-zinc-800">
+            Details
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       <div className="flex-none">
@@ -1522,9 +1591,7 @@ export const DashboardView: React.FC = () => {
                           }}
                           className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none"
                         />
-                      ) : (
-                        <TextContent content={msg.content} className="text-foreground" />
-                      )}
+                      ) : renderMessageContent(msg)}
                       {imageAttachments.length > 0 && <ImageAttachment attachments={imageAttachments} />}
                       {videoAttachments.map((attachment) => (
                         <VideoAttachment key={attachment.id} url={attachment.url} />
@@ -1612,9 +1679,7 @@ export const DashboardView: React.FC = () => {
                     }}
                     className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none"
                   />
-                ) : (
-                  <TextContent content={msg.content} className="text-foreground" />
-                )}
+                ) : renderMessageContent(msg)}
                 {(isPending || isFailed) && (
                   <div className="mt-0.5 text-xs">
                     {isPending && <span className="text-amber-400">đang gửi...</span>}
@@ -1870,7 +1935,7 @@ export const DashboardView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setIsGamesLauncherOpen(false)
-                  void navigate(`/app/games/${game.id}/play`)
+                  void navigate(`/games/${game.id}/play`)
                 }}
                 className="rounded-md border border-border bg-background p-3 text-left hover:bg-accent"
               >

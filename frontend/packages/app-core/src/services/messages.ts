@@ -17,7 +17,9 @@ type BackendMessage = {
     avatar_color?: string
   }
   content?: {
-    payload?: string
+    type?: string
+    payload?: unknown
+    encoding?: string
   }
   created_at?: number
   updated_at?: number
@@ -130,6 +132,15 @@ const mapMessage = (item: BackendMessage): UIMessage => {
   const author = item.author?.username ?? fallbackAuthor
   const { timestamp, date } = formatTimestamp(item.created_at)
 
+  const contentType = item.content?.type ?? 'text/plain'
+  const payload = item.content?.payload
+  const normalizedContent =
+    typeof payload === 'string'
+      ? payload
+      : payload !== undefined && payload !== null
+        ? JSON.stringify(payload)
+        : ''
+
   return {
     id: item.id,
     authorId: item.author_id,
@@ -137,7 +148,13 @@ const mapMessage = (item: BackendMessage): UIMessage => {
     avatarUrl: item.author?.avatar_url,
     avatarColor: item.author?.avatar_color ?? colorFromId(item.author_id),
     avatarInitials: initialsFromName(author),
-    content: item.content?.payload ?? '',
+    contentType,
+    content: normalizedContent,
+    contentData: payload,
+    gameShare:
+      contentType === 'game/share' && payload && typeof payload === 'object'
+        ? (payload as UIMessage['gameShare'])
+        : undefined,
     timestamp,
     date,
     editedAt: item.updated_at && item.updated_at !== item.created_at
