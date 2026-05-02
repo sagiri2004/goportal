@@ -25,6 +25,8 @@ var (
 	recordingRepo        repositories.RecordingRepository
 	tournamentRepoOnce   sync.Once
 	tournamentRepo       repositories.TournamentRepository
+	gameRepoOnce         sync.Once
+	gameRepo             repositories.GameRepository
 )
 
 // UserRepository returns the singleton UserRepository instance.
@@ -82,4 +84,11 @@ func TournamentRepository() repositories.TournamentRepository {
 		tournamentRepo = repoimpl.NewTournamentRepository(global.DB)
 	})
 	return tournamentRepo
+}
+
+func GameRepository() repositories.GameRepository {
+	gameRepoOnce.Do(func() {
+		gameRepo = repoimpl.NewGameRepository(global.DB)
+	})
+	return gameRepo
 }

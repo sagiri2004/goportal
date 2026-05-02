@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Gamepad2, Plus } from 'lucide-react'
 import { mockUsers } from '@goportal/app-core'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui'
+import { useNavigate } from 'react-router-dom'
 
 const statusDotClass: Record<string, string> = {
   online: 'bg-green-500',
@@ -12,6 +13,7 @@ const statusDotClass: Record<string, string> = {
 
 export const DirectMessagesSidebar: React.FC = () => {
   const [activeUserId, setActiveUserId] = useState<string>('u2')
+  const navigate = useNavigate()
 
   const dms = useMemo(() => mockUsers.filter((u) => u.id !== 'u1'), [])
 
@@ -21,6 +23,18 @@ export const DirectMessagesSidebar: React.FC = () => {
         <span className="text-base font-semibold text-foreground truncate">
           Direct Messages
         </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => navigate('/app/games')}
+              className="cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground"
+            >
+              <Gamepad2 className="w-4 h-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Games</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <button

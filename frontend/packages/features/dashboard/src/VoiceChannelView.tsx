@@ -301,6 +301,48 @@ export const VoiceChannelView: React.FC = () => {
     [effectiveFocusedParticipantId, participantTiles]
   )
 
+  const primaryVideoTrackRef = useMemo(
+    () => focusedParticipant?.trackRef ?? screenShareParticipant?.trackRef ?? null,
+    [focusedParticipant?.trackRef, screenShareParticipant?.trackRef]
+  )
+
+  const [qualityBadge, setQualityBadge] = useState('N/A')
+
+  useEffect(() => {
+    if (!primaryVideoTrackRef) {
+      setQualityBadge('N/A')
+      return
+    }
+
+    let cancelled = false
+
+    const readTrackQuality = () => {
+      const lkTrack = primaryVideoTrackRef?.publication?.track ?? primaryVideoTrackRef?.track ?? null
+      const mediaTrack = lkTrack?.mediaStreamTrack
+
+      const settings = typeof mediaTrack?.getSettings === 'function' ? mediaTrack.getSettings() : undefined
+      const trackDimensions = lkTrack?.dimensions
+
+      const height = typeof settings?.height === 'number' ? settings.height : trackDimensions?.height
+      const fpsValue = typeof settings?.frameRate === 'number' ? settings.frameRate : undefined
+
+      const resolutionLabel = typeof height === 'number' && height > 0 ? `${Math.round(height)}p` : 'N/A'
+      const fpsLabel = typeof fpsValue === 'number' && fpsValue > 0 ? `${Math.round(fpsValue)}FPS` : 'N/A'
+
+      if (!cancelled) {
+        setQualityBadge(`${resolutionLabel} ${fpsLabel}`)
+      }
+    }
+
+    readTrackQuality()
+    const timer = window.setInterval(readTrackQuality, 1500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [primaryVideoTrackRef])
+
   const toggleFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
@@ -444,6 +486,7 @@ export const VoiceChannelView: React.FC = () => {
   }, [handleActivityClick, handleInviteClick, handleToggleFocus, participantTiles])
 
   const shareOwnerName = screenShareParticipant?.name ?? focusedParticipant?.name ?? ''
+  const hasQualityInfo = qualityBadge !== 'N/A'
 
   return (
     <div
@@ -456,7 +499,7 @@ export const VoiceChannelView: React.FC = () => {
           <div className="flex min-w-0 items-center gap-2">
             <Volume2 className="h-4 w-4 text-muted-foreground" />
             <p className="truncate text-sm font-semibold text-foreground"># {channelName}</p>
-            {(hasScreenShare || focusedParticipant?.isScreenSharing) && (
+            {hasScreenShare && (
               <>
                 <span className="text-xs text-muted-foreground">•</span>
                 <div className="flex min-w-0 items-center gap-2">
@@ -476,14 +519,16 @@ export const VoiceChannelView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            {(hasScreenShare || focusedParticipant?.isScreenSharing) && (
+            {hasQualityInfo && (
               <>
                 <span className="rounded bg-[hsl(240,5%,20%)] px-2 py-0.5 font-mono text-xs text-foreground">
-                  720p 30FPS
+                  {qualityBadge}
                 </span>
-                <span className="animate-pulse rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                  TRUC TIEP
-                </span>
+                {hasScreenShare && (
+                  <span className="animate-pulse rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                    TRUC TIEP
+                  </span>
+                )}
               </>
             )}
 
@@ -584,7 +629,7 @@ export const VoiceChannelView: React.FC = () => {
         >
           {isFocusLayout ? (
             <div className="flex items-center justify-center">
-              <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex max-w-full flex-nowrap items-center justify-center gap-2 overflow-x-auto rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleInviteClick}
@@ -727,30 +772,25 @@ export const VoiceChannelView: React.FC = () => {
         </footer>
       </section>
 
-      <aside
-        className={cn(
-          'h-full flex-none overflow-hidden bg-[hsl(240,6%,10%)] transition-all duration-200',
-          showThread
-            ? 'basis-[clamp(300px,30vw,420px)] border-l border-white/10 opacity-100'
-            : 'w-0 basis-0 border-l-0 opacity-0 pointer-events-none'
-        )}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3">
-            <p className="truncate text-sm font-semibold text-foreground"># {channelName}</p>
-            <button
-              type="button"
-              onClick={() => setShowThread(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
+      {showThread ? (
+        <aside className="h-full w-[clamp(300px,30vw,420px)] flex-none overflow-hidden border-l border-white/10 bg-[hsl(240,6%,10%)] transition-all duration-200">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3">
+              <p className="truncate text-sm font-semibold text-foreground"># {channelName}</p>
+              <button
+                type="button"
+                onClick={() => setShowThread(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <ThreadPanelChat channelName={channelName} channelId={chatChannelId} />
+            </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <ThreadPanelChat channelName={channelName} channelId={chatChannelId} />
-          </div>
-        </div>
-      </aside>
+        </aside>
+      ) : null}
     </div>
   )
 }

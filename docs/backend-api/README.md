@@ -19,3 +19,4 @@ Each router has:
 - [Uploads](./uploads/README.md)
 - [Webhooks](./webhooks/README.md)
 - [Tournaments](./tournaments/README.md)
+- [Games](./games/README.md)

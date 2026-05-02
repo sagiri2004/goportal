@@ -13,6 +13,7 @@ import (
 const (
 	MaxImageUploadSize      int64 = 5 * 1024 * 1024  // 5MB
 	MaxAttachmentUploadSize int64 = 25 * 1024 * 1024 // 25MB
+	MaxGameBundleUploadSize int64 = 100 * 1024 * 1024
 )
 
 var allowedMimePrefixes = []string{
@@ -50,6 +51,8 @@ func uploadSizeLimitByType(mediaType services.UploadMediaType) int64 {
 	switch mediaType {
 	case services.MediaTypeAvatar, services.MediaTypeServerIcon, services.MediaTypeServerBanner, services.MediaTypeRoleIcon:
 		return MaxImageUploadSize
+	case services.MediaTypeGameBundle:
+		return MaxGameBundleUploadSize
 	default:
 		return MaxAttachmentUploadSize
 	}
@@ -65,6 +68,9 @@ func isAllowedMime(contentType string, mediaType services.UploadMediaType) bool 
 		mediaType == services.MediaTypeServerBanner ||
 		mediaType == services.MediaTypeRoleIcon {
 		return strings.HasPrefix(lower, "image/")
+	}
+	if mediaType == services.MediaTypeGameBundle {
+		return lower == "application/zip" || lower == "application/x-zip-compressed"
 	}
 
 	if _, ok := allowedExactMime[strings.ToLower(contentType)]; ok {

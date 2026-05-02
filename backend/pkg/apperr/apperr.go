@@ -99,6 +99,18 @@ var registry = map[string]errDef{
 	"TOURNAMENT_MATCH_NOT_FOUND":           {http.StatusNotFound, "Tournament match not found"},
 	"TOURNAMENT_INVALID_MATCH_STATUS":      {http.StatusBadRequest, "Invalid tournament match status transition"},
 	"TOURNAMENT_REPORT_NOT_FOUND":          {http.StatusNotFound, "Tournament match report not found"},
+	"GAME_NOT_FOUND":                       {http.StatusNotFound, "Game not found"},
+	"GAME_BUILD_NOT_FOUND":                 {http.StatusNotFound, "No playable game build found"},
+	"GAME_FORBIDDEN":                       {http.StatusForbidden, "You are not allowed to manage this game"},
+	"GAME_NOT_AVAILABLE":                   {http.StatusBadRequest, "Game is not available"},
+	"GAME_BUNDLE_INVALID_ZIP":              {http.StatusBadRequest, "Uploaded file is not a valid zip bundle"},
+	"GAME_BUNDLE_MISSING_INDEX":            {http.StatusBadRequest, "Game bundle must include index.html at root"},
+	"GAME_BUNDLE_INVALID_PATH":             {http.StatusBadRequest, "Game bundle contains unsafe file paths"},
+	"GAME_BUNDLE_FILE_TYPE_NOT_ALLOWED":    {http.StatusBadRequest, "Game bundle contains unsupported file type"},
+	"GAME_BUNDLE_TOO_LARGE":                {http.StatusBadRequest, "Game bundle is too large after extraction"},
+	"GAME_RATING_NOT_FOUND":                {http.StatusNotFound, "Game rating not found"},
+	"GAME_REVIEW_NOT_FOUND":                {http.StatusNotFound, "Game review not found"},
+	"RATE_LIMITED":                         {http.StatusTooManyRequests, "Too many requests, please retry later"},
 }
 
 type AppError struct {

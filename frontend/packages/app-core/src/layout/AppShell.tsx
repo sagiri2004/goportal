@@ -537,6 +537,7 @@ export const AppShell: React.FC = () => {
   const params = useParams<{ serverId?: string; channelId?: string; tournamentId?: string }>()
   const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname])
   const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname])
+  const isGamesMode = useMemo(() => location.pathname.includes('/app/games'), [location.pathname])
   const isTournamentMode = useMemo(
     () => location.pathname.includes('/app/servers/') && location.pathname.includes('/tournaments'),
     [location.pathname],
@@ -581,6 +582,15 @@ export const AppShell: React.FC = () => {
   const joinVoiceInFlightRef = useRef<string | null>(null)
   const pendingVoiceRoomRef = useRef<Room | null>(null)
   const voiceJoinAttemptRef = useRef(0)
+  const notificationSocketRef = useRef<WebSocket | null>(null)
+  const notificationListenersRef = useRef(new Set<(event: any) => void>())
+  const applyVoiceChannelActivityUpdateRef = useRef<
+    ((update: {
+      serverId: string
+      channelId: string
+      participants: VoiceChannelActivityParticipant[]
+    }) => void) | null
+  >(null)
 
   const markOnboardingSeen = useCallback(() => {
     setHasSeenOnboarding(true)
@@ -717,6 +727,26 @@ export const AppShell: React.FC = () => {
   }, [activeServerId, mapVoiceParticipantsToActivity])
 
   useEffect(() => {
+    applyVoiceChannelActivityUpdateRef.current = applyVoiceChannelActivityUpdate
+  }, [applyVoiceChannelActivityUpdate])
+
+  const subscribeNotificationEvents = useCallback((listener: (event: any) => void) => {
+    notificationListenersRef.current.add(listener)
+    return () => {
+      notificationListenersRef.current.delete(listener)
+    }
+  }, [])
+
+  const sendNotificationSocketMessage = useCallback((payload: unknown): boolean => {
+    const socket = notificationSocketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false
+    }
+    socket.send(JSON.stringify(payload))
+    return true
+  }, [])
+
+  useEffect(() => {
     if (!currentUser?.id) {
       return
     }
@@ -734,6 +764,14 @@ export const AppShell: React.FC = () => {
       } catch {
         return
       }
+
+      notificationListenersRef.current.forEach((listener) => {
+        try {
+          listener(event)
+        } catch {
+          // no-op
+        }
+      })
 
       const eventType = resolveNotificationEventType(event)
       if (!eventType || eventType === 'CONNECTED') {
@@ -755,7 +793,7 @@ export const AppShell: React.FC = () => {
         return
       }
 
-      applyVoiceChannelActivityUpdate({
+      applyVoiceChannelActivityUpdateRef.current?.({
         serverId,
         channelId,
         participants,
@@ -774,6 +812,7 @@ export const AppShell: React.FC = () => {
       const target = targets[reconnectAttempt % targets.length]
       const ws = new WebSocket(target)
       socket = ws
+      notificationSocketRef.current = ws
 
       ws.onopen = () => {
         if (socket !== ws) {
@@ -792,6 +831,9 @@ export const AppShell: React.FC = () => {
       ws.onclose = () => {
         if (socket === ws) {
           socket = null
+        }
+        if (notificationSocketRef.current === ws) {
+          notificationSocketRef.current = null
         }
         if (closedByClient) {
           return
@@ -828,8 +870,9 @@ export const AppShell: React.FC = () => {
       }
       socket?.close()
       socket = null
+      notificationSocketRef.current = null
     }
-  }, [applyVoiceChannelActivityUpdate, currentUser?.id, token])
+  }, [currentUser?.id, token])
 
   const refreshVoiceSidebarActivity = useCallback(async (serverId: string) => {
     if (!serverId) {
@@ -967,7 +1010,7 @@ export const AppShell: React.FC = () => {
         return
       }
 
-      if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode) {
+      if ((!paramServerId || paramServerId !== nextServerId) && !isDmMode && !isGamesMode) {
         try {
           const channelData = await getChannels(nextServerId)
           if (isCancelled) {
@@ -996,7 +1039,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [isDmMode, location.pathname, navigate, params.serverId])
+  }, [isDmMode, isGamesMode, location.pathname, navigate, params.serverId])
 
   useEffect(() => {
     let isCancelled = false
@@ -1046,7 +1089,7 @@ export const AppShell: React.FC = () => {
       const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId)
 
       if (!hasActiveChannel && availableChannels.length > 0) {
-        if (isVoiceMode || isTournamentMode) {
+        if (isVoiceMode || isTournamentMode || isGamesMode) {
           return
         }
         const fallbackChannel = availableChannels[0]
@@ -1060,7 +1103,7 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [activeChannelId, activeServerId, isTournamentMode, isVoiceMode, navigate])
+  }, [activeChannelId, activeServerId, isGamesMode, isTournamentMode, isVoiceMode, navigate])
 
   useEffect(() => {
     let isCancelled = false
@@ -1862,6 +1905,8 @@ export const AppShell: React.FC = () => {
       toggleCamera,
       toggleScreenShare,
       applyVoiceChannelActivityUpdate,
+      subscribeNotificationEvents,
+      sendNotificationSocketMessage,
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
@@ -1892,6 +1937,8 @@ export const AppShell: React.FC = () => {
       toggleCamera,
       toggleScreenShare,
       applyVoiceChannelActivityUpdate,
+      subscribeNotificationEvents,
+      sendNotificationSocketMessage,
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
@@ -1919,6 +1966,7 @@ export const AppShell: React.FC = () => {
                 navigate('/app/@me')
               }
             }}
+            onOpenGames={() => navigate('/app/games')}
             onCreateServer={() => openCreateServerModal()}
           />
         </div>

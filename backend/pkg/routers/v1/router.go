@@ -104,6 +104,42 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		upload.POST("", v1.Upload.UploadFile)
 	}
 
+	games := api.Group("/games")
+	{
+		games.GET("", v1.Game.List)
+		games.GET("/market", v1.Game.Market)
+		games.GET("/trending", v1.Game.Trending)
+		games.GET("/search", v1.Game.Search)
+		games.GET("/me", middlewares.AuthMiddleware(), v1.Game.ListMine)
+		games.GET("/:id", v1.Game.GetByID)
+		games.GET("/:id/reviews", v1.Game.ListReviews)
+	}
+
+	gamesAuth := api.Group("/games")
+	gamesAuth.Use(middlewares.AuthMiddleware())
+	{
+		gamesAuth.POST("", v1.Game.Create)
+		gamesAuth.POST("/:id/builds", v1.Game.CreateBuild)
+		gamesAuth.POST("/:id/submit-review", v1.Game.SubmitForReview)
+		gamesAuth.POST("/:id/ratings", v1.Game.Rate)
+		gamesAuth.POST("/:id/reviews", v1.Game.AddReview)
+		gamesAuth.POST("/:id/reports", v1.Game.Report)
+		gamesAuth.GET("/:id/play-session", v1.Game.PlaySession)
+	}
+
+	admin := api.Group("/admin")
+	admin.Use(middlewares.AuthMiddleware())
+	{
+		adminGames := admin.Group("/games")
+		adminGames.POST("/system", v1.Game.AdminCreateSystemGame)
+		adminGames.PATCH("/:id/publish-state", v1.Game.AdminUpdatePublishState)
+		adminGames.POST("/:id/feature", v1.Game.AdminFeature)
+		adminGames.GET("/review-queue", v1.Game.AdminReviewQueue)
+
+		adminReviews := admin.Group("/reviews")
+		adminReviews.PATCH("/:reviewId/moderate", v1.Game.AdminModerateReview)
+	}
+
 	tournaments := api.Group("/tournaments")
 	tournaments.Use(middlewares.AuthMiddleware())
 	{

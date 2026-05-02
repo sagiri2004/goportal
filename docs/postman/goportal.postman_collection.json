@@ -1469,6 +1469,147 @@
       ]
     },
     {
+      "name": "Games",
+      "item": [
+        {
+          "name": "Create Game",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Chess Arena\",\n  \"slug\": \"chess-arena\",\n  \"description\": \"Realtime chess game\",\n  \"visibility\": \"public\"\n}"
+            },
+            "description": "Create game metadata."
+          }
+        },
+        {
+          "name": "Upload Game Build",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/builds",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "builds"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "version",
+                  "value": "v1.0.0",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "description": "Upload zip bundle containing index.html."
+          }
+        },
+        {
+          "name": "List Games",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/games",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games"
+              ]
+            },
+            "description": "List published public games."
+          }
+        },
+        {
+          "name": "Get Game Detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}"
+              ]
+            },
+            "description": "Get game detail and latest ready build."
+          }
+        },
+        {
+          "name": "Create Play Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/play-session",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "play-session"
+              ]
+            },
+            "description": "Get iframe play URL for current user."
+          }
+        }
+      ]
+    },
+    {
       "name": "Webhooks",
       "item": [
         {
@@ -1502,6 +1643,322 @@
               "raw": "{\n  \"event\": \"egress_ended\",\n  \"egress_info\": {\n    \"egress_id\": \"EG_xxx\"\n  }\n}"
             },
             "description": "Backend-to-backend callback endpoint for LiveKit egress lifecycle events."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Games Marketplace",
+      "item": [
+        {
+          "name": "Market List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/market?source_type=community&sort=trending&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "market?source_type=community&sort=trending&limit=20"
+              ]
+            },
+            "description": "Marketplace list with filters and sort"
+          }
+        },
+        {
+          "name": "Trending",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/trending?source_type=system&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "trending?source_type=system&limit=10"
+              ]
+            },
+            "description": "Trending discovery endpoint"
+          }
+        },
+        {
+          "name": "Search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/search?q=chess&source_type=community&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "search?q=chess&source_type=community&limit=20"
+              ]
+            },
+            "description": "Search by title/description"
+          }
+        },
+        {
+          "name": "Rate Game",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/ratings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "ratings"
+              ]
+            },
+            "description": "Create or update user rating",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/reviews",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "reviews"
+              ]
+            },
+            "description": "Create review comment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Great game\",\n  \"content\": \"Controls are smooth and gameplay is fun.\",\n  \"score\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Report Game",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/reports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "reports"
+              ]
+            },
+            "description": "Report inappropriate/spam game",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"inappropriate_content\",\n  \"detail\": \"Contains abusive assets.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Review Queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/games/{{game_id}}/submit-review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "games",
+                "{{game_id}}",
+                "submit-review"
+              ]
+            },
+            "description": "Creator submits game for moderation",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Admin Publish State",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/games/{{game_id}}/publish-state",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "games",
+                "{{game_id}}",
+                "publish-state"
+              ]
+            },
+            "description": "Admin moderation for publish lifecycle",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publish_state\": \"published\",\n  \"note\": \"Approved for release\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Admin Review Queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/games/review-queue?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "games",
+                "review-queue?limit=20&offset=0"
+              ]
+            },
+            "description": "Admin pending queue list"
+          }
+        },
+        {
+          "name": "Admin Moderate Review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/reviews/{{review_id}}/moderate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "reviews",
+                "{{review_id}}",
+                "moderate"
+              ]
+            },
+            "description": "Admin review moderation",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"hidden\",\n  \"note\": \"Violates guidelines\"\n}"
+            }
           }
         }
       ]
