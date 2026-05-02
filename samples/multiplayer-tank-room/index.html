@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GoPortal - Multiplayer Tank Room</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, sans-serif;
+        background: linear-gradient(160deg, #0b1120, #111827 45%, #0f172a);
+        color: #e2e8f0;
+        padding: 14px;
+      }
+      .app {
+        max-width: 980px;
+        margin: 0 auto;
+        display: grid;
+        gap: 10px;
+      }
+      .panel {
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      input, button {
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 8px 10px;
+        font-size: 0.85rem;
+      }
+      input { min-width: 220px; }
+      button {
+        cursor: pointer;
+        border-color: transparent;
+        background: linear-gradient(180deg, #6366f1, #4338ca);
+        font-weight: 600;
+      }
+      button.secondary {
+        background: transparent;
+        border-color: rgba(148, 163, 184, 0.45);
+        color: #cbd5e1;
+      }
+      #status {
+        font-size: 0.82rem;
+        color: #93c5fd;
+        min-height: 18px;
+      }
+      #board {
+        width: 100%;
+        height: 520px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: #020617;
+      }
+      .small {
+        color: #94a3b8;
+        font-size: 0.78rem;
+      }
+      #scoreboard {
+        font-size: 0.85rem;
+        color: #cbd5e1;
+      }
+      .kbd {
+        display: inline-block;
+        font-size: 0.72rem;
+        padding: 2px 6px;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        border-radius: 6px;
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="panel">
+        <div class="row" style="justify-content: space-between">
+          <strong>Multiplayer Tank Arena (demo)</strong>
+          <div class="small">
+            <span class="kbd">WASD / Arrows</span>
+            <span class="kbd">Space</span> Fire
+          </div>
+        </div>
+        <div class="row" style="margin-top: 8px">
+          <button id="create-room">Create Room</button>
+          <input id="room-id-input" placeholder="Room ID to join" />
+          <button id="join-room" class="secondary">Join Room</button>
+          <button id="leave-room" class="secondary">Leave</button>
+          <button id="force-gap" class="secondary">Force Version Gap</button>
+          <button id="sync-now" class="secondary">Sync Now</button>
+        </div>
+        <div class="row" style="margin-top: 8px">
+          <div class="small">Room: <code id="room-label">-</code></div>
+          <div class="small">Version: <code id="version-label">0</code></div>
+          <div class="small">You: <code id="self-label">unknown</code></div>
+        </div>
+        <div id="status">Waiting for SDK init...</div>
+      </div>
+      <canvas id="board" width="960" height="520"></canvas>
+      <div class="panel">
+        <div id="scoreboard">No players</div>
+      </div>
+    </div>
+
+    <script src="./goportal-game-sdk.js"></script>
+    <script>
+      ;(function () {
+        var sdk = window.GoPortalGameSDK
+        var board = document.getElementById('board')
+        var ctx = board.getContext('2d')
+        var statusEl = document.getElementById('status')
+        var roomLabel = document.getElementById('room-label')
+        var versionLabel = document.getElementById('version-label')
+        var selfLabel = document.getElementById('self-label')
+        var scoreEl = document.getElementById('scoreboard')
+        var roomInput = document.getElementById('room-id-input')
+
+        var roomId = ''
+        var selfUserId = ''
+        var stateVersion = 0
+        var pendingPublish = false
+        var keys = Object.create(null)
+        var rehydrateNoteUntil = 0
+        var fireCooldown = 0
+
+        var state = { players: {}, updated_at: Date.now() }
+        var colorPool = ['#60a5fa', '#f472b6', '#34d399', '#facc15', '#f97316', '#a78bfa', '#22d3ee']
+
+        function setStatus(text) {
+          statusEl.textContent = text
+        }
+
+        function randomPos() {
+          return {
+            x: 80 + Math.random() * (board.width - 160),
+            y: 80 + Math.random() * (board.height - 160),
+          }
+        }
+
+        function makePlayer(userId, name) {
+          var p = randomPos()
+          return {
+            user_id: userId,
+            name: name || userId.slice(0, 8),
+            x: p.x,
+            y: p.y,
+            dir: 0,
+            hp: 100,
+            score: 0,
+            color: colorPool[Math.floor(Math.random() * colorPool.length)],
+          }
+        }
+
+        function ensureSelfPlayer() {
+          if (!selfUserId) return
+          if (!state.players[selfUserId]) {
+            state.players[selfUserId] = makePlayer(selfUserId, 'you')
+            queuePublish()
+          }
+        }
+
+        function setRoomInfo() {
+          roomLabel.textContent = roomId || '-'
+          versionLabel.textContent = String(stateVersion)
+          selfLabel.textContent = selfUserId || 'unknown'
+        }
+
+        function applyRoomResponse(roomState) {
+          if (!roomState || !roomState.room) return
+          roomId = roomState.room.id
+          stateVersion = Number(roomState.room.state_version || 0)
+          if (roomState.room.current_state && roomState.room.current_state.players) {
+            state = roomState.room.current_state
+          } else {
+            state = { players: {}, updated_at: Date.now() }
+          }
+          if (Array.isArray(roomState.members)) {
+            roomState.members.forEach(function (m) {
+              if (m.is_self) selfUserId = m.user_id
+              if (!state.players[m.user_id]) {
+                state.players[m.user_id] = makePlayer(m.user_id, m.user_id === selfUserId ? 'you' : m.user_id.slice(0, 8))
+              }
+            })
+          }
+          ensureSelfPlayer()
+          setRoomInfo()
+          render()
+        }
+
+        function queuePublish() {
+          if (!roomId || !selfUserId) return
+          if (pendingPublish) return
+          pendingPublish = true
+          setTimeout(function () {
+            pendingPublish = false
+            publishState()
+          }, 120)
+        }
+
+        function publishState(forceGap) {
+          if (!sdk || !roomId || !selfUserId) return
+          var nextVersion = stateVersion + 1
+          if (forceGap) nextVersion = stateVersion + 5
+          state.updated_at = Date.now()
+          sdk
+            .sendState(roomId, state, nextVersion)
+            .then(function () {
+              stateVersion = nextVersion
+              setRoomInfo()
+            })
+            .catch(function (err) {
+              setStatus('sendState failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        }
+
+        function handleRealtime(ev) {
+          if (!ev || !ev.room_id || (roomId && ev.room_id !== roomId)) return
+          if (ev.event_type === 'GAME_ROOM_STATE_UPDATED' && ev.state) {
+            var incomingVersion = Number(ev.state_version || 0)
+            if (incomingVersion && incomingVersion < stateVersion) return
+            if (incomingVersion) stateVersion = incomingVersion
+            state = ev.state
+            if (ev.source === 'rehydrate') {
+              rehydrateNoteUntil = Date.now() + 2200
+              setStatus('Detected state gap -> auto rehydrate snapshot loaded')
+            }
+            ensureSelfPlayer()
+            setRoomInfo()
+            render()
+            return
+          }
+          if (ev.event_type === 'GAME_ROOM_MEMBER_JOINED' || ev.event_type === 'GAME_ROOM_CREATED') {
+            ;(ev.member_user_ids || []).forEach(function (uid) {
+              if (!state.players[uid]) state.players[uid] = makePlayer(uid, uid === selfUserId ? 'you' : uid.slice(0, 8))
+            })
+            render()
+          }
+        }
+
+        function shoot() {
+          if (!selfUserId || !state.players[selfUserId]) return
+          var me = state.players[selfUserId]
+          var hitId = ''
+          var hitDist = 99999
+          Object.keys(state.players).forEach(function (uid) {
+            if (uid === selfUserId) return
+            var p = state.players[uid]
+            var dx = p.x - me.x
+            var dy = p.y - me.y
+            var ahead = dx * Math.cos(me.dir) + dy * Math.sin(me.dir)
+            var side = Math.abs(-dx * Math.sin(me.dir) + dy * Math.cos(me.dir))
+            if (ahead > 0 && ahead < 180 && side < 22 && ahead < hitDist) {
+              hitDist = ahead
+              hitId = uid
+            }
+          })
+          if (!hitId) return
+          var target = state.players[hitId]
+          target.hp -= 25
+          if (target.hp <= 0) {
+            target.hp = 100
+            var respawn = randomPos()
+            target.x = respawn.x
+            target.y = respawn.y
+            me.score += 1
+          }
+          queuePublish()
+        }
+
+        function update(dt) {
+          if (!selfUserId || !state.players[selfUserId]) return
+          var me = state.players[selfUserId]
+          var speed = 180
+          var vx = 0
+          var vy = 0
+          if (keys.ArrowUp || keys.KeyW) vy -= 1
+          if (keys.ArrowDown || keys.KeyS) vy += 1
+          if (keys.ArrowLeft || keys.KeyA) vx -= 1
+          if (keys.ArrowRight || keys.KeyD) vx += 1
+          if (vx !== 0 || vy !== 0) {
+            var len = Math.sqrt(vx * vx + vy * vy)
+            vx /= len
+            vy /= len
+            me.x += vx * speed * dt
+            me.y += vy * speed * dt
+            me.x = Math.max(24, Math.min(board.width - 24, me.x))
+            me.y = Math.max(24, Math.min(board.height - 24, me.y))
+            me.dir = Math.atan2(vy, vx)
+            queuePublish()
+          }
+          fireCooldown = Math.max(0, fireCooldown - dt)
+        }
+
+        function drawTank(p, isSelf) {
+          ctx.save()
+          ctx.translate(p.x, p.y)
+          ctx.rotate(p.dir)
+          ctx.fillStyle = p.color
+          ctx.fillRect(-18, -14, 36, 28)
+          ctx.fillStyle = '#e2e8f0'
+          ctx.fillRect(0, -3, 24, 6)
+          ctx.restore()
+          ctx.fillStyle = '#e2e8f0'
+          ctx.font = '12px system-ui'
+          ctx.fillText((isSelf ? '[you] ' : '') + p.name + ' (' + p.score + ')', p.x - 26, p.y - 22)
+          ctx.fillStyle = '#1f2937'
+          ctx.fillRect(p.x - 20, p.y + 18, 40, 5)
+          ctx.fillStyle = '#22c55e'
+          ctx.fillRect(p.x - 20, p.y + 18, Math.max(0, p.hp / 100) * 40, 5)
+        }
+
+        function render() {
+          ctx.clearRect(0, 0, board.width, board.height)
+          ctx.fillStyle = '#0f172a'
+          ctx.fillRect(0, 0, board.width, board.height)
+          Object.keys(state.players).forEach(function (uid) {
+            drawTank(state.players[uid], uid === selfUserId)
+          })
+          if (Date.now() < rehydrateNoteUntil) {
+            ctx.fillStyle = 'rgba(2,132,199,0.2)'
+            ctx.fillRect(0, 0, board.width, 28)
+            ctx.fillStyle = '#7dd3fc'
+            ctx.font = '13px system-ui'
+            ctx.fillText('Auto-resync active: loaded latest room snapshot.', 12, 19)
+          }
+          var rows = Object.keys(state.players)
+            .map(function (uid) { return state.players[uid] })
+            .sort(function (a, b) { return b.score - a.score })
+            .map(function (p) { return p.name + ': ' + p.score + ' pts' })
+          scoreEl.textContent = rows.length ? rows.join(' | ') : 'No players'
+        }
+
+        var last = performance.now()
+        function frame(now) {
+          var dt = Math.min(0.05, (now - last) / 1000)
+          last = now
+          update(dt)
+          render()
+          requestAnimationFrame(frame)
+        }
+
+        document.addEventListener('keydown', function (e) {
+          keys[e.code] = true
+          if (e.code === 'Space' && fireCooldown === 0) {
+            fireCooldown = 0.22
+            shoot()
+          }
+        })
+        document.addEventListener('keyup', function (e) {
+          keys[e.code] = false
+        })
+
+        document.getElementById('create-room').addEventListener('click', function () {
+          if (!sdk) return
+          sdk
+            .createRoom({ room_name: 'Tank Arena', max_players: 8 })
+            .then(function (roomState) {
+              applyRoomResponse(roomState)
+              setStatus('Room created: ' + roomId)
+              sdk.subscribeRoom(roomId)
+            })
+            .catch(function (err) {
+              setStatus('Create room failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        })
+
+        document.getElementById('join-room').addEventListener('click', function () {
+          if (!sdk) return
+          var target = String(roomInput.value || '').trim()
+          if (!target) {
+            setStatus('Enter room ID first')
+            return
+          }
+          sdk
+            .joinRoom(target)
+            .then(function (roomState) {
+              applyRoomResponse(roomState)
+              setStatus('Joined room: ' + roomId)
+              sdk.subscribeRoom(roomId)
+            })
+            .catch(function (err) {
+              setStatus('Join failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        })
+
+        document.getElementById('leave-room').addEventListener('click', function () {
+          if (!sdk || !roomId) return
+          sdk
+            .leaveRoom(roomId)
+            .then(function () {
+              setStatus('Left room')
+              roomId = ''
+              stateVersion = 0
+              state = { players: {}, updated_at: Date.now() }
+              setRoomInfo()
+              render()
+            })
+            .catch(function (err) {
+              setStatus('Leave failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        })
+
+        document.getElementById('sync-now').addEventListener('click', function () {
+          if (!sdk || !roomId) return
+          sdk
+            .getRoomState(roomId)
+            .then(function (roomState) {
+              applyRoomResponse(roomState)
+              rehydrateNoteUntil = Date.now() + 1200
+              setStatus('Manual room state sync completed')
+            })
+            .catch(function (err) {
+              setStatus('Sync failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        })
+
+        document.getElementById('force-gap').addEventListener('click', function () {
+          if (!roomId) return
+          publishState(true)
+          setStatus('Force version gap sent (for auto rehydrate demo)')
+        })
+
+        function initSDK() {
+          if (!sdk || typeof sdk.init !== 'function') {
+            setStatus('GoPortal SDK not found. Include goportal-game-sdk.js')
+            return Promise.resolve()
+          }
+          sdk.on('*', handleRealtime)
+          return sdk
+            .ready()
+            .then(function () {
+              return sdk.init({ metadata: { mode: 'tank_multiplayer_demo', build: 'sample-v2' } })
+            })
+            .then(function (res) {
+              setStatus('SDK ready. Session: ' + (res && res.session_id ? res.session_id : '(hidden)'))
+            })
+            .catch(function (err) {
+              setStatus('SDK init failed: ' + (err && err.message ? err.message : 'unknown error'))
+            })
+        }
+
+        initSDK().then(function () {
+          requestAnimationFrame(frame)
+          setRoomInfo()
+          render()
+        })
+      })()
+    </script>
+  </body>
+</html>

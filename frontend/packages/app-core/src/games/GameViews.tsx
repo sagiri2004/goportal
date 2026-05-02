@@ -962,6 +962,14 @@ export const GamePlayerPage: React.FC = () => {
   const activeRoomIdRef = React.useRef<string | null>(null)
   const roomStateVersionRef = React.useRef<Map<string, number>>(new Map())
   const channelIdFromQuery = React.useMemo(() => new URLSearchParams(location.search).get('channelId'), [location.search])
+  const sdkTargetOrigin = React.useMemo(() => {
+    if (!playUrl) return '*'
+    try {
+      return new URL(playUrl, window.location.origin).origin
+    } catch {
+      return '*'
+    }
+  }, [playUrl])
 
   React.useEffect(() => {
     let cancelled = false
@@ -1009,7 +1017,7 @@ export const GamePlayerPage: React.FC = () => {
           type: 'GOPORTAL_GAME_EVENT',
           payload: event,
         },
-        '*',
+        sdkTargetOrigin,
       )
     }
     const handleRoomEvent = async (event: GameRoomRealtimeEvent) => {
@@ -1063,7 +1071,7 @@ export const GamePlayerPage: React.FC = () => {
         gameWsRef.current = null
       }
     }
-  }, [gameId, token])
+  }, [gameId, sdkTargetOrigin, token])
 
   const toggleFullscreen = React.useCallback(async () => {
     const node = playerContainerRef.current
@@ -1092,21 +1100,44 @@ export const GamePlayerPage: React.FC = () => {
   }, [isMuted])
 
   React.useEffect(() => {
-    const sendResponse = (requestId: string, ok: boolean, data?: unknown, message?: string) => {
+    const sendResponse = (params: {
+      requestId: string
+      ok: boolean
+      protocolVersion: string
+      targetOrigin: string
+      data?: unknown
+      error?: string
+      errorCode?:
+        | 'ERR_BAD_REQUEST'
+        | 'ERR_TIMEOUT'
+        | 'ERR_UNAUTHORIZED'
+        | 'ERR_CHANNEL_REQUIRED'
+        | 'ERR_ROOM_REQUIRED'
+        | 'ERR_NOT_READY'
+        | 'ERR_UNSUPPORTED_ACTION'
+        | 'ERR_INTERNAL'
+      retryable?: boolean
+    }) => {
       iframeRef.current?.contentWindow?.postMessage(
         {
           type: 'GOPORTAL_SDK_RESPONSE',
-          request_id: requestId,
-          ok,
-          data,
-          error: message,
+          protocol_version: params.protocolVersion,
+          request_id: params.requestId,
+          ok: params.ok,
+          data: params.data,
+          error: params.error,
+          error_code: params.errorCode,
+          retryable: params.retryable,
         },
-        '*',
+        params.targetOrigin,
       )
     }
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) {
+        return
+      }
+      if (sdkTargetOrigin !== '*' && event.origin !== sdkTargetOrigin) {
         return
       }
       const payload = event.data
@@ -1116,8 +1147,45 @@ export const GamePlayerPage: React.FC = () => {
       const requestId = typeof payload.request_id === 'string' ? payload.request_id : `${Date.now()}`
       const action = typeof payload.action === 'string' ? payload.action : ''
       const body = payload.payload ?? {}
+      const protocolVersion = typeof payload.protocol_version === 'string' ? payload.protocol_version : '1.0'
+      const responseOrigin = sdkTargetOrigin === '*' ? event.origin || '*' : sdkTargetOrigin
+
+      const fail = (message: string, errorCode: Parameters<typeof sendResponse>[0]['errorCode'], retryable = false) => {
+        sendResponse({
+          requestId,
+          ok: false,
+          protocolVersion,
+          targetOrigin: responseOrigin,
+          error: message,
+          errorCode,
+          retryable,
+        })
+      }
 
       const run = async () => {
+        if (action === 'handshake' || action === 'ready') {
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: {
+              protocol_version: '2.0',
+              context: {
+                game_id: gameId,
+                channel_id: channelIdFromQuery ?? undefined,
+              },
+              capabilities: {
+                share_score: true,
+                share_achievement: true,
+                share_game: true,
+                rooms: true,
+                room_state_sync: true,
+              },
+            },
+          })
+          return
+        }
         if (action === 'init') {
           const session = await startGameSession(gameId, {
             channel_id: body.channel_id ?? channelIdFromQuery ?? undefined,
@@ -1129,7 +1197,13 @@ export const GamePlayerPage: React.FC = () => {
             gameWsRef.current?.subscribeRoom(body.room_id)
           }
           setSdkSessionId(session.id)
-          sendResponse(requestId, true, { session_id: session.id })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { session_id: session.id },
+          })
           return
         }
         if (action === 'shareScore') {
@@ -1154,7 +1228,13 @@ export const GamePlayerPage: React.FC = () => {
               comment: body.comment,
             })
           }
-          sendResponse(requestId, true, { event_id: eventCreated.id, session_id: sessionId })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { event_id: eventCreated.id, session_id: sessionId },
+          })
           return
         }
         if (action === 'shareAchievement') {
@@ -1180,20 +1260,33 @@ export const GamePlayerPage: React.FC = () => {
               comment: body.comment,
             })
           }
-          sendResponse(requestId, true, { event_id: eventCreated.id, session_id: sessionId })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { event_id: eventCreated.id, session_id: sessionId },
+          })
           return
         }
         if (action === 'shareGame') {
           const targetChannelId = body.channel_id ?? channelIdFromQuery
           if (!targetChannelId) {
-            throw new Error('channel_id is required to share game card')
+            fail('channel_id is required to share game card', 'ERR_CHANNEL_REQUIRED', false)
+            return
           }
           await shareGameToChannel(gameId, {
             channel_id: targetChannelId,
             share_type: 'game',
             comment: body.comment,
           })
-          sendResponse(requestId, true, {})
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: {},
+          })
           return
         }
         if (action === 'createRoom') {
@@ -1205,18 +1298,38 @@ export const GamePlayerPage: React.FC = () => {
           activeRoomIdRef.current = room.room.id
           roomStateVersionRef.current.set(room.room.id, Number(room.room.state_version ?? 1))
           gameWsRef.current?.subscribeRoom(room.room.id)
-          sendResponse(requestId, true, room)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: room,
+          })
           return
         }
         if (action === 'joinRoom') {
+          if (typeof body.room_id !== 'string' || !body.room_id) {
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
+          }
           const room = await joinGameRoom(gameId, body.room_id)
           activeRoomIdRef.current = room.room.id
           roomStateVersionRef.current.set(room.room.id, Number(room.room.state_version ?? 1))
           gameWsRef.current?.subscribeRoom(room.room.id)
-          sendResponse(requestId, true, room)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: room,
+          })
           return
         }
         if (action === 'leaveRoom') {
+          if (typeof body.room_id !== 'string' || !body.room_id) {
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
+          }
           const room = await leaveGameRoom(gameId, body.room_id)
           if (activeRoomIdRef.current === body.room_id) {
             activeRoomIdRef.current = null
@@ -1224,31 +1337,59 @@ export const GamePlayerPage: React.FC = () => {
           if (typeof body.room_id === 'string' && body.room_id) {
             roomStateVersionRef.current.delete(body.room_id)
           }
-          sendResponse(requestId, true, room)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: room,
+          })
           return
         }
         if (action === 'getRoomState') {
+          if (typeof body.room_id !== 'string' || !body.room_id) {
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
+          }
           const room = await getGameRoomState(gameId, body.room_id)
           activeRoomIdRef.current = room.room.id
           roomStateVersionRef.current.set(room.room.id, Number(room.room.state_version ?? 1))
           gameWsRef.current?.subscribeRoom(room.room.id)
-          sendResponse(requestId, true, room)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: room,
+          })
           return
         }
         if (action === 'subscribeRoom') {
           const roomID = typeof body.room_id === 'string' ? body.room_id : ''
           if (!roomID) {
-            throw new Error('room_id is required')
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
           }
           activeRoomIdRef.current = roomID
           gameWsRef.current?.subscribeRoom(roomID)
-          sendResponse(requestId, true, { subscribed: true, room_id: roomID })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { subscribed: true, room_id: roomID },
+          })
           return
         }
         if (action === 'sendState') {
           const sessionId = sdkSessionId
           if (!sessionId) {
-            throw new Error('SDK session is not initialized')
+            fail('SDK session is not initialized', 'ERR_NOT_READY', false)
+            return
+          }
+          if (typeof body.room_id !== 'string' || !body.room_id) {
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
           }
           const eventCreated = await createGameEvent(gameId, sessionId, {
             event_type: 'state',
@@ -1259,13 +1400,19 @@ export const GamePlayerPage: React.FC = () => {
               state_version: body.state_version,
             },
           })
-          sendResponse(requestId, true, { event_id: eventCreated.id })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { event_id: eventCreated.id },
+          })
           return
         }
-        throw new Error('Unsupported SDK action')
+        fail('Unsupported SDK action', 'ERR_UNSUPPORTED_ACTION', false)
       }
       void run().catch((err) => {
-        sendResponse(requestId, false, null, err instanceof Error ? err.message : 'SDK command failed')
+        fail(err instanceof Error ? err.message : 'SDK command failed', 'ERR_INTERNAL', false)
       })
     }
 
@@ -1273,7 +1420,7 @@ export const GamePlayerPage: React.FC = () => {
     return () => {
       window.removeEventListener('message', onMessage)
     }
-  }, [channelIdFromQuery, gameId, sdkSessionId])
+  }, [channelIdFromQuery, gameId, sdkSessionId, sdkTargetOrigin])
 
   if (error) {
     return <div className="p-6 text-sm text-red-500">{error}</div>

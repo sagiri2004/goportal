@@ -17,9 +17,47 @@ type SDKEventMap = {
 
 type SDKListener<T> = (payload: T) => void
 
+type SDKErrorCode =
+  | 'ERR_BAD_REQUEST'
+  | 'ERR_TIMEOUT'
+  | 'ERR_UNAUTHORIZED'
+  | 'ERR_CHANNEL_REQUIRED'
+  | 'ERR_ROOM_REQUIRED'
+  | 'ERR_NOT_READY'
+  | 'ERR_UNSUPPORTED_ACTION'
+  | 'ERR_INTERNAL'
+
+type SDKCapabilities = {
+  share_score: boolean
+  share_achievement: boolean
+  share_game: boolean
+  rooms: boolean
+  room_state_sync: boolean
+}
+
+export class GoPortalSDKServiceError extends Error {
+  code: SDKErrorCode
+  retryable: boolean
+
+  constructor(message: string, code: SDKErrorCode, retryable = false) {
+    super(message)
+    this.name = 'GoPortalSDKServiceError'
+    this.code = code
+    this.retryable = retryable
+  }
+}
+
 export class GoPortalGameSDK {
   private session: GameSessionDTO | null = null
   private listeners: Record<string, Array<(payload: unknown) => void>> = {}
+  private readonly capabilities: SDKCapabilities = {
+    share_score: true,
+    share_achievement: true,
+    share_game: true,
+    rooms: true,
+    room_state_sync: true,
+  }
+  private readonly protocolVersion = '2.0'
 
   constructor(private readonly gameId: string, private readonly channelId?: string) {}
 
@@ -33,14 +71,36 @@ export class GoPortalGameSDK {
     return this.session
   }
 
-  async shareScore(score: number, payload: { comment?: string; channel_id?: string } = {}): Promise<void> {
+  async ready() {
+    return {
+      protocol_version: this.protocolVersion,
+      capabilities: this.capabilities,
+      context: {
+        game_id: this.gameId,
+        channel_id: this.channelId,
+      },
+    }
+  }
+
+  async shareScore(
+    score: number,
+    payload: {
+      comment?: string
+      channel_id?: string
+      share?: boolean
+      idempotency_key?: string
+      payload?: unknown
+    } = {},
+  ): Promise<{ event_id: string; session_id: string }> {
     const session = await this.ensureSession(payload.channel_id)
     const event = await createGameEvent(this.gameId, session.id, {
       event_type: 'score',
+      idempotency_key: payload.idempotency_key,
       score,
+      payload: payload.payload,
     })
     const targetChannelId = payload.channel_id ?? this.channelId
-    if (targetChannelId) {
+    if (targetChannelId && payload.share !== false) {
       await shareGameToChannel(this.gameId, {
         channel_id: targetChannelId,
         session_id: session.id,
@@ -50,6 +110,7 @@ export class GoPortalGameSDK {
         comment: payload.comment,
       })
     }
+    return { event_id: event.id, session_id: session.id }
   }
 
   async shareAchievement(payload: {
@@ -57,15 +118,20 @@ export class GoPortalGameSDK {
     achievement_title?: string
     comment?: string
     channel_id?: string
-  }): Promise<void> {
+    share?: boolean
+    idempotency_key?: string
+    payload?: unknown
+  }): Promise<{ event_id: string; session_id: string }> {
     const session = await this.ensureSession(payload.channel_id)
     const event = await createGameEvent(this.gameId, session.id, {
       event_type: 'achievement',
+      idempotency_key: payload.idempotency_key,
       achievement_code: payload.achievement_code,
       achievement_title: payload.achievement_title,
+      payload: payload.payload,
     })
     const targetChannelId = payload.channel_id ?? this.channelId
-    if (targetChannelId) {
+    if (targetChannelId && payload.share !== false) {
       await shareGameToChannel(this.gameId, {
         channel_id: targetChannelId,
         session_id: session.id,
@@ -75,6 +141,19 @@ export class GoPortalGameSDK {
         comment: payload.comment,
       })
     }
+    return { event_id: event.id, session_id: session.id }
+  }
+
+  async shareGame(payload: { channel_id?: string; comment?: string } = {}): Promise<void> {
+    const targetChannelId = payload.channel_id ?? this.channelId
+    if (!targetChannelId) {
+      throw new GoPortalSDKServiceError('channel_id is required to share game card', 'ERR_CHANNEL_REQUIRED')
+    }
+    await shareGameToChannel(this.gameId, {
+      channel_id: targetChannelId,
+      share_type: 'game',
+      comment: payload.comment,
+    })
   }
 
   async createRoom(payload: { channel_id?: string; room_name?: string; max_players?: number } = {}): Promise<GameRoomStateDTO> {
@@ -97,7 +176,7 @@ export class GoPortalGameSDK {
 
   async sendState(payload: { room_id: string; state: unknown; state_version?: number }): Promise<void> {
     if (!this.session) {
-      throw new Error('SDK session is not initialized')
+      throw new GoPortalSDKServiceError('SDK session is not initialized', 'ERR_NOT_READY')
     }
     await createGameEvent(this.gameId, this.session.id, {
       event_type: 'state',
@@ -135,5 +214,46 @@ export class GoPortalGameSDK {
   private emit<K extends keyof SDKEventMap>(event: K, payload: SDKEventMap[K]) {
     const key = String(event)
     ;(this.listeners[key] ?? []).forEach((listener) => listener(payload))
+  }
+
+  get commands() {
+    return {
+      init: (payload?: { channel_id?: string; room_id?: string; metadata?: unknown }) => this.init(payload ?? {}),
+      shareScore: (payload: {
+        score: number
+        comment?: string
+        channel_id?: string
+        share?: boolean
+        idempotency_key?: string
+        payload?: unknown
+      }) =>
+        this.shareScore(payload.score, {
+          comment: payload.comment,
+          channel_id: payload.channel_id,
+          share: payload.share,
+          idempotency_key: payload.idempotency_key,
+          payload: payload.payload,
+        }),
+      shareAchievement: (payload: {
+        achievement_code?: string
+        achievement_title?: string
+        comment?: string
+        channel_id?: string
+        share?: boolean
+        idempotency_key?: string
+        payload?: unknown
+      }) => this.shareAchievement(payload),
+      shareGame: (payload?: { channel_id?: string; comment?: string }) => this.shareGame(payload ?? {}),
+      createRoom: (payload?: { channel_id?: string; room_name?: string; max_players?: number }) => this.createRoom(payload ?? {}),
+      joinRoom: (payload: { room_id: string }) => this.joinRoom(payload.room_id),
+      leaveRoom: (payload: { room_id: string }) => this.leaveRoom(payload.room_id),
+      subscribeRoom: (payload: { room_id: string }) =>
+        Promise.resolve({
+          subscribed: true,
+          room_id: payload.room_id,
+        }),
+      getRoomState: (payload: { room_id: string }) => this.getRoomState(payload.room_id),
+      sendState: (payload: { room_id: string; state: unknown; state_version?: number }) => this.sendState(payload),
+    }
   }
 }
