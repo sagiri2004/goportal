@@ -11,9 +11,11 @@ import {
   type SDKJoinLeaveRoomPayload,
   type SDKReadyOptions,
   type SDKResponseEnvelope,
+  type SDKShareResult,
   type SDKSendStatePayload,
   type SDKShareAchievementPayload,
   type SDKShareGamePayload,
+  type SDKShareSessionStartPayload,
   type SDKShareScorePayload,
 } from '../types'
 
@@ -90,6 +92,7 @@ export class GoPortalSDKClient {
         share_score: false,
         share_achievement: false,
         share_game: false,
+        share_session_start: false,
         rooms: false,
         room_state_sync: false,
       }
@@ -107,6 +110,7 @@ export class GoPortalSDKClient {
           share_score: Boolean(data.capabilities?.share_score),
           share_achievement: Boolean(data.capabilities?.share_achievement),
           share_game: Boolean(data.capabilities?.share_game),
+          share_session_start: Boolean(data.capabilities?.share_session_start),
           rooms: Boolean(data.capabilities?.rooms),
           room_state_sync: Boolean(data.capabilities?.room_state_sync),
         },
@@ -127,15 +131,19 @@ export class GoPortalSDKClient {
   }
 
   async shareScore(score: number, payload: Omit<SDKShareScorePayload, 'score'> = {}) {
-    return this.command<SDKShareScorePayload, { event_id: string; session_id: string }>('shareScore', { ...payload, score })
+    return this.command<SDKShareScorePayload, SDKShareResult>('shareScore', { ...payload, score })
   }
 
   async shareAchievement(payload: SDKShareAchievementPayload = {}) {
-    return this.command<SDKShareAchievementPayload, { event_id: string; session_id: string }>('shareAchievement', payload)
+    return this.command<SDKShareAchievementPayload, SDKShareResult>('shareAchievement', payload)
   }
 
   async shareGame(payload: SDKShareGamePayload = {}) {
-    return this.command<SDKShareGamePayload, Record<string, never>>('shareGame', payload)
+    return this.command<SDKShareGamePayload, SDKShareResult>('shareGame', payload)
+  }
+
+  async shareSessionStart(payload: SDKShareSessionStartPayload = {}) {
+    return this.command<SDKShareSessionStartPayload, SDKShareResult>('shareSessionStart', payload)
   }
 
   async createRoom(payload: SDKCreateRoomPayload = {}) {
@@ -181,10 +189,12 @@ export class GoPortalSDKClient {
   get commands() {
     return {
       init: (payload?: SDKInitPayload) => this.init(payload),
-      shareScore: (payload: SDKShareScorePayload) => this.command<SDKShareScorePayload, { event_id: string; session_id: string }>('shareScore', payload),
+      shareScore: (payload: SDKShareScorePayload) => this.command<SDKShareScorePayload, SDKShareResult>('shareScore', payload),
       shareAchievement: (payload: SDKShareAchievementPayload) =>
-        this.command<SDKShareAchievementPayload, { event_id: string; session_id: string }>('shareAchievement', payload),
-      shareGame: (payload?: SDKShareGamePayload) => this.command<SDKShareGamePayload, Record<string, never>>('shareGame', payload ?? {}),
+        this.command<SDKShareAchievementPayload, SDKShareResult>('shareAchievement', payload),
+      shareGame: (payload?: SDKShareGamePayload) => this.command<SDKShareGamePayload, SDKShareResult>('shareGame', payload ?? {}),
+      shareSessionStart: (payload?: SDKShareSessionStartPayload) =>
+        this.command<SDKShareSessionStartPayload, SDKShareResult>('shareSessionStart', payload ?? {}),
       createRoom: (payload?: SDKCreateRoomPayload) => this.command<SDKCreateRoomPayload, unknown>('createRoom', payload ?? {}),
       joinRoom: (payload: SDKJoinLeaveRoomPayload) => this.command<SDKJoinLeaveRoomPayload, unknown>('joinRoom', payload),
       leaveRoom: (payload: SDKJoinLeaveRoomPayload) => this.command<SDKJoinLeaveRoomPayload, unknown>('leaveRoom', payload),

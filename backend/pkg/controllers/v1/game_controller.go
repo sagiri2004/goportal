@@ -596,6 +596,7 @@ func (ctrl *gameController) RoomState(c *gin.Context) {
 }
 
 func (ctrl *gameController) respondError(c *gin.Context, err error) {
+	_ = c.Error(err)
 	if ae, ok := apperr.From(err); ok {
 		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
 		return

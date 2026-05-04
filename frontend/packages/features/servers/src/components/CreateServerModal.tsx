@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   Button,
   Input,
   Label,
@@ -263,6 +266,10 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Tao hoac tham gia server</DialogTitle>
+          <DialogDescription>Hop thoai tao server moi hoac tham gia bang loi moi.</DialogDescription>
+        </DialogHeader>
         <div className="relative min-h-[420px]">
           <section
             className={[

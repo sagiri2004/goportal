@@ -4,6 +4,7 @@ export type SDKCapabilities = {
   share_score: boolean
   share_achievement: boolean
   share_game: boolean
+  share_session_start?: boolean
   rooms: boolean
   room_state_sync: boolean
 }
@@ -30,12 +31,29 @@ export type SDKAction =
   | 'shareScore'
   | 'shareAchievement'
   | 'shareGame'
+  | 'shareSessionStart'
   | 'createRoom'
   | 'joinRoom'
   | 'leaveRoom'
   | 'getRoomState'
   | 'subscribeRoom'
   | 'sendState'
+
+export type SDKShareAction = 'shareScore' | 'shareAchievement' | 'shareGame' | 'shareSessionStart'
+
+export type SDKShareTarget = {
+  channel_id?: string
+  server_id?: string
+}
+
+export type SDKShareResult = {
+  session_id?: string
+  event_id?: string
+  share_action: SDKShareAction
+  shared: boolean
+  share_status: 'shared' | 'skipped'
+  target?: SDKShareTarget
+}
 
 export type SDKRequestEnvelope<TPayload = unknown> = {
   type: 'GOPORTAL_SDK_REQUEST'
@@ -100,6 +118,13 @@ export type SDKShareAchievementPayload = {
 export type SDKShareGamePayload = {
   channel_id?: string
   comment?: string
+  share?: boolean
+}
+
+export type SDKShareSessionStartPayload = {
+  channel_id?: string
+  comment?: string
+  share?: boolean
 }
 
 export type SDKCreateRoomPayload = {
