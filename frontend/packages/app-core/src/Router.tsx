@@ -16,6 +16,7 @@ import { AuthView } from '@goportal/feature-auth'
 import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
 import { TournamentDetailPage, TournamentListPage } from './tournaments'
 import { GameDetailPage, GamePlayerPage, GamesCatalogPage, GamesDeveloperPage } from './games/GameViews'
+import { GameSDKDocsPage } from './games/GameSDKDocsPage'
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react'
 import { useAuthStore } from '@goportal/store'
 import { getChannels, getServers, hydrateSession } from './services'
@@ -308,6 +309,14 @@ export const Router: React.FC = () => {
           element={
             <PrivateRoute>
               <GamesDeveloperPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/sdk/docs"
+          element={
+            <PrivateRoute>
+              <GameSDKDocsPage />
             </PrivateRoute>
           }
         />

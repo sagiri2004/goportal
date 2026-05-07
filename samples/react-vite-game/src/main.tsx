@@ -6,6 +6,7 @@ function App() {
   const [status, setStatus] = React.useState('Booting...')
   const [ready, setReady] = React.useState(false)
   const [sessionId, setSessionId] = React.useState('')
+  const [lastShare, setLastShare] = React.useState('')
 
   const sdkRef = React.useRef(createGoPortalSDK())
 
@@ -13,6 +14,10 @@ function App() {
     const sdk = sdkRef.current
     const unsubscribe = sdk.on('*', (event: SDKEventPayload) => {
       if (event?.event_type) {
+        if (event.event_type === 'gop.sdk.share_status') {
+          setStatus(`Share flow: ${String(event.status)} (${String(event.share_action)})`)
+          return
+        }
         setStatus(`Realtime event: ${String(event.event_type)}`)
       }
     })
@@ -40,11 +45,27 @@ function App() {
         score: Math.floor(Math.random() * 500),
         comment: 'React/Vite sample share',
       })
-      .then(() => {
-        setStatus('Score shared successfully')
+      .then((res) => {
+        setLastShare(JSON.stringify(res))
+        setStatus(`Score share status: ${res.share_status}`)
       })
       .catch((err) => {
         setStatus(`Share failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+      })
+  }, [])
+
+  const shareNowPlaying = React.useCallback(() => {
+    const sdk = sdkRef.current
+    void sdk.commands
+      .shareSessionStart({
+        comment: 'React/Vite sample is now playing',
+      })
+      .then((res) => {
+        setLastShare(JSON.stringify(res))
+        setStatus(`Now-playing share status: ${res.share_status}`)
+      })
+      .catch((err) => {
+        setStatus(`Now-playing failed: ${err instanceof Error ? err.message : 'unknown error'}`)
       })
   }, [])
 
@@ -63,13 +84,22 @@ function App() {
       >
         <p style={{ marginTop: 0 }}>Session: {sessionId || '(pending)'}</p>
         <p>Status: {status}</p>
+        <p style={{ opacity: 0.85, fontSize: 12 }}>Last share result: {lastShare || '(none)'}</p>
         <button
           type="button"
           disabled={!ready}
           onClick={shareScore}
-          style={{ borderRadius: 10, border: 'none', padding: '10px 16px', cursor: 'pointer' }}
+          style={{ borderRadius: 10, border: 'none', padding: '10px 16px', cursor: 'pointer', marginRight: 8 }}
         >
           Share Random Score
+        </button>
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={shareNowPlaying}
+          style={{ borderRadius: 10, border: 'none', padding: '10px 16px', cursor: 'pointer' }}
+        >
+          Share Now Playing
         </button>
       </div>
     </main>

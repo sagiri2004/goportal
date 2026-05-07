@@ -31,6 +31,7 @@ type SDKCapabilities = {
   share_score: boolean
   share_achievement: boolean
   share_game: boolean
+  share_session_start?: boolean
   rooms: boolean
   room_state_sync: boolean
 }
@@ -156,6 +157,20 @@ export class GoPortalGameSDK {
     })
   }
 
+  async shareSessionStart(payload: { channel_id?: string; comment?: string; share?: boolean } = {}): Promise<{ session_id: string }> {
+    const session = await this.ensureSession(payload.channel_id)
+    const targetChannelId = payload.channel_id ?? this.channelId
+    if (targetChannelId && payload.share !== false) {
+      await shareGameToChannel(this.gameId, {
+        channel_id: targetChannelId,
+        session_id: session.id,
+        share_type: 'game',
+        comment: payload.comment,
+      })
+    }
+    return { session_id: session.id }
+  }
+
   async createRoom(payload: { channel_id?: string; room_name?: string; max_players?: number } = {}): Promise<GameRoomStateDTO> {
     const room = await createGameRoom(this.gameId, payload)
     this.emit('room_updated', room)
@@ -244,6 +259,7 @@ export class GoPortalGameSDK {
         payload?: unknown
       }) => this.shareAchievement(payload),
       shareGame: (payload?: { channel_id?: string; comment?: string }) => this.shareGame(payload ?? {}),
+      shareSessionStart: (payload?: { channel_id?: string; comment?: string; share?: boolean }) => this.shareSessionStart(payload ?? {}),
       createRoom: (payload?: { channel_id?: string; room_name?: string; max_players?: number }) => this.createRoom(payload ?? {}),
       joinRoom: (payload: { room_id: string }) => this.joinRoom(payload.room_id),
       leaveRoom: (payload: { room_id: string }) => this.leaveRoom(payload.room_id),

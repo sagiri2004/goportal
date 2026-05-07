@@ -576,8 +576,13 @@ func (s *gameService) StartSession(ctx context.Context, actorID string, input se
 	if err != nil {
 		return nil, err
 	}
-	if err := assertGameVisibleForActor(game, actorID); err != nil {
-		return nil, err
+	// Keep session-start eligibility aligned with play-session eligibility
+	// so players who can open a game can also initialize SDK session.
+	if game.Status != models.GameStatusPublished {
+		return nil, apperr.E("GAME_NOT_AVAILABLE", nil)
+	}
+	if game.Visibility == models.GameVisibilityPrivate && game.OwnerUserID != actorID {
+		return nil, apperr.E("GAME_FORBIDDEN", nil)
 	}
 	now := time.Now().Unix()
 	session := &models.GameSession{

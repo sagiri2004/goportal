@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Separator, cn } from '@goportal/ui'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Separator, cn } from '@goportal/ui'
 import { ChannelHeader } from '@goportal/feature-channels'
 import {
   Edit,
@@ -959,7 +959,34 @@ export const DashboardView: React.FC = () => {
 
   const extractFirstUrl = useCallback((text: string): string | null => {
     const match = text.match(/https?:\/\/[^\s<]+/i)
-    return match ? match[0] : null
+    if (!match) return null
+    const cleaned = match[0].replace(/[)"',}\]]+$/g, '')
+    try {
+      const parsed = new URL(cleaned)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return null
+      }
+      return parsed.toString()
+    } catch {
+      return null
+    }
+  }, [])
+
+  const isUnsafeEmbedUrl = useCallback((url: string): boolean => {
+    const lower = url.toLowerCase()
+    if (lower.includes('%22') || lower.includes('%2c') || lower.includes('%7b') || lower.includes('%7d')) {
+      return true
+    }
+    return lower.includes('","') || lower.includes('"}')
+  }, [])
+
+  const isDirectImageUrl = useCallback((url: string): boolean => {
+    try {
+      const parsed = new URL(url)
+      return /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(parsed.pathname)
+    } catch {
+      return false
+    }
   }, [])
 
   useEffect(() => {
@@ -971,6 +998,10 @@ export const DashboardView: React.FC = () => {
     messagesNeedingEmbed.forEach((message) => {
       const url = extractFirstUrl(message.content)
       if (!url) {
+        return
+      }
+      if (isUnsafeEmbedUrl(url)) {
+        embedCacheRef.current[url] = null
         return
       }
 
@@ -986,11 +1017,37 @@ export const DashboardView: React.FC = () => {
         return
       }
 
+      if (isDirectImageUrl(url)) {
+        let siteName: string | undefined
+        try {
+          siteName = new URL(url).hostname
+        } catch {
+          siteName = undefined
+        }
+        const imageEmbed = {
+          url,
+          title: undefined,
+          description: undefined,
+          image: url,
+          siteName,
+        }
+        embedCacheRef.current[url] = imageEmbed
+        setAutoEmbedsByUrl((prev) => (prev[url] ? prev : { ...prev, [url]: imageEmbed }))
+        return
+      }
+
       embedInFlightRef.current[url] = true
       const apiUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 5000)
 
-      fetch(apiUrl)
-        .then((response) => response.json() as Promise<{ contents?: string }>)
+      fetch(apiUrl, { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Embed proxy failed: ${response.status}`)
+          }
+          return response.json() as Promise<{ contents?: string }>
+        })
         .then((payload) => {
           const html = payload.contents ?? ''
           if (!html) {
@@ -1035,6 +1092,7 @@ export const DashboardView: React.FC = () => {
           embedCacheRef.current[url] = null
         })
         .finally(() => {
+          window.clearTimeout(timeoutId)
           delete embedInFlightRef.current[url]
         })
     })
@@ -1042,7 +1100,7 @@ export const DashboardView: React.FC = () => {
     return () => {
       isCancelled = true
     }
-  }, [activeMessages, extractFirstUrl])
+  }, [activeMessages, extractFirstUrl, isDirectImageUrl, isUnsafeEmbedUrl])
 
   const actionButtons = [
     { icon: Reply, label: 'Reply', key: 'reply' },
@@ -1927,6 +1985,7 @@ export const DashboardView: React.FC = () => {
               <Gamepad2 className="h-4 w-4" />
               Quick launcher
             </DialogTitle>
+            <DialogDescription>Chon game de mo nhanh trang play.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {quickGames.map((game) => (

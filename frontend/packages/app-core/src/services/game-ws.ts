@@ -20,6 +20,7 @@ export class GameWsClient {
   private ws: WebSocket | null = null
   private listeners = new Set<Listener>()
   private subscribedRooms = new Set<string>()
+  private outboundQueue: Array<Record<string, unknown>> = []
   private reconnectTimer: number | null = null
   private closedByClient = false
   private reconnectAttempt = 0
@@ -32,6 +33,9 @@ export class GameWsClient {
   ) {}
 
   connect() {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
     this.closedByClient = false
     this.connectInternal()
   }
@@ -53,25 +57,64 @@ export class GameWsClient {
     this.send({ type: 'subscribe.room', room_id: normalized })
   }
 
+  publishState(input: {
+    game_id: string
+    room_id: string
+    state: unknown
+    state_version: number
+    room_status?: string
+    channel_id?: string
+  }): boolean {
+    const roomID = input.room_id.trim()
+    const gameID = input.game_id.trim()
+    if (!roomID || !gameID) {
+      return false
+    }
+    const payload = {
+      type: 'publish.state',
+      game_id: gameID,
+      room_id: roomID,
+      state: input.state,
+      state_version: input.state_version,
+      room_status: input.room_status ?? 'open',
+      channel_id: input.channel_id,
+    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.outboundQueue.push(payload)
+      if (this.outboundQueue.length > 200) {
+        this.outboundQueue.splice(0, this.outboundQueue.length - 200)
+      }
+      return true
+    }
+    this.send(payload)
+    return true
+  }
+
   onRoomEvent(listener: Listener): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
   private connectInternal() {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
     const target = new URL(this.wsURL)
     target.searchParams.set('token', this.token)
     const ws = new WebSocket(target.toString())
     this.ws = ws
 
     ws.onopen = () => {
+      if (ws !== this.ws) return
       this.reconnectAttempt = 0
       this.subscribedRooms.forEach((roomId) => {
         this.send({ type: 'subscribe.room', room_id: roomId })
       })
+      this.flushQueue()
     }
 
     ws.onmessage = (event) => {
+      if (ws !== this.ws) return
       let parsed: { type?: string; payload?: unknown } | null = null
       try {
         parsed = JSON.parse(String(event.data))
@@ -99,6 +142,7 @@ export class GameWsClient {
     }
 
     ws.onclose = () => {
+      if (ws !== this.ws) return
       if (this.closedByClient) return
       const delay = Math.min(30000, 1000 * 2 ** this.reconnectAttempt)
       this.reconnectAttempt += 1
@@ -109,6 +153,7 @@ export class GameWsClient {
     }
 
     ws.onerror = () => {
+      if (ws !== this.ws) return
       ws.close()
     }
   }
@@ -116,5 +161,14 @@ export class GameWsClient {
   private send(payload: Record<string, unknown>) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     this.ws.send(JSON.stringify(payload))
+  }
+
+  private flushQueue() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.outboundQueue.length === 0) {
+      return
+    }
+    const queue = [...this.outboundQueue]
+    this.outboundQueue = []
+    queue.forEach((payload) => this.send(payload))
   }
 }

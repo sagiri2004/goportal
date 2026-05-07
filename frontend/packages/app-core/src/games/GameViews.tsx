@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Tabs, TabsList, TabsTrigger } from '@goportal/ui'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tabs, TabsList, TabsTrigger } from '@goportal/ui'
 import { ArrowLeft, Flame, Gamepad2, Library, Maximize2, Minimize2, Play, RefreshCcw, Search, Sparkles, Star, Store, TrendingUp, UploadCloud, Volume2, VolumeX } from 'lucide-react'
 import {
   createGame,
@@ -27,6 +27,7 @@ import {
   type GameReviewDTO,
 } from '../services'
 import { useAuthStore } from '@goportal/store'
+import { GameSharePickerDialog, type SharePickerAction } from './GameSharePickerDialog'
 
 const resolvePlayURL = (rawURL: string): string => {
   if (/^https?:\/\//i.test(rawURL)) {
@@ -53,6 +54,14 @@ const formatPlayCount = (count: number): string => {
     return `${(count / 1_000).toFixed(1)}K`
   }
   return `${count}`
+}
+
+const normalizeOptionalID = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const normalized = value.trim()
+  return normalized ? normalized : undefined
 }
 
 const GameTile: React.FC<{
@@ -685,6 +694,15 @@ export const GamesDeveloperPage: React.FC = () => {
               <div className="rounded-md border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                 SDK source: <code>game-sdk/browser/goportal-game-sdk.js</code> | Docs: <code>game-sdk/README.md</code>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/games/sdk/docs"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent"
+                >
+                  Open Frontend SDK Docs (EN/VI)
+                </Link>
+                <span className="text-xs text-muted-foreground">Professional guide with full examples for HTML + React/Vite</span>
+              </div>
               <label className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2 text-sm">
                 Allow score share
                 <input type="checkbox" checked={allowScoreShare} onChange={(e) => setAllowScoreShare(e.target.checked)} />
@@ -946,9 +964,23 @@ export const GameDetailPage: React.FC = () => {
 }
 
 export const GamePlayerPage: React.FC = () => {
+  type SDKErrorCode =
+    | 'ERR_BAD_REQUEST'
+    | 'ERR_TIMEOUT'
+    | 'ERR_UNAUTHORIZED'
+    | 'ERR_CHANNEL_REQUIRED'
+    | 'ERR_ROOM_REQUIRED'
+    | 'ERR_NOT_READY'
+    | 'ERR_UNSUPPORTED_ACTION'
+    | 'ERR_INTERNAL'
+
+  type ShareAction = 'shareScore' | 'shareAchievement' | 'shareGame' | 'shareSessionStart'
+  type ShareSelection = { serverId: string; channelId: string }
+
   const { gameId = '' } = useParams<{ gameId: string }>()
   const location = useLocation()
   const token = useAuthStore((state) => state.token)
+  const currentUserId = useAuthStore((state) => state.user?.id ?? '')
   const [playUrl, setPlayUrl] = React.useState<string | null>(null)
   const [title, setTitle] = React.useState<string>('Game')
   const [error, setError] = React.useState<string | null>(null)
@@ -959,9 +991,14 @@ export const GamePlayerPage: React.FC = () => {
   const playerContainerRef = React.useRef<HTMLDivElement>(null)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const gameWsRef = React.useRef<GameWsClient | null>(null)
+  const sdkTargetOriginRef = React.useRef<string>('*')
   const activeRoomIdRef = React.useRef<string | null>(null)
   const roomStateVersionRef = React.useRef<Map<string, number>>(new Map())
-  const channelIdFromQuery = React.useMemo(() => new URLSearchParams(location.search).get('channelId'), [location.search])
+  const sdkSessionIdRef = React.useRef<string | null>(null)
+  const sharePickerResolverRef = React.useRef<((selection: ShareSelection | null) => void) | null>(null)
+  const [sharePickerIntent, setSharePickerIntent] = React.useState<{ action: ShareAction } | null>(null)
+  const [sharePickerBusy, setSharePickerBusy] = React.useState(false)
+  const channelIdFromQuery = React.useMemo(() => normalizeOptionalID(new URLSearchParams(location.search).get('channelId')), [location.search])
   const sdkTargetOrigin = React.useMemo(() => {
     if (!playUrl) return '*'
     try {
@@ -970,6 +1007,29 @@ export const GamePlayerPage: React.FC = () => {
       return '*'
     }
   }, [playUrl])
+
+  React.useEffect(() => {
+    sdkTargetOriginRef.current = sdkTargetOrigin
+  }, [sdkTargetOrigin])
+
+  React.useEffect(() => {
+    sdkSessionIdRef.current = sdkSessionId
+  }, [sdkSessionId])
+
+  const resolveSharePicker = React.useCallback((selection: ShareSelection | null) => {
+    const resolver = sharePickerResolverRef.current
+    sharePickerResolverRef.current = null
+    setSharePickerBusy(false)
+    setSharePickerIntent(null)
+    resolver?.(selection)
+  }, [])
+
+  React.useEffect(() => {
+    return () => {
+      sharePickerResolverRef.current?.(null)
+      sharePickerResolverRef.current = null
+    }
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -1005,7 +1065,7 @@ export const GamePlayerPage: React.FC = () => {
   }, [])
 
   React.useEffect(() => {
-    if (!token || !gameId) {
+    if (!token || !gameId || !playUrl) {
       return
     }
     const wsClient = new GameWsClient(token)
@@ -1017,7 +1077,7 @@ export const GamePlayerPage: React.FC = () => {
           type: 'GOPORTAL_GAME_EVENT',
           payload: event,
         },
-        sdkTargetOrigin,
+        sdkTargetOriginRef.current,
       )
     }
     const handleRoomEvent = async (event: GameRoomRealtimeEvent) => {
@@ -1071,7 +1131,7 @@ export const GamePlayerPage: React.FC = () => {
         gameWsRef.current = null
       }
     }
-  }, [gameId, sdkTargetOrigin, token])
+  }, [gameId, playUrl, token])
 
   const toggleFullscreen = React.useCallback(async () => {
     const node = playerContainerRef.current
@@ -1107,15 +1167,7 @@ export const GamePlayerPage: React.FC = () => {
       targetOrigin: string
       data?: unknown
       error?: string
-      errorCode?:
-        | 'ERR_BAD_REQUEST'
-        | 'ERR_TIMEOUT'
-        | 'ERR_UNAUTHORIZED'
-        | 'ERR_CHANNEL_REQUIRED'
-        | 'ERR_ROOM_REQUIRED'
-        | 'ERR_NOT_READY'
-        | 'ERR_UNSUPPORTED_ACTION'
-        | 'ERR_INTERNAL'
+      errorCode?: SDKErrorCode
       retryable?: boolean
     }) => {
       iframeRef.current?.contentWindow?.postMessage(
@@ -1131,6 +1183,57 @@ export const GamePlayerPage: React.FC = () => {
         },
         params.targetOrigin,
       )
+    }
+
+    const sendSDKEvent = (payload: Record<string, unknown>, targetOrigin: string) => {
+      iframeRef.current?.contentWindow?.postMessage(
+        {
+          type: 'GOPORTAL_GAME_EVENT',
+          payload,
+        },
+        targetOrigin,
+      )
+    }
+
+    const sendShareStatusEvent = (params: {
+      requestId: string
+      action: ShareAction
+      status: 'opened' | 'submitted' | 'shared' | 'cancelled' | 'failed'
+      targetOrigin: string
+      sessionId?: string
+      eventId?: string
+      channelId?: string
+      serverId?: string
+      error?: string
+    }) => {
+      sendSDKEvent(
+        {
+          event_id: `share-status-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          event_type: 'gop.sdk.share_status',
+          request_id: params.requestId,
+          share_action: params.action,
+          status: params.status,
+          session_id: params.sessionId,
+          game_event_id: params.eventId,
+          channel_id: params.channelId,
+          server_id: params.serverId,
+          error: params.error,
+          occurred_at: new Date().toISOString(),
+        },
+        params.targetOrigin,
+      )
+    }
+
+    const requestShareSelection = async (action: ShareAction): Promise<ShareSelection | null> => {
+      if (sharePickerResolverRef.current) {
+        sharePickerResolverRef.current(null)
+        sharePickerResolverRef.current = null
+      }
+      setSharePickerBusy(false)
+      setSharePickerIntent({ action })
+      return new Promise((resolve) => {
+        sharePickerResolverRef.current = resolve
+      })
     }
 
     const onMessage = (event: MessageEvent) => {
@@ -1150,7 +1253,7 @@ export const GamePlayerPage: React.FC = () => {
       const protocolVersion = typeof payload.protocol_version === 'string' ? payload.protocol_version : '1.0'
       const responseOrigin = sdkTargetOrigin === '*' ? event.origin || '*' : sdkTargetOrigin
 
-      const fail = (message: string, errorCode: Parameters<typeof sendResponse>[0]['errorCode'], retryable = false) => {
+      const fail = (message: string, errorCode: SDKErrorCode, retryable = false) => {
         sendResponse({
           requestId,
           ok: false,
@@ -1160,6 +1263,17 @@ export const GamePlayerPage: React.FC = () => {
           errorCode,
           retryable,
         })
+      }
+
+      const ensureSession = async (channelId?: string): Promise<string> => {
+        const currentSessionId = sdkSessionIdRef.current
+        if (currentSessionId) {
+          return currentSessionId
+        }
+        const session = await startGameSession(gameId, { channel_id: channelId, metadata: { source: 'game-sdk' } })
+        sdkSessionIdRef.current = session.id
+        setSdkSessionId(session.id)
+        return session.id
       }
 
       const run = async () => {
@@ -1174,11 +1288,13 @@ export const GamePlayerPage: React.FC = () => {
               context: {
                 game_id: gameId,
                 channel_id: channelIdFromQuery ?? undefined,
+                user_id: currentUserId || undefined,
               },
               capabilities: {
                 share_score: true,
                 share_achievement: true,
                 share_game: true,
+                share_session_start: true,
                 rooms: true,
                 room_state_sync: true,
               },
@@ -1188,14 +1304,16 @@ export const GamePlayerPage: React.FC = () => {
         }
         if (action === 'init') {
           const session = await startGameSession(gameId, {
-            channel_id: body.channel_id ?? channelIdFromQuery ?? undefined,
-            room_id: body.room_id ?? undefined,
+            channel_id: normalizeOptionalID(body.channel_id) ?? channelIdFromQuery,
+            room_id: normalizeOptionalID(body.room_id),
             metadata: body.metadata,
           })
-          if (typeof body.room_id === 'string' && body.room_id) {
-            activeRoomIdRef.current = body.room_id
-            gameWsRef.current?.subscribeRoom(body.room_id)
+          const roomId = normalizeOptionalID(body.room_id)
+          if (roomId) {
+            activeRoomIdRef.current = roomId
+            gameWsRef.current?.subscribeRoom(roomId)
           }
+          sdkSessionIdRef.current = session.id
           setSdkSessionId(session.id)
           sendResponse({
             requestId,
@@ -1206,92 +1324,223 @@ export const GamePlayerPage: React.FC = () => {
           })
           return
         }
-        if (action === 'shareScore') {
-          const sessionId =
-            sdkSessionId ??
-            (await startGameSession(gameId, { channel_id: body.channel_id ?? channelIdFromQuery ?? undefined })).id
-          setSdkSessionId(sessionId)
-          const eventCreated = await createGameEvent(gameId, sessionId, {
-            event_type: 'score',
-            idempotency_key: body.idempotency_key,
-            score: body.score,
-            payload: body.payload,
-          })
-          const targetChannelId = body.channel_id ?? channelIdFromQuery
-          if (targetChannelId && body.share !== false) {
-            await shareGameToChannel(gameId, {
-              channel_id: targetChannelId,
-              session_id: sessionId,
-              event_id: eventCreated.id,
-              share_type: 'score',
-              score: body.score,
-              comment: body.comment,
+        if (action === 'shareScore' || action === 'shareAchievement' || action === 'shareGame' || action === 'shareSessionStart') {
+          const shareAction = action as ShareAction
+          const shareEnabled = body.share !== false
+          let selection: ShareSelection | null = null
+          let targetChannelId = normalizeOptionalID(body.channel_id) ?? channelIdFromQuery
+
+          try {
+            if (shareEnabled && !targetChannelId) {
+              sendShareStatusEvent({
+                requestId,
+                action: shareAction,
+                status: 'opened',
+                targetOrigin: responseOrigin,
+              })
+              selection = await requestShareSelection(shareAction)
+              if (!selection) {
+                sendShareStatusEvent({
+                  requestId,
+                  action: shareAction,
+                  status: 'cancelled',
+                  targetOrigin: responseOrigin,
+                })
+                fail('Share cancelled by user', 'ERR_BAD_REQUEST', false)
+                return
+              }
+              targetChannelId = selection.channelId
+            }
+
+            if (shareEnabled && targetChannelId) {
+              sendShareStatusEvent({
+                requestId,
+                action: shareAction,
+                status: 'submitted',
+                targetOrigin: responseOrigin,
+                channelId: targetChannelId,
+                serverId: selection?.serverId,
+              })
+            }
+
+            if (shareAction === 'shareScore') {
+              const sessionId = await ensureSession(targetChannelId)
+              const eventCreated = await createGameEvent(gameId, sessionId, {
+                event_type: 'score',
+                idempotency_key: body.idempotency_key,
+                score: body.score,
+                payload: body.payload,
+              })
+              const shared = Boolean(shareEnabled && targetChannelId)
+              if (shared && targetChannelId) {
+                await shareGameToChannel(gameId, {
+                  channel_id: targetChannelId,
+                  session_id: sessionId,
+                  event_id: eventCreated.id,
+                  share_type: 'score',
+                  score: body.score,
+                  comment: body.comment,
+                })
+              }
+              if (shared) {
+                sendShareStatusEvent({
+                  requestId,
+                  action: shareAction,
+                  status: 'shared',
+                  targetOrigin: responseOrigin,
+                  sessionId,
+                  eventId: eventCreated.id,
+                  channelId: targetChannelId,
+                  serverId: selection?.serverId,
+                })
+              }
+              sendResponse({
+                requestId,
+                ok: true,
+                protocolVersion: '2.0',
+                targetOrigin: responseOrigin,
+                data: {
+                  event_id: eventCreated.id,
+                  session_id: sessionId,
+                  share_action: shareAction,
+                  shared,
+                  share_status: shared ? 'shared' : 'skipped',
+                  target: targetChannelId ? { channel_id: targetChannelId, server_id: selection?.serverId } : undefined,
+                },
+              })
+              return
+            }
+
+            if (shareAction === 'shareAchievement') {
+              const sessionId = await ensureSession(targetChannelId)
+              const eventCreated = await createGameEvent(gameId, sessionId, {
+                event_type: 'achievement',
+                idempotency_key: body.idempotency_key,
+                achievement_code: body.achievement_code,
+                achievement_title: body.achievement_title,
+                payload: body.payload,
+              })
+              const shared = Boolean(shareEnabled && targetChannelId)
+              if (shared && targetChannelId) {
+                await shareGameToChannel(gameId, {
+                  channel_id: targetChannelId,
+                  session_id: sessionId,
+                  event_id: eventCreated.id,
+                  share_type: 'achievement',
+                  achievement: body.achievement_title ?? body.achievement_code,
+                  comment: body.comment,
+                })
+              }
+              if (shared) {
+                sendShareStatusEvent({
+                  requestId,
+                  action: shareAction,
+                  status: 'shared',
+                  targetOrigin: responseOrigin,
+                  sessionId,
+                  eventId: eventCreated.id,
+                  channelId: targetChannelId,
+                  serverId: selection?.serverId,
+                })
+              }
+              sendResponse({
+                requestId,
+                ok: true,
+                protocolVersion: '2.0',
+                targetOrigin: responseOrigin,
+                data: {
+                  event_id: eventCreated.id,
+                  session_id: sessionId,
+                  share_action: shareAction,
+                  shared,
+                  share_status: shared ? 'shared' : 'skipped',
+                  target: targetChannelId ? { channel_id: targetChannelId, server_id: selection?.serverId } : undefined,
+                },
+              })
+              return
+            }
+
+            if (shareAction === 'shareGame') {
+              const shared = Boolean(shareEnabled && targetChannelId)
+              if (shared && targetChannelId) {
+                await shareGameToChannel(gameId, {
+                  channel_id: targetChannelId,
+                  share_type: 'game',
+                  comment: body.comment,
+                })
+                sendShareStatusEvent({
+                  requestId,
+                  action: shareAction,
+                  status: 'shared',
+                  targetOrigin: responseOrigin,
+                  channelId: targetChannelId,
+                  serverId: selection?.serverId,
+                })
+              }
+              sendResponse({
+                requestId,
+                ok: true,
+                protocolVersion: '2.0',
+                targetOrigin: responseOrigin,
+                data: {
+                  share_action: shareAction,
+                  shared,
+                  share_status: shared ? 'shared' : 'skipped',
+                  target: targetChannelId ? { channel_id: targetChannelId, server_id: selection?.serverId } : undefined,
+                },
+              })
+              return
+            }
+
+            const sessionId = await ensureSession(targetChannelId)
+            const shared = Boolean(shareEnabled && targetChannelId)
+            if (shared && targetChannelId) {
+              await shareGameToChannel(gameId, {
+                channel_id: targetChannelId,
+                session_id: sessionId,
+                share_type: 'game',
+                comment: body.comment,
+              })
+              sendShareStatusEvent({
+                requestId,
+                action: shareAction,
+                status: 'shared',
+                targetOrigin: responseOrigin,
+                sessionId,
+                channelId: targetChannelId,
+                serverId: selection?.serverId,
+              })
+            }
+            sendResponse({
+              requestId,
+              ok: true,
+              protocolVersion: '2.0',
+              targetOrigin: responseOrigin,
+              data: {
+                session_id: sessionId,
+                share_action: shareAction,
+                shared,
+                share_status: shared ? 'shared' : 'skipped',
+                target: targetChannelId ? { channel_id: targetChannelId, server_id: selection?.serverId } : undefined,
+              },
             })
-          }
-          sendResponse({
-            requestId,
-            ok: true,
-            protocolVersion: '2.0',
-            targetOrigin: responseOrigin,
-            data: { event_id: eventCreated.id, session_id: sessionId },
-          })
-          return
-        }
-        if (action === 'shareAchievement') {
-          const sessionId =
-            sdkSessionId ??
-            (await startGameSession(gameId, { channel_id: body.channel_id ?? channelIdFromQuery ?? undefined })).id
-          setSdkSessionId(sessionId)
-          const eventCreated = await createGameEvent(gameId, sessionId, {
-            event_type: 'achievement',
-            idempotency_key: body.idempotency_key,
-            achievement_code: body.achievement_code,
-            achievement_title: body.achievement_title,
-            payload: body.payload,
-          })
-          const targetChannelId = body.channel_id ?? channelIdFromQuery
-          if (targetChannelId && body.share !== false) {
-            await shareGameToChannel(gameId, {
-              channel_id: targetChannelId,
-              session_id: sessionId,
-              event_id: eventCreated.id,
-              share_type: 'achievement',
-              achievement: body.achievement_title ?? body.achievement_code,
-              comment: body.comment,
-            })
-          }
-          sendResponse({
-            requestId,
-            ok: true,
-            protocolVersion: '2.0',
-            targetOrigin: responseOrigin,
-            data: { event_id: eventCreated.id, session_id: sessionId },
-          })
-          return
-        }
-        if (action === 'shareGame') {
-          const targetChannelId = body.channel_id ?? channelIdFromQuery
-          if (!targetChannelId) {
-            fail('channel_id is required to share game card', 'ERR_CHANNEL_REQUIRED', false)
             return
+          } catch (err) {
+            sendShareStatusEvent({
+              requestId,
+              action: shareAction,
+              status: 'failed',
+              targetOrigin: responseOrigin,
+              channelId: targetChannelId,
+              serverId: selection?.serverId,
+              error: err instanceof Error ? err.message : 'Share failed',
+            })
+            throw err
           }
-          await shareGameToChannel(gameId, {
-            channel_id: targetChannelId,
-            share_type: 'game',
-            comment: body.comment,
-          })
-          sendResponse({
-            requestId,
-            ok: true,
-            protocolVersion: '2.0',
-            targetOrigin: responseOrigin,
-            data: {},
-          })
-          return
         }
         if (action === 'createRoom') {
           const room = await createGameRoom(gameId, {
-            channel_id: body.channel_id ?? channelIdFromQuery ?? undefined,
+            channel_id: normalizeOptionalID(body.channel_id) ?? channelIdFromQuery,
             room_name: body.room_name,
             max_players: body.max_players,
           })
@@ -1382,30 +1631,32 @@ export const GamePlayerPage: React.FC = () => {
           return
         }
         if (action === 'sendState') {
-          const sessionId = sdkSessionId
-          if (!sessionId) {
-            fail('SDK session is not initialized', 'ERR_NOT_READY', false)
-            return
-          }
           if (typeof body.room_id !== 'string' || !body.room_id) {
             fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
             return
           }
-          const eventCreated = await createGameEvent(gameId, sessionId, {
-            event_type: 'state',
-            idempotency_key: body.idempotency_key,
-            payload: {
-              room_id: body.room_id,
-              state: body.state,
-              state_version: body.state_version,
-            },
+          const roomID = body.room_id.trim()
+          const stateVersion = Number(body.state_version ?? 0)
+          activeRoomIdRef.current = roomID
+          gameWsRef.current?.subscribeRoom(roomID)
+          const published = gameWsRef.current?.publishState({
+            game_id: gameId,
+            room_id: roomID,
+            state: body.state,
+            state_version: stateVersion,
+            room_status: 'open',
+            channel_id: channelIdFromQuery ?? undefined,
           })
+          if (!published) {
+            fail('Realtime socket is not connected', 'ERR_INTERNAL', true)
+            return
+          }
           sendResponse({
             requestId,
             ok: true,
             protocolVersion: '2.0',
             targetOrigin: responseOrigin,
-            data: { event_id: eventCreated.id },
+            data: { event_id: `ws-${Date.now()}` },
           })
           return
         }
@@ -1420,7 +1671,7 @@ export const GamePlayerPage: React.FC = () => {
     return () => {
       window.removeEventListener('message', onMessage)
     }
-  }, [channelIdFromQuery, gameId, sdkSessionId, sdkTargetOrigin])
+  }, [channelIdFromQuery, currentUserId, gameId, sdkTargetOrigin])
 
   if (error) {
     return <div className="p-6 text-sm text-red-500">{error}</div>
@@ -1482,6 +1733,17 @@ export const GamePlayerPage: React.FC = () => {
           />
         </div>
       </div>
+      <GameSharePickerDialog
+        open={Boolean(sharePickerIntent)}
+        action={(sharePickerIntent?.action as SharePickerAction | undefined) ?? null}
+        loading={sharePickerBusy}
+        preferredChannelId={channelIdFromQuery}
+        onCancel={() => resolveSharePicker(null)}
+        onConfirm={(selection) => {
+          setSharePickerBusy(true)
+          resolveSharePicker(selection)
+        }}
+      />
     </div>
   )
 }
@@ -1512,6 +1774,7 @@ export const QuickGamesLauncher: React.FC<{
             <Gamepad2 className="h-4 w-4" />
             Quick Games Launcher
           </DialogTitle>
+          <DialogDescription>Pick a trending game to open immediately.</DialogDescription>
         </DialogHeader>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading games...</div>

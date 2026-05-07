@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/sagiri/goportal/game-realtime/internal/domain"
 )
@@ -115,9 +116,14 @@ func (m *Manager) readLoop(c *connection) {
 			return
 		}
 		var msg struct {
-			Type   string          `json:"type"`
-			RoomID string          `json:"room_id"`
-			Data   json.RawMessage `json:"data"`
+			Type         string          `json:"type"`
+			RoomID       string          `json:"room_id"`
+			GameID       string          `json:"game_id"`
+			StateVersion int64           `json:"state_version"`
+			RoomStatus   string          `json:"room_status"`
+			ChannelID    *string         `json:"channel_id,omitempty"`
+			State        json.RawMessage `json:"state"`
+			Data         json.RawMessage `json:"data"`
 		}
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			continue
@@ -135,6 +141,54 @@ func (m *Manager) readLoop(c *connection) {
 				delete(c.subscribed, roomID)
 				c.mu.Unlock()
 			}
+		case "publish.state":
+			roomID := strings.TrimSpace(msg.RoomID)
+			gameID := strings.TrimSpace(msg.GameID)
+			if roomID == "" || gameID == "" {
+				continue
+			}
+			roomStatus := strings.TrimSpace(strings.ToLower(msg.RoomStatus))
+			if roomStatus == "" {
+				roomStatus = "open"
+			}
+			event := domain.GameRoomRealtimeEvent{
+				EventID:       uuid.NewString(),
+				EventType:     "GAME_ROOM_STATE_UPDATED",
+				OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+				GameID:        gameID,
+				RoomID:        roomID,
+				ActorUserID:   c.userID,
+				MemberUserIDs: []string{},
+				ChannelID:     msg.ChannelID,
+				RoomStatus:    roomStatus,
+				StateVersion:  msg.StateVersion,
+				State:         msg.State,
+			}
+			m.broadcastToSubscribedRoom(context.Background(), event)
+		}
+	}
+}
+
+func (m *Manager) broadcastToSubscribedRoom(ctx context.Context, event domain.GameRoomRealtimeEvent) {
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	envelope := domain.OutboundEnvelope{
+		Type:      "game.room.event",
+		EventID:   event.EventID,
+		Timestamp: event.OccurredAt,
+		Payload:   raw,
+	}
+	for _, client := range m.allClients() {
+		if !client.isSubscribed(event.RoomID) {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			_ = client.write(envelope)
 		}
 	}
 }
@@ -195,6 +249,18 @@ func (m *Manager) clientsForUser(userID string) []*connection {
 	result := make([]*connection, 0, len(clients))
 	for client := range clients {
 		result = append(result, client)
+	}
+	return result
+}
+
+func (m *Manager) allClients() []*connection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*connection, 0, 16)
+	for _, clients := range m.users {
+		for client := range clients {
+			result = append(result, client)
+		}
 	}
 	return result
 }

@@ -46,6 +46,7 @@ await sdk.ready()
 - `sdk.commands.shareScore(payload)`
 - `sdk.commands.shareAchievement(payload)`
 - `sdk.commands.shareGame(payload)`
+- `sdk.commands.shareSessionStart(payload)`
 - `sdk.commands.createRoom(payload)`
 - `sdk.commands.joinRoom({ room_id })`
 - `sdk.commands.leaveRoom({ room_id })`
@@ -74,6 +75,9 @@ sdk.on('*', (event) => {
 })
 ```
 
+Share workflow status can be observed via `event.event_type === 'gop.sdk.share_status'` with statuses:
+`opened`, `submitted`, `shared`, `cancelled`, `failed`.
+
 SDK nhan event qua `postMessage` tu host app shell (`GOPORTAL_GAME_EVENT`).
 
 ## 5) Error model
@@ -96,3 +100,8 @@ Loi command tra ve `GoPortalSDKError` co:
 - SDK v2 tiep tuc dung `postMessage` giua iframe game va app shell.
 - Neu game chay doc lap ngoai GoPortal, request se timeout do khong co host bridge.
 - Khuyen nghi pin version SDK va theo migration guide khi nang cap major.
+
+## 8) Frontend handbook
+
+- Frontend integration guide (EN/VI): `docs/sdk/frontend-integration-guide.md`
+- Migration guide: `docs/sdk/migration-v1-to-v2.md`
