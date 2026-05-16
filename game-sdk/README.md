@@ -53,6 +53,15 @@ await sdk.ready()
 - `sdk.commands.subscribeRoom({ room_id })`
 - `sdk.commands.getRoomState({ room_id })`
 - `sdk.commands.sendState({ room_id, state, state_version, idempotency_key })`
+- `sdk.commands.updateRoom({ room_id, is_joinable?, invite_params?, metadata? })`
+- `sdk.commands.leftRoom({ room_id? })`
+- `sdk.commands.getUser()`
+- `sdk.commands.showAuthPrompt({ mode?, reason? })`
+- `sdk.commands.dataGet({ key })`
+- `sdk.commands.dataSet({ key, value })`
+- `sdk.commands.dataRemove({ key })`
+- `sdk.commands.submitScore({ leaderboard_id, score, metadata? })`
+- `sdk.commands.getLeaderboard({ leaderboard_id, scope?, limit? })`
 
 ### Legacy-style (tuong thich nguoc)
 

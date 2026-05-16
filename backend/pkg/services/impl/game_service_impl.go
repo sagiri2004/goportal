@@ -670,7 +670,7 @@ func (s *gameService) ShareToChannel(ctx context.Context, actorID string, input 
 	if err != nil {
 		return err
 	}
-	if err := assertGameVisibleForActor(game, actorID); err != nil {
+	if err := assertGamePlayableForActor(game, actorID); err != nil {
 		return err
 	}
 	channelID := strings.TrimSpace(input.ChannelID)
@@ -706,6 +706,12 @@ func (s *gameService) ShareToChannel(ctx context.Context, actorID string, input 
 	if input.EventID != nil {
 		payload["event_id"] = strings.TrimSpace(*input.EventID)
 	}
+	if input.RoomID != nil {
+		payload["room_id"] = strings.TrimSpace(*input.RoomID)
+	}
+	if v := normalizeOptionalText(input.RoomName); v != nil {
+		payload["room_name"] = *v
+	}
 	contentRaw, err := json.Marshal(payload)
 	if err != nil {
 		return apperr.E("INTERNAL_ERROR", err)
@@ -725,7 +731,7 @@ func (s *gameService) CreateRoom(ctx context.Context, actorID string, input serv
 	if err != nil {
 		return nil, err
 	}
-	if err := assertGameVisibleForActor(game, actorID); err != nil {
+	if err := assertGamePlayableForActor(game, actorID); err != nil {
 		return nil, err
 	}
 	now := time.Now().Unix()
@@ -763,6 +769,37 @@ func (s *gameService) CreateRoom(ctx context.Context, actorID string, input serv
 	}
 	s.emitRoomMemberEvent(ctx, room, []models.GameRoomMember{*member}, "GAME_ROOM_CREATED", actorID)
 	return &services.GameRoomResponse{Room: *room, Members: []models.GameRoomMember{*member}}, nil
+}
+
+func (s *gameService) ListOpenRooms(ctx context.Context, actorID string, filter services.GameRoomListFilter) ([]services.GameRoomResponse, error) {
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(filter.GameID))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertGamePlayableForActor(game, actorID); err != nil {
+		return nil, err
+	}
+	rooms, err := s.repo.ListOpenRoomsByGameID(ctx, game.ID, filter.Limit, filter.Offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]services.GameRoomResponse, 0, len(rooms))
+	for i := range rooms {
+		members, listErr := s.repo.ListRoomMembers(ctx, repositories.GameRoomMemberFilter{
+			RoomID:     rooms[i].ID,
+			OnlyJoined: true,
+			Limit:      64,
+			Offset:     0,
+		})
+		if listErr != nil {
+			return nil, listErr
+		}
+		result = append(result, services.GameRoomResponse{
+			Room:    rooms[i],
+			Members: members,
+		})
+	}
+	return result, nil
 }
 
 func (s *gameService) JoinRoom(ctx context.Context, actorID, gameID, roomID string) (*services.GameRoomResponse, error) {
@@ -1178,6 +1215,19 @@ func assertGameVisibleForActor(game *models.UserGame, actorID string) error {
 		return apperr.E("GAME_NOT_AVAILABLE", nil)
 	}
 	if game.PublishState != models.GamePublishStatePublished && game.OwnerUserID != actorID {
+		return apperr.E("GAME_NOT_AVAILABLE", nil)
+	}
+	if game.Visibility == models.GameVisibilityPrivate && game.OwnerUserID != actorID {
+		return apperr.E("GAME_FORBIDDEN", nil)
+	}
+	return nil
+}
+
+func assertGamePlayableForActor(game *models.UserGame, actorID string) error {
+	if game == nil {
+		return apperr.E("GAME_NOT_FOUND", nil)
+	}
+	if game.Status != models.GameStatusPublished {
 		return apperr.E("GAME_NOT_AVAILABLE", nil)
 	}
 	if game.Visibility == models.GameVisibilityPrivate && game.OwnerUserID != actorID {

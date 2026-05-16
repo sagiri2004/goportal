@@ -124,6 +124,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		gamesAuth.POST("/:id/sessions/:sessionId/events", v1.Game.AddSessionEvent)
 		gamesAuth.POST("/:id/share", v1.Game.ShareToChannel)
 		gamesAuth.POST("/:id/rooms", v1.Game.CreateRoom)
+		gamesAuth.GET("/:id/rooms/open", v1.Game.ListOpenRooms)
 		gamesAuth.POST("/:id/rooms/:roomId/join", v1.Game.JoinRoom)
 		gamesAuth.POST("/:id/rooms/:roomId/leave", v1.Game.LeaveRoom)
 		gamesAuth.GET("/:id/rooms/:roomId/state", v1.Game.RoomState)

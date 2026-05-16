@@ -361,7 +361,9 @@ export const shareGameToChannel = async (
     channel_id: string
     session_id?: string
     event_id?: string
-    share_type?: 'game' | 'score' | 'achievement'
+    share_type?: 'game' | 'score' | 'achievement' | 'room'
+    room_id?: string
+    room_name?: string
     score?: number
     achievement?: string
     comment?: string
@@ -383,6 +385,11 @@ export const leaveGameRoom = async (gameId: string, roomId: string): Promise<Gam
 
 export const getGameRoomState = async (gameId: string, roomId: string): Promise<GameRoomStateDTO> =>
   apiClient.get(`/api/v1/games/${gameId}/rooms/${roomId}/state`)
+
+export const listOpenGameRooms = async (
+  gameId: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<GameRoomStateDTO[]> => apiClient.get(`/api/v1/games/${gameId}/rooms/open${toSearchParams(params)}`)
 
 const getToken = (): string | null => {
   const token = useAuthStore.getState().token

@@ -6,6 +6,8 @@ export {
   type SDKContext,
   type SDKErrorCode,
   type SDKHandshakeData,
+  type SDKLeaderboardResult,
   type SDKShareAction,
   type SDKShareResult,
+  type SDKUserProfile,
 } from './types'

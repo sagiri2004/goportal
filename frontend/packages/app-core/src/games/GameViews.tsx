@@ -19,6 +19,7 @@ import {
   submitGameForReview,
   joinGameRoom,
   getGameRoomState,
+  listOpenGameRooms,
   uploadMedia,
   uploadGameBuild,
   GameWsClient,
@@ -974,7 +975,7 @@ export const GamePlayerPage: React.FC = () => {
     | 'ERR_UNSUPPORTED_ACTION'
     | 'ERR_INTERNAL'
 
-  type ShareAction = 'shareScore' | 'shareAchievement' | 'shareGame' | 'shareSessionStart'
+  type ShareAction = 'shareScore' | 'shareAchievement' | 'shareGame' | 'shareSessionStart' | 'shareRoom'
   type ShareSelection = { serverId: string; channelId: string }
 
   const { gameId = '' } = useParams<{ gameId: string }>()
@@ -994,11 +995,13 @@ export const GamePlayerPage: React.FC = () => {
   const sdkTargetOriginRef = React.useRef<string>('*')
   const activeRoomIdRef = React.useRef<string | null>(null)
   const roomStateVersionRef = React.useRef<Map<string, number>>(new Map())
+  const roomInviteParamsRef = React.useRef<Map<string, unknown>>(new Map())
   const sdkSessionIdRef = React.useRef<string | null>(null)
   const sharePickerResolverRef = React.useRef<((selection: ShareSelection | null) => void) | null>(null)
   const [sharePickerIntent, setSharePickerIntent] = React.useState<{ action: ShareAction } | null>(null)
   const [sharePickerBusy, setSharePickerBusy] = React.useState(false)
   const channelIdFromQuery = React.useMemo(() => normalizeOptionalID(new URLSearchParams(location.search).get('channelId')), [location.search])
+  const roomIdFromQuery = React.useMemo(() => normalizeOptionalID(new URLSearchParams(location.search).get('roomId')), [location.search])
   const sdkTargetOrigin = React.useMemo(() => {
     if (!playUrl) return '*'
     try {
@@ -1159,6 +1162,24 @@ export const GamePlayerPage: React.FC = () => {
     )
   }, [isMuted])
 
+  const emitJoinRoomIntent = React.useCallback(() => {
+    if (!roomIdFromQuery) {
+      return
+    }
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'GOPORTAL_GAME_EVENT',
+        payload: {
+          event_id: `join-intent-${Date.now()}`,
+          event_type: 'gop.sdk.join_room_intent',
+          room_id: roomIdFromQuery,
+          occurred_at: new Date().toISOString(),
+        },
+      },
+      sdkTargetOriginRef.current,
+    )
+  }, [roomIdFromQuery])
+
   React.useEffect(() => {
     const sendResponse = (params: {
       requestId: string
@@ -1277,6 +1298,21 @@ export const GamePlayerPage: React.FC = () => {
       }
 
       const run = async () => {
+        const storageUserKey = currentUserId || 'guest'
+        const dataKeyPrefix = `goportal:sdk:data:${gameId}:${storageUserKey}:`
+        const leaderboardStorageKey = `goportal:sdk:leaderboard:${gameId}`
+        const parseLeaderboard = () => {
+          try {
+            const raw = window.localStorage.getItem(leaderboardStorageKey)
+            return raw ? (JSON.parse(raw) as Record<string, Array<Record<string, unknown>>>) : {}
+          } catch {
+            return {}
+          }
+        }
+        const saveLeaderboard = (value: Record<string, Array<Record<string, unknown>>>) => {
+          window.localStorage.setItem(leaderboardStorageKey, JSON.stringify(value))
+        }
+
         if (action === 'handshake' || action === 'ready') {
           sendResponse({
             requestId,
@@ -1297,6 +1333,11 @@ export const GamePlayerPage: React.FC = () => {
                 share_session_start: true,
                 rooms: true,
                 room_state_sync: true,
+                user_profile: true,
+                cloud_data: true,
+                leaderboard: true,
+                room_presence: true,
+                join_room_intent: true,
               },
             },
           })
@@ -1324,7 +1365,7 @@ export const GamePlayerPage: React.FC = () => {
           })
           return
         }
-        if (action === 'shareScore' || action === 'shareAchievement' || action === 'shareGame' || action === 'shareSessionStart') {
+        if (action === 'shareScore' || action === 'shareAchievement' || action === 'shareGame' || action === 'shareSessionStart' || action === 'shareRoom') {
           const shareAction = action as ShareAction
           const shareEnabled = body.share !== false
           let selection: ShareSelection | null = null
@@ -1460,12 +1501,14 @@ export const GamePlayerPage: React.FC = () => {
               return
             }
 
-            if (shareAction === 'shareGame') {
+            if (shareAction === 'shareGame' || shareAction === 'shareRoom') {
               const shared = Boolean(shareEnabled && targetChannelId)
               if (shared && targetChannelId) {
                 await shareGameToChannel(gameId, {
                   channel_id: targetChannelId,
-                  share_type: 'game',
+                  share_type: shareAction === 'shareRoom' ? 'room' : 'game',
+                  room_id: typeof body.room_id === 'string' ? body.room_id : undefined,
+                  room_name: typeof body.room_name === 'string' ? body.room_name : undefined,
                   comment: body.comment,
                 })
                 sendShareStatusEvent({
@@ -1556,6 +1599,20 @@ export const GamePlayerPage: React.FC = () => {
           })
           return
         }
+        if (action === 'listOpenRooms') {
+          const rooms = await listOpenGameRooms(gameId, {
+            limit: Number(body.limit ?? 20),
+            offset: Number(body.offset ?? 0),
+          })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: rooms,
+          })
+          return
+        }
         if (action === 'joinRoom') {
           if (typeof body.room_id !== 'string' || !body.room_id) {
             fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
@@ -1592,6 +1649,188 @@ export const GamePlayerPage: React.FC = () => {
             protocolVersion: '2.0',
             targetOrigin: responseOrigin,
             data: room,
+          })
+          return
+        }
+        if (action === 'updateRoom') {
+          if (typeof body.room_id !== 'string' || !body.room_id) {
+            fail('room_id is required', 'ERR_ROOM_REQUIRED', false)
+            return
+          }
+          const roomID = body.room_id.trim()
+          roomInviteParamsRef.current.set(roomID, {
+            is_joinable: body.is_joinable !== false,
+            invite_params: body.invite_params ?? null,
+            metadata: body.metadata ?? null,
+          })
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { updated: true, room_id: roomID },
+          })
+          return
+        }
+        if (action === 'leftRoom') {
+          const roomID = typeof body.room_id === 'string' ? body.room_id.trim() : activeRoomIdRef.current
+          if (roomID) {
+            roomInviteParamsRef.current.delete(roomID)
+            if (activeRoomIdRef.current === roomID) {
+              activeRoomIdRef.current = null
+            }
+          }
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { left: true },
+          })
+          return
+        }
+        if (action === 'getUser') {
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: {
+              user_id: currentUserId || 'guest',
+              display_name: currentUserId ? `User ${currentUserId.slice(0, 8)}` : 'Guest',
+              avatar_url: undefined,
+              is_guest: !currentUserId,
+            },
+          })
+          return
+        }
+        if (action === 'showAuthPrompt') {
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: {
+              success: Boolean(currentUserId),
+              user: {
+                user_id: currentUserId || 'guest',
+                display_name: currentUserId ? `User ${currentUserId.slice(0, 8)}` : 'Guest',
+                avatar_url: undefined,
+                is_guest: !currentUserId,
+              },
+            },
+          })
+          return
+        }
+        if (action === 'dataGet') {
+          const key = typeof body.key === 'string' ? body.key.trim() : ''
+          if (!key) {
+            fail('key is required', 'ERR_BAD_REQUEST', false)
+            return
+          }
+          const raw = window.localStorage.getItem(`${dataKeyPrefix}${key}`)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: raw
+              ? { key, found: true, value: JSON.parse(raw) }
+              : { key, found: false },
+          })
+          return
+        }
+        if (action === 'dataSet') {
+          const key = typeof body.key === 'string' ? body.key.trim() : ''
+          if (!key) {
+            fail('key is required', 'ERR_BAD_REQUEST', false)
+            return
+          }
+          window.localStorage.setItem(`${dataKeyPrefix}${key}`, JSON.stringify(body.value ?? null))
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { ok: true },
+          })
+          return
+        }
+        if (action === 'dataRemove') {
+          const key = typeof body.key === 'string' ? body.key.trim() : ''
+          if (!key) {
+            fail('key is required', 'ERR_BAD_REQUEST', false)
+            return
+          }
+          window.localStorage.removeItem(`${dataKeyPrefix}${key}`)
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { ok: true },
+          })
+          return
+        }
+        if (action === 'submitScore') {
+          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : ''
+          const score = Number(body.score ?? NaN)
+          if (!leaderboardID || Number.isNaN(score)) {
+            fail('leaderboard_id and score are required', 'ERR_BAD_REQUEST', false)
+            return
+          }
+          const allBoards = parseLeaderboard()
+          const list = Array.isArray(allBoards[leaderboardID]) ? allBoards[leaderboardID] : []
+          list.push({
+            user_id: currentUserId || 'guest',
+            display_name: currentUserId ? `User ${currentUserId.slice(0, 8)}` : 'Guest',
+            score,
+            metadata: body.metadata ?? null,
+            created_at: new Date().toISOString(),
+          })
+          list.sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
+          allBoards[leaderboardID] = list.slice(0, 200)
+          saveLeaderboard(allBoards)
+          const rank = allBoards[leaderboardID].findIndex((item) => item.user_id === (currentUserId || 'guest') && Number(item.score) === score) + 1
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: { accepted: true, rank: rank > 0 ? rank : undefined },
+          })
+          return
+        }
+        if (action === 'getLeaderboard') {
+          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : ''
+          if (!leaderboardID) {
+            fail('leaderboard_id is required', 'ERR_BAD_REQUEST', false)
+            return
+          }
+          const scope = body.scope === 'friends' || body.scope === 'channel' ? body.scope : 'global'
+          const limit = Math.max(1, Math.min(100, Number(body.limit ?? 20)))
+          const allBoards = parseLeaderboard()
+          const list = Array.isArray(allBoards[leaderboardID]) ? allBoards[leaderboardID] : []
+          const entries = list.slice(0, limit).map((item, idx) => ({
+            rank: idx + 1,
+            user_id: String(item.user_id ?? 'guest'),
+            display_name: typeof item.display_name === 'string' ? item.display_name : undefined,
+            score: Number(item.score ?? 0),
+            metadata: item.metadata,
+            created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
+          }))
+          const me = entries.find((item) => item.user_id === (currentUserId || 'guest'))
+          sendResponse({
+            requestId,
+            ok: true,
+            protocolVersion: '2.0',
+            targetOrigin: responseOrigin,
+            data: {
+              leaderboard_id: leaderboardID,
+              scope,
+              entries,
+              me,
+            },
           })
           return
         }
@@ -1728,6 +1967,7 @@ export const GamePlayerPage: React.FC = () => {
             ref={iframeRef}
             src={playUrl}
             title={title}
+            onLoad={() => emitJoinRoomIntent()}
             className="h-[calc(100vh-10rem)] w-full bg-background"
             sandbox="allow-scripts allow-forms allow-pointer-lock allow-popups allow-same-origin"
           />

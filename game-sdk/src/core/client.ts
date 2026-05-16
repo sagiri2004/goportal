@@ -5,18 +5,31 @@ import {
   type SDKContext,
   type SDKCreateRoomPayload,
   type SDKEventPayload,
+  type SDKDataGetPayload,
+  type SDKDataRemovePayload,
+  type SDKDataSetPayload,
+  type SDKDataValueResult,
+  type SDKGetLeaderboardPayload,
+  type SDKListOpenRoomsPayload,
   type SDKGetStatePayload,
   type SDKHandshakeData,
+  type SDKLeaderboardResult,
+  type SDKLeftRoomPayload,
+  type SDKAuthPromptPayload,
   type SDKInitPayload,
   type SDKJoinLeaveRoomPayload,
   type SDKReadyOptions,
   type SDKResponseEnvelope,
   type SDKShareResult,
+  type SDKShareRoomPayload,
   type SDKSendStatePayload,
+  type SDKSubmitScorePayload,
   type SDKShareAchievementPayload,
   type SDKShareGamePayload,
   type SDKShareSessionStartPayload,
   type SDKShareScorePayload,
+  type SDKUpdateRoomPayload,
+  type SDKUserProfile,
 } from '../types'
 
 type PendingRequest = {
@@ -95,6 +108,11 @@ export class GoPortalSDKClient {
         share_session_start: false,
         rooms: false,
         room_state_sync: false,
+        user_profile: false,
+        cloud_data: false,
+        leaderboard: false,
+        room_presence: false,
+        join_room_intent: false,
       }
     )
   }
@@ -113,6 +131,11 @@ export class GoPortalSDKClient {
           share_session_start: Boolean(data.capabilities?.share_session_start),
           rooms: Boolean(data.capabilities?.rooms),
           room_state_sync: Boolean(data.capabilities?.room_state_sync),
+          user_profile: Boolean(data.capabilities?.user_profile),
+          cloud_data: Boolean(data.capabilities?.cloud_data),
+          leaderboard: Boolean(data.capabilities?.leaderboard),
+          room_presence: Boolean(data.capabilities?.room_presence),
+          join_room_intent: Boolean(data.capabilities?.join_room_intent),
         },
         context: data.context ?? {},
       }
@@ -146,6 +169,10 @@ export class GoPortalSDKClient {
     return this.command<SDKShareSessionStartPayload, SDKShareResult>('shareSessionStart', payload)
   }
 
+  async shareRoom(payload: SDKShareRoomPayload) {
+    return this.command<SDKShareRoomPayload, SDKShareResult>('shareRoom', payload)
+  }
+
   async createRoom(payload: SDKCreateRoomPayload = {}) {
     return this.command<SDKCreateRoomPayload, unknown>('createRoom', payload)
   }
@@ -166,6 +193,10 @@ export class GoPortalSDKClient {
     return this.command<SDKGetStatePayload, unknown>('getRoomState', { room_id: roomId })
   }
 
+  async listOpenRooms(payload: SDKListOpenRoomsPayload = {}) {
+    return this.command<SDKListOpenRoomsPayload, unknown[]>('listOpenRooms', payload)
+  }
+
   async sendState(roomId: string, state: unknown, stateVersion?: number, idempotencyKey?: string) {
     return this.command<SDKSendStatePayload, { event_id: string }>('sendState', {
       room_id: roomId,
@@ -173,6 +204,42 @@ export class GoPortalSDKClient {
       state_version: stateVersion,
       idempotency_key: idempotencyKey,
     })
+  }
+
+  async updateRoom(payload: SDKUpdateRoomPayload) {
+    return this.command<SDKUpdateRoomPayload, { updated: boolean; room_id: string }>('updateRoom', payload)
+  }
+
+  async leftRoom(payload: SDKLeftRoomPayload = {}) {
+    return this.command<SDKLeftRoomPayload, { left: boolean }>('leftRoom', payload)
+  }
+
+  async getUser() {
+    return this.command<Record<string, never>, SDKUserProfile>('getUser', {})
+  }
+
+  async showAuthPrompt(payload: SDKAuthPromptPayload = {}) {
+    return this.command<SDKAuthPromptPayload, { success: boolean; user?: SDKUserProfile }>('showAuthPrompt', payload)
+  }
+
+  async dataGet(key: string) {
+    return this.command<SDKDataGetPayload, SDKDataValueResult>('dataGet', { key })
+  }
+
+  async dataSet(key: string, value: unknown) {
+    return this.command<SDKDataSetPayload, { ok: boolean }>('dataSet', { key, value })
+  }
+
+  async dataRemove(key: string) {
+    return this.command<SDKDataRemovePayload, { ok: boolean }>('dataRemove', { key })
+  }
+
+  async submitScore(payload: SDKSubmitScorePayload) {
+    return this.command<SDKSubmitScorePayload, { accepted: boolean; rank?: number }>('submitScore', payload)
+  }
+
+  async getLeaderboard(payload: SDKGetLeaderboardPayload) {
+    return this.command<SDKGetLeaderboardPayload, SDKLeaderboardResult>('getLeaderboard', payload)
   }
 
   on(eventType: string, handler: Listener): () => void {
@@ -195,13 +262,28 @@ export class GoPortalSDKClient {
       shareGame: (payload?: SDKShareGamePayload) => this.command<SDKShareGamePayload, SDKShareResult>('shareGame', payload ?? {}),
       shareSessionStart: (payload?: SDKShareSessionStartPayload) =>
         this.command<SDKShareSessionStartPayload, SDKShareResult>('shareSessionStart', payload ?? {}),
+      shareRoom: (payload: SDKShareRoomPayload) => this.command<SDKShareRoomPayload, SDKShareResult>('shareRoom', payload),
       createRoom: (payload?: SDKCreateRoomPayload) => this.command<SDKCreateRoomPayload, unknown>('createRoom', payload ?? {}),
       joinRoom: (payload: SDKJoinLeaveRoomPayload) => this.command<SDKJoinLeaveRoomPayload, unknown>('joinRoom', payload),
       leaveRoom: (payload: SDKJoinLeaveRoomPayload) => this.command<SDKJoinLeaveRoomPayload, unknown>('leaveRoom', payload),
       subscribeRoom: (payload: SDKJoinLeaveRoomPayload) =>
         this.command<SDKJoinLeaveRoomPayload, { subscribed: boolean; room_id: string }>('subscribeRoom', payload),
       getRoomState: (payload: SDKGetStatePayload) => this.command<SDKGetStatePayload, unknown>('getRoomState', payload),
+      listOpenRooms: (payload?: SDKListOpenRoomsPayload) => this.command<SDKListOpenRoomsPayload, unknown[]>('listOpenRooms', payload ?? {}),
       sendState: (payload: SDKSendStatePayload) => this.command<SDKSendStatePayload, { event_id: string }>('sendState', payload),
+      updateRoom: (payload: SDKUpdateRoomPayload) =>
+        this.command<SDKUpdateRoomPayload, { updated: boolean; room_id: string }>('updateRoom', payload),
+      leftRoom: (payload?: SDKLeftRoomPayload) => this.command<SDKLeftRoomPayload, { left: boolean }>('leftRoom', payload ?? {}),
+      getUser: () => this.command<Record<string, never>, SDKUserProfile>('getUser', {}),
+      showAuthPrompt: (payload?: SDKAuthPromptPayload) =>
+        this.command<SDKAuthPromptPayload, { success: boolean; user?: SDKUserProfile }>('showAuthPrompt', payload ?? {}),
+      dataGet: (payload: SDKDataGetPayload) => this.command<SDKDataGetPayload, SDKDataValueResult>('dataGet', payload),
+      dataSet: (payload: SDKDataSetPayload) => this.command<SDKDataSetPayload, { ok: boolean }>('dataSet', payload),
+      dataRemove: (payload: SDKDataRemovePayload) => this.command<SDKDataRemovePayload, { ok: boolean }>('dataRemove', payload),
+      submitScore: (payload: SDKSubmitScorePayload) =>
+        this.command<SDKSubmitScorePayload, { accepted: boolean; rank?: number }>('submitScore', payload),
+      getLeaderboard: (payload: SDKGetLeaderboardPayload) =>
+        this.command<SDKGetLeaderboardPayload, SDKLeaderboardResult>('getLeaderboard', payload),
     }
   }
 

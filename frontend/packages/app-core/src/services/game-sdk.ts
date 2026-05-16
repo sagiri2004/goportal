@@ -34,6 +34,11 @@ type SDKCapabilities = {
   share_session_start?: boolean
   rooms: boolean
   room_state_sync: boolean
+  user_profile?: boolean
+  cloud_data?: boolean
+  leaderboard?: boolean
+  room_presence?: boolean
+  join_room_intent?: boolean
 }
 
 export class GoPortalSDKServiceError extends Error {
@@ -57,6 +62,11 @@ export class GoPortalGameSDK {
     share_game: true,
     rooms: true,
     room_state_sync: true,
+    user_profile: true,
+    cloud_data: true,
+    leaderboard: true,
+    room_presence: true,
+    join_room_intent: true,
   }
   private readonly protocolVersion = '2.0'
 
@@ -209,6 +219,84 @@ export class GoPortalGameSDK {
     return room
   }
 
+  async updateRoom(payload: { room_id: string; is_joinable?: boolean; invite_params?: Record<string, unknown>; metadata?: unknown }) {
+    return { updated: true, ...payload }
+  }
+
+  async leftRoom(_payload: { room_id?: string } = {}) {
+    return { left: true }
+  }
+
+  async getUser() {
+    const userId = this.channelId ? `user-${this.channelId}` : 'guest'
+    return {
+      user_id: userId,
+      display_name: userId,
+      is_guest: userId === 'guest',
+    }
+  }
+
+  async showAuthPrompt() {
+    const user = await this.getUser()
+    return { success: true, user }
+  }
+
+  async dataGet(key: string) {
+    const storageKey = `goportal:sdk:data:${this.gameId}:${key}`
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) {
+      return { key, found: false }
+    }
+    return { key, found: true, value: JSON.parse(raw) }
+  }
+
+  async dataSet(key: string, value: unknown) {
+    const storageKey = `goportal:sdk:data:${this.gameId}:${key}`
+    window.localStorage.setItem(storageKey, JSON.stringify(value))
+    return { ok: true }
+  }
+
+  async dataRemove(key: string) {
+    const storageKey = `goportal:sdk:data:${this.gameId}:${key}`
+    window.localStorage.removeItem(storageKey)
+    return { ok: true }
+  }
+
+  async submitScore(payload: { leaderboard_id: string; score: number; metadata?: unknown }) {
+    const storageKey = `goportal:sdk:leaderboard:${this.gameId}:${payload.leaderboard_id}`
+    const raw = window.localStorage.getItem(storageKey)
+    const rows = raw ? (JSON.parse(raw) as Array<{ user_id: string; display_name: string; score: number; metadata?: unknown; created_at: string }>) : []
+    const user = await this.getUser()
+    rows.push({
+      user_id: user.user_id,
+      display_name: user.display_name ?? user.user_id,
+      score: payload.score,
+      metadata: payload.metadata,
+      created_at: new Date().toISOString(),
+    })
+    rows.sort((a, b) => b.score - a.score)
+    window.localStorage.setItem(storageKey, JSON.stringify(rows.slice(0, 200)))
+    const rank = rows.findIndex((item) => item.user_id === user.user_id && item.score === payload.score) + 1
+    return { accepted: true, rank: rank > 0 ? rank : undefined }
+  }
+
+  async getLeaderboard(payload: { leaderboard_id: string; scope?: 'global' | 'friends' | 'channel'; limit?: number }) {
+    const storageKey = `goportal:sdk:leaderboard:${this.gameId}:${payload.leaderboard_id}`
+    const raw = window.localStorage.getItem(storageKey)
+    const rows = raw ? (JSON.parse(raw) as Array<{ user_id: string; display_name: string; score: number; metadata?: unknown; created_at: string }>) : []
+    const entries = rows.slice(0, Math.max(1, Math.min(payload.limit ?? 20, 100))).map((item, idx) => ({
+      rank: idx + 1,
+      user_id: item.user_id,
+      display_name: item.display_name,
+      score: item.score,
+      metadata: item.metadata,
+      created_at: item.created_at,
+    }))
+    const meUser = await this.getUser()
+    const me = entries.find((item) => item.user_id === meUser.user_id)
+    return { leaderboard_id: payload.leaderboard_id, scope: payload.scope ?? 'global', entries, me }
+  }
+
   on<K extends keyof SDKEventMap>(event: K, listener: SDKListener<SDKEventMap[K]>): () => void {
     const key = String(event)
     const next = this.listeners[key] ?? []
@@ -270,6 +358,17 @@ export class GoPortalGameSDK {
         }),
       getRoomState: (payload: { room_id: string }) => this.getRoomState(payload.room_id),
       sendState: (payload: { room_id: string; state: unknown; state_version?: number }) => this.sendState(payload),
+      updateRoom: (payload: { room_id: string; is_joinable?: boolean; invite_params?: Record<string, unknown>; metadata?: unknown }) =>
+        this.updateRoom(payload),
+      leftRoom: (payload?: { room_id?: string }) => this.leftRoom(payload ?? {}),
+      getUser: () => this.getUser(),
+      showAuthPrompt: () => this.showAuthPrompt(),
+      dataGet: (payload: { key: string }) => this.dataGet(payload.key),
+      dataSet: (payload: { key: string; value: unknown }) => this.dataSet(payload.key, payload.value),
+      dataRemove: (payload: { key: string }) => this.dataRemove(payload.key),
+      submitScore: (payload: { leaderboard_id: string; score: number; metadata?: unknown }) => this.submitScore(payload),
+      getLeaderboard: (payload: { leaderboard_id: string; scope?: 'global' | 'friends' | 'channel'; limit?: number }) =>
+        this.getLeaderboard(payload),
     }
   }
 }
