@@ -10,7 +10,7 @@ import {
   Input,
   Label,
 } from '@goportal/ui'
-import { Hash, Volume2 } from 'lucide-react'
+import { Hash, Radio, Volume2 } from 'lucide-react'
 import type { CreateChannelRequest } from '@goportal/types'
 
 type CreateChannelModalProps = {
@@ -24,14 +24,19 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
   onOpenChange,
   onCreate,
 }) => {
-  const [channelType, setChannelType] = useState<'TEXT' | 'VOICE'>('TEXT')
+  const [channelType, setChannelType] = useState<'TEXT' | 'VOICE' | 'LIVESTREAM'>('TEXT')
   const [name, setName] = useState('')
   const [nameError, setNameError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const placeholder = useMemo(
-    () => (channelType === 'TEXT' ? 'text-channel' : 'voice-channel'),
+    () =>
+      channelType === 'TEXT'
+        ? 'text-channel'
+        : channelType === 'VOICE'
+          ? 'voice-channel'
+          : 'livestream-channel',
     [channelType],
   )
 
@@ -109,7 +114,7 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
             <Label htmlFor="channel-name">
               Loại Kênh
             </Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setChannelType('TEXT')}
@@ -133,6 +138,18 @@ export const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
               >
                 <Volume2 className="h-4 w-4" />
                 <span className="text-sm font-medium">Voice Channel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannelType('LIVESTREAM')}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                  channelType === 'LIVESTREAM'
+                    ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Radio className="h-4 w-4" />
+                <span className="text-sm font-medium">Livestream</span>
               </button>
             </div>
           </div>

@@ -6,9 +6,20 @@ type StartStreamRequest struct {
 	RTMPURL string `json:"rtmp_url" binding:"required"`
 }
 
+type LivestreamTokenRequest struct {
+	Mode string `json:"mode"`
+}
+
 type VoiceTokenResponse struct {
 	Token string `json:"token"`
 	URL   string `json:"url"`
+}
+
+type LivestreamStateResponse struct {
+	ChannelID     string                                   `json:"channel_id"`
+	Participants  []models.VoiceChannelParticipantSnapshot `json:"participants"`
+	ViewerCount   int                                      `json:"viewer_count"`
+	StreamerCount int                                      `json:"streamer_count"`
 }
 
 type RecordingResponse struct {

@@ -12,7 +12,7 @@ export type MockServer = {
 export type MockChannel = {
     id: string;
     name: string;
-    type: 'text' | 'voice';
+    type: 'text' | 'voice' | 'livestream';
     unread: number;
     activeMembers?: Array<{
         id: string;

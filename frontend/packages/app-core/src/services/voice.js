@@ -1,5 +1,7 @@
 import { apiClient } from '../lib/api-client';
 export const getVoiceToken = async (channelId) => apiClient.post(`/api/v1/channels/${channelId}/voice/token`);
+export const getLivestreamToken = async (channelId, mode = 'viewer') => apiClient.post(`/api/v1/channels/${channelId}/livestream/token`, { mode });
+export const getLivestreamState = async (channelId) => apiClient.get(`/api/v1/channels/${channelId}/livestream/state`);
 export const listVoiceParticipants = async (channelId) => apiClient.get(`/api/v1/channels/${channelId}/voice/participants`);
 export const startChannelRecording = async (channelId) => apiClient.post(`/api/v1/channels/${channelId}/recording/start`);
 export const stopChannelRecording = async (channelId) => apiClient.post(`/api/v1/channels/${channelId}/recording/stop`);

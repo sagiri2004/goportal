@@ -2,6 +2,7 @@ export type VoiceTokenResponse = {
     token: string;
     url: string;
 };
+export type LivestreamMode = 'viewer' | 'streamer';
 export type RecordingItem = {
     id: string;
     channel_id: string;
@@ -23,7 +24,15 @@ export type VoiceParticipantSnapshot = {
     avatar_url?: string;
     is_screen_sharing?: boolean;
 };
+export type LivestreamStateResponse = {
+    channel_id: string;
+    participants: VoiceParticipantSnapshot[];
+    viewer_count: number;
+    streamer_count: number;
+};
 export declare const getVoiceToken: (channelId: string) => Promise<VoiceTokenResponse>;
+export declare const getLivestreamToken: (channelId: string, mode?: LivestreamMode) => Promise<VoiceTokenResponse>;
+export declare const getLivestreamState: (channelId: string) => Promise<LivestreamStateResponse>;
 export declare const listVoiceParticipants: (channelId: string) => Promise<{
     items: VoiceParticipantSnapshot[];
 }>;

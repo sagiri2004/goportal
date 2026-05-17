@@ -26,6 +26,7 @@ type messageService struct {
 	repo        repositories.MessageRepository
 	serverRepo  repositories.ServerRepository
 	channelRepo repositories.ChannelRepository
+	tournamentRepo repositories.TournamentRepository
 	userRepo    repositories.UserRepository
 	storage     services.StorageService
 	publisher   message.Publisher
@@ -40,6 +41,7 @@ func NewMessageService(
 	repo repositories.MessageRepository,
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
+	tournamentRepo repositories.TournamentRepository,
 	userRepo repositories.UserRepository,
 	storage services.StorageService,
 	publisher message.Publisher,
@@ -48,10 +50,53 @@ func NewMessageService(
 		repo:        repo,
 		serverRepo:  serverRepo,
 		channelRepo: channelRepo,
+		tournamentRepo: tournamentRepo,
 		userRepo:    userRepo,
 		storage:     storage,
 		publisher:   publisher,
 	}
+}
+
+func (s *messageService) canAccessTournamentPrivateChannelByRole(ctx context.Context, actorID, channelID string) (bool, error) {
+	if s.tournamentRepo == nil {
+		return false, nil
+	}
+	workspace, err := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok && ae.Code == "TOURNAMENT_WORKSPACE_NOT_FOUND" {
+			return false, nil
+		}
+		return false, err
+	}
+	tournament, err := s.tournamentRepo.FindTournamentByID(ctx, workspace.TournamentID)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(tournament.CreatedBy) == strings.TrimSpace(actorID) {
+		return true, nil
+	}
+	roles, err := s.tournamentRepo.ListRoles(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	roleByID := make(map[string]string, len(roles))
+	for i := range roles {
+		roleByID[roles[i].ID] = strings.TrimSpace(roles[i].Code)
+	}
+	bindings, err := s.tournamentRepo.ListRoleBindings(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	for i := range bindings {
+		if strings.TrimSpace(bindings[i].UserID) != strings.TrimSpace(actorID) {
+			continue
+		}
+		code := roleByID[bindings[i].RoleID]
+		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *messageService) CreateMessage(ctx context.Context, input services.CreateMessageInput) (*models.Message, error) {
@@ -86,7 +131,13 @@ func (s *messageService) CreateMessage(ctx context.Context, input services.Creat
 			return nil, err
 		}
 		if !isMember {
-			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			canOverride, overrideErr := s.canAccessTournamentPrivateChannelByRole(ctx, input.AuthorID, channel.ID)
+			if overrideErr != nil {
+				return nil, overrideErr
+			}
+			if !canOverride {
+				return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			}
 		}
 	}
 
@@ -253,7 +304,13 @@ func (s *messageService) ListByChannel(
 			return nil, err
 		}
 		if !isMember {
-			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			canOverride, overrideErr := s.canAccessTournamentPrivateChannelByRole(ctx, actorID, channel.ID)
+			if overrideErr != nil {
+				return nil, overrideErr
+			}
+			if !canOverride {
+				return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			}
 		}
 	}
 
@@ -447,7 +504,13 @@ func (s *messageService) ToggleReaction(ctx context.Context, actorID, messageID,
 			return false, err
 		}
 		if !isMember {
-			return false, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			canOverride, overrideErr := s.canAccessTournamentPrivateChannelByRole(ctx, actorID, channel.ID)
+			if overrideErr != nil {
+				return false, overrideErr
+			}
+			if !canOverride {
+				return false, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			}
 		}
 	}
 

@@ -14,7 +14,7 @@ export type MockServer = {
 export type MockChannel = {
   id: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   unread: number
   activeMembers?: Array<{
     id: string
@@ -179,6 +179,14 @@ export const mockChannelsData: ChannelDTO[] = [
     name: 'voice-lounge',
     type: 'VOICE',
     position: 2,
+    is_private: false,
+  },
+  {
+    id: 'c6',
+    server_id: 's1',
+    name: 'live-main',
+    type: 'LIVESTREAM',
+    position: 3,
     is_private: false,
   },
   {

@@ -613,6 +613,20 @@ export const TournamentDetailPage: React.FC = () => {
 
   const submitMatch = async (override = false) => {
     if (!tournament || !selectedMatch || !winnerId) return
+    const roleCodeById = new Map(roles.map((role) => [role.id, role.code]))
+    const actorRoleCodes = new Set(
+      roleBindings
+        .filter((binding) => binding.user_id === currentUser?.id)
+        .map((binding) => roleCodeById.get(binding.role_id))
+        .filter((code): code is string => Boolean(code)),
+    )
+    const canJudge =
+      selectedMatch.status === 'in_progress' &&
+      (canManage || actorRoleCodes.has('admin') || actorRoleCodes.has('referee'))
+    if (!canJudge && !override) {
+      setMatchSubmitError('Bạn không có quyền báo cáo kết quả trận này.')
+      return
+    }
     try {
       if (override) {
         await overrideTournamentMatchResult(tournament.id, selectedMatch.id, {
@@ -765,6 +779,23 @@ export const TournamentDetailPage: React.FC = () => {
     return roleBindings.filter((item) => item.role_id === role.id)
   }, [bindingRoleFilter, roleBindings, roles])
 
+  const roleCodeById = useMemo(() => {
+    const map = new Map<string, string>()
+    roles.forEach((role) => map.set(role.id, role.code))
+    return map
+  }, [roles])
+
+  const currentUserTournamentRoleCodes = useMemo(() => {
+    if (!currentUser?.id) return new Set<string>()
+    const set = new Set<string>()
+    roleBindings.forEach((binding) => {
+      if (binding.user_id !== currentUser.id) return
+      const code = roleCodeById.get(binding.role_id)
+      if (code) set.add(code)
+    })
+    return set
+  }, [currentUser?.id, roleBindings, roleCodeById])
+
   if (loading) {
     return (
       <div className="space-y-4 p-4">
@@ -787,11 +818,14 @@ export const TournamentDetailPage: React.FC = () => {
   const statusMeta = TOURNAMENT_STATUS_META[tournament.status]
   const formatMeta = TOURNAMENT_FORMAT_META[tournament.format]
 
-  const canReport = Boolean(
+  const canJudgeMatchResult = Boolean(
     selectedMatch &&
-    myParticipant &&
-    selectedMatch.status === 'in_progress' &&
-    (selectedMatch.participant1?.id === myParticipant.id || selectedMatch.participant2?.id === myParticipant.id),
+      selectedMatch.status === 'in_progress' &&
+      (
+        canManage ||
+        currentUserTournamentRoleCodes.has('admin') ||
+        currentUserTournamentRoleCodes.has('referee')
+      ),
   )
 
   return (
@@ -1118,7 +1152,7 @@ export const TournamentDetailPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-              {(canReport || canManage) && (
+              {canJudgeMatchResult && (
                 <div className="space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
                   <Label>Winner</Label>
                   <select value={winnerId} onChange={(e) => setWinnerId(e.target.value)} className="h-10 w-full rounded-md border border-white/10 bg-zinc-900/80 px-3 text-sm">
@@ -1127,7 +1161,9 @@ export const TournamentDetailPage: React.FC = () => {
                     {selectedMatch.participant2 && <option value={selectedMatch.participant2.id}>{getName(selectedMatch.participant2)}</option>}
                   </select>
                   <div className="grid grid-cols-2 gap-2"><Input type="number" value={score1} onChange={(e) => setScore1(e.target.value)} /><Input type="number" value={score2} onChange={(e) => setScore2(e.target.value)} /></div>
-                  {canManage && <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Lý do override" />}
+                  {canManage && selectedMatch?.status === 'completed' && (
+                    <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Lý do override" />
+                  )}
                   {matchSubmitError && <p className="text-sm text-rose-300">{matchSubmitError}</p>}
                   {startMatchNote && <p className="text-sm text-emerald-300">{startMatchNote}</p>}
                 </div>
@@ -1140,8 +1176,18 @@ export const TournamentDetailPage: React.FC = () => {
                 <Play className="mr-2 h-4 w-4" />Start Match
               </Button>
             )}
-            {(canReport || canManage) && <Button type="button" onClick={() => void submitMatch(false)}><Swords className="mr-2 h-4 w-4" />Báo cáo kết quả</Button>}
-            {canManage && <Button type="button" variant="outline" onClick={() => void submitMatch(true)}><Crown className="mr-2 h-4 w-4" />Override</Button>}
+            {canJudgeMatchResult && (
+              <Button type="button" onClick={() => void submitMatch(false)}>
+                <Swords className="mr-2 h-4 w-4" />
+                {canManage ? 'Cập nhật kết quả' : 'Báo cáo kết quả'}
+              </Button>
+            )}
+            {canManage && selectedMatch && selectedMatch.status === 'completed' && (
+              <Button type="button" variant="outline" onClick={() => void submitMatch(true)}>
+                <Crown className="mr-2 h-4 w-4" />
+                Override kết quả
+              </Button>
+            )}
             <Button type="button" variant="ghost" onClick={() => setMatchModalOpen(false)}>Đóng</Button>
           </DialogFooter>
         </DialogContent>

@@ -102,7 +102,7 @@ export type ServerErrorCode = typeof SERVER_ERROR_CODES[keyof typeof SERVER_ERRO
 export type ChannelDTO = {
   id:         string
   server_id:  string
-  type:       'TEXT' | 'VOICE'
+  type:       'TEXT' | 'VOICE' | 'LIVESTREAM'
   name:       string
   position:   number
   is_private: boolean
@@ -112,7 +112,7 @@ export type ChannelDTO = {
 
 export type CreateChannelRequest = {
   name:       string
-  type:       'TEXT' | 'VOICE'
+  type:       'TEXT' | 'VOICE' | 'LIVESTREAM'
   parent_id?: string | null
   position?:  number
 }
@@ -372,6 +372,7 @@ export type TournamentDTO = {
   created_by: string
   started_at?: number | null
   completed_at?: number | null
+  tournament_general_channel_id?: string | null
   created_at: number
   updated_at: number
 }
@@ -502,7 +503,9 @@ export type TournamentMatchWorkspaceDTO = {
   team_b_channel_id: string
   caster_channel_id: string
   admin_channel_id: string
+  referee_channel_id?: string
   spectator_channel_id: string
+  livestream_channel_id?: string | null
   created_by: string
   created_at: number
 }
@@ -517,4 +520,5 @@ export type TournamentObserverTokenBundleDTO = {
   team_a: TournamentObserverTokenDTO
   team_b: TournamentObserverTokenDTO
   caster?: TournamentObserverTokenDTO | null
+  spectator?: TournamentObserverTokenDTO | null
 }

@@ -9,7 +9,12 @@ type ChannelsResult = {
 const mapChannel = (channel: ChannelDTO): MockChannel => ({
   id: channel.id,
   name: channel.name,
-  type: channel.type === 'VOICE' ? 'voice' : 'text',
+  type:
+    channel.type === 'VOICE'
+      ? 'voice'
+      : channel.type === 'LIVESTREAM'
+        ? 'livestream'
+        : 'text',
   unread: channel.unread_count ?? 0,
 })
 
@@ -22,6 +27,10 @@ const toCategories = (channels: ChannelDTO[]): MockCategory[] => {
 
   const voiceChannels = sorted
     .filter((channel) => channel.type === 'VOICE')
+    .map(mapChannel)
+
+  const livestreamChannels = sorted
+    .filter((channel) => channel.type === 'LIVESTREAM')
     .map(mapChannel)
 
   const categories: MockCategory[] = []
@@ -38,6 +47,14 @@ const toCategories = (channels: ChannelDTO[]): MockCategory[] => {
       id: 'voice',
       name: 'Voice Channels',
       channels: voiceChannels,
+    })
+  }
+
+  if (livestreamChannels.length > 0) {
+    categories.push({
+      id: 'livestream',
+      name: 'Livestream Channels',
+      channels: livestreamChannels,
     })
   }
 

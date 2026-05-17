@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	ChannelTypeText     = "TEXT"
-	ChannelTypeVoice    = "VOICE"
-	ChannelTypeCategory = "CATEGORY"
+	ChannelTypeText       = "TEXT"
+	ChannelTypeVoice      = "VOICE"
+	ChannelTypeCategory   = "CATEGORY"
+	ChannelTypeLivestream = "LIVESTREAM"
 )
 
 type ChannelType struct {

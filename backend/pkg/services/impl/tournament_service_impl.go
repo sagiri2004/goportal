@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -106,6 +107,9 @@ func (s *tournamentService) CreateTournament(ctx context.Context, actorID string
 	if err := s.repo.CreateTournament(ctx, t); err != nil {
 		return nil, err
 	}
+	if err := s.ensureTournamentGeneralChannel(ctx, t); err != nil {
+		return nil, err
+	}
 	s.publishEvent(ctx, tournamentCreatedTopic, map[string]any{
 		"event_id":      uuid.NewString(),
 		"event_type":    "TOURNAMENT_CREATED",
@@ -137,6 +141,9 @@ func (s *tournamentService) ListTournaments(ctx context.Context, actorID string,
 	if err != nil {
 		return nil, err
 	}
+	for i := range rows {
+		_ = s.ensureTournamentGeneralChannel(ctx, &rows[i])
+	}
 	page := input.Page
 	if page <= 0 {
 		page = 1
@@ -158,6 +165,7 @@ func (s *tournamentService) GetTournamentDetail(ctx context.Context, actorID, to
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	_ = s.ensureTournamentGeneralChannel(ctx, t)
 	count, err := s.repo.CountParticipants(ctx, t.ID)
 	if err != nil {
 		return nil, 0, nil, err
@@ -167,6 +175,71 @@ func (s *tournamentService) GetTournamentDetail(ctx context.Context, actorID, to
 		return nil, 0, nil, err
 	}
 	return t, count, participants, nil
+}
+
+func (s *tournamentService) ensureTournamentGeneralChannel(ctx context.Context, t *models.Tournament) error {
+	if t == nil || strings.TrimSpace(t.ID) == "" || strings.TrimSpace(t.ServerID) == "" {
+		return nil
+	}
+	if t.TournamentGeneralChannelID != nil && strings.TrimSpace(*t.TournamentGeneralChannelID) != "" {
+		return nil
+	}
+
+	slug := slugifyTournamentName(t.Name)
+	channelName := fmt.Sprintf("tournament-%s-general", slug)
+
+	channels, err := s.channelRepo.ListByServerID(ctx, t.ServerID)
+	if err != nil {
+		return err
+	}
+
+	var tournamentCategoryID *string
+	for i := range channels {
+		ch := channels[i]
+		if ch.Type != models.ChannelTypeCategory {
+			continue
+		}
+		lower := strings.ToLower(strings.TrimSpace(ch.Name))
+		if strings.Contains(lower, "tournament") || strings.Contains(lower, "giai dau") || strings.Contains(lower, "giải đấu") {
+			id := ch.ID
+			tournamentCategoryID = &id
+			break
+		}
+	}
+
+	for i := range channels {
+		ch := channels[i]
+		if ch.Type != models.ChannelTypeText || strings.TrimSpace(ch.Name) != channelName {
+			continue
+		}
+		if tournamentCategoryID != nil {
+			if ch.ParentID == nil || *ch.ParentID != *tournamentCategoryID {
+				ch.ParentID = tournamentCategoryID
+				_ = s.channelRepo.Update(ctx, &ch)
+			}
+		}
+		t.TournamentGeneralChannelID = &ch.ID
+		return s.repo.UpdateTournament(ctx, t)
+	}
+
+	general, err := s.createChannel(ctx, t.ServerID, tournamentCategoryID, models.ChannelTypeText, channelName, false)
+	if err != nil {
+		return err
+	}
+	t.TournamentGeneralChannelID = &general.ID
+	return s.repo.UpdateTournament(ctx, t)
+}
+
+var tournamentSlugRegex = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugifyTournamentName(raw string) string {
+	slug := strings.ToLower(strings.TrimSpace(raw))
+	slug = tournamentSlugRegex.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		return "main"
+	}
+	return slug
 }
 
 func (s *tournamentService) UpdateTournament(ctx context.Context, actorID, tournamentID string, input services.TournamentUpdateInput) (*models.Tournament, error) {
@@ -1067,7 +1140,25 @@ func (s *tournamentService) EnsureDefaultRoles(ctx context.Context, actorID, tou
 			return nil, err
 		}
 	}
-	return s.repo.ListRoles(ctx, t.ID)
+	roles, err := s.repo.ListRoles(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	var adminRoleID string
+	for i := range roles {
+		if roles[i].Code == models.TournamentRoleAdmin {
+			adminRoleID = roles[i].ID
+			break
+		}
+	}
+	if strings.TrimSpace(adminRoleID) != "" && strings.TrimSpace(t.CreatedBy) != "" {
+		_ = s.repo.BindRole(ctx, &models.TournamentRoleBinding{
+			TournamentID: t.ID,
+			RoleID:       adminRoleID,
+			UserID:       t.CreatedBy,
+		})
+	}
+	return roles, nil
 }
 
 func (s *tournamentService) BindRole(ctx context.Context, actorID, tournamentID, roleCode, userID string) error {
@@ -1080,6 +1171,9 @@ func (s *tournamentService) BindRole(ctx context.Context, actorID, tournamentID,
 	if roleCode == "" || userID == "" {
 		return apperr.E("MISSING_FIELDS", nil)
 	}
+	if _, err := s.EnsureDefaultRoles(ctx, actorID, t.ID); err != nil {
+		return err
+	}
 	role, err := s.repo.FindRoleByCode(ctx, t.ID, roleCode)
 	if err != nil {
 		return err
@@ -1087,11 +1181,14 @@ func (s *tournamentService) BindRole(ctx context.Context, actorID, tournamentID,
 	if _, err := s.userRepo.FindByID(ctx, userID); err != nil {
 		return err
 	}
-	return s.repo.BindRole(ctx, &models.TournamentRoleBinding{
+	if err := s.repo.BindRole(ctx, &models.TournamentRoleBinding{
 		TournamentID: t.ID,
 		RoleID:       role.ID,
 		UserID:       userID,
-	})
+	}); err != nil {
+		return err
+	}
+	return s.reseedTournamentWorkspaces(ctx, t)
 }
 
 func (s *tournamentService) UnbindRole(ctx context.Context, actorID, tournamentID, roleCode, userID string) error {
@@ -1103,7 +1200,26 @@ func (s *tournamentService) UnbindRole(ctx context.Context, actorID, tournamentI
 	if err != nil {
 		return err
 	}
-	return s.repo.DeleteRoleBinding(ctx, t.ID, role.ID, strings.TrimSpace(userID))
+	if err := s.repo.DeleteRoleBinding(ctx, t.ID, role.ID, strings.TrimSpace(userID)); err != nil {
+		return err
+	}
+	return s.reseedTournamentWorkspaces(ctx, t)
+}
+
+func (s *tournamentService) reseedTournamentWorkspaces(ctx context.Context, t *models.Tournament) error {
+	workspaces, err := s.repo.ListMatchWorkspaces(ctx, t.ID)
+	if err != nil {
+		return err
+	}
+	for i := range workspaces {
+		match, mErr := s.repo.FindMatchByID(ctx, t.ID, workspaces[i].MatchID)
+		if mErr != nil {
+			continue
+		}
+		_ = s.seedWorkspaceMembers(ctx, t.ID, match, &workspaces[i])
+		_ = s.seedRoleMembers(ctx, t.ServerID, t.ID, match, &workspaces[i])
+	}
+	return nil
 }
 
 func (s *tournamentService) ListRoleBindings(ctx context.Context, actorID, tournamentID string) ([]models.TournamentRoleBinding, error) {
@@ -1155,7 +1271,7 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 	if err != nil {
 		return nil, err
 	}
-	admin, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeVoice, fmt.Sprintf("admin-%s", channelSuffix), true)
+	referee, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeVoice, fmt.Sprintf("referee-%s", channelSuffix), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1163,17 +1279,24 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 	if err != nil {
 		return nil, err
 	}
+	livestream, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeLivestream, fmt.Sprintf("live-%s", channelSuffix), false)
+	if err != nil {
+		return nil, err
+	}
+	livestreamID := livestream.ID
 	workspace := &models.TournamentMatchWorkspace{
-		TournamentID:       t.ID,
-		MatchID:            matchID,
-		ServerID:           t.ServerID,
-		CategoryChannelID:  category.ID,
-		TeamAChannelID:     teamA.ID,
-		TeamBChannelID:     teamB.ID,
-		CasterChannelID:    caster.ID,
-		AdminChannelID:     admin.ID,
-		SpectatorChannelID: spectator.ID,
-		CreatedBy:          actorID,
+		TournamentID:        t.ID,
+		MatchID:             matchID,
+		ServerID:            t.ServerID,
+		CategoryChannelID:   category.ID,
+		TeamAChannelID:      teamA.ID,
+		TeamBChannelID:      teamB.ID,
+		CasterChannelID:     caster.ID,
+		AdminChannelID:      referee.ID,
+		RefereeChannelID:    referee.ID,
+		SpectatorChannelID:  spectator.ID,
+		LivestreamChannelID: &livestreamID,
+		CreatedBy:           actorID,
 	}
 	if err := s.repo.CreateMatchWorkspace(ctx, workspace); err != nil {
 		return nil, err
@@ -1269,11 +1392,16 @@ func (s *tournamentService) seedRoleMembers(
 			// Casters also join public spectator room to stream/commentate to audience.
 			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, bindings[i].UserID)
 		case models.TournamentRoleAdmin, models.TournamentRoleReferee:
-			_ = s.channelRepo.AddMember(ctx, workspace.AdminChannelID, bindings[i].UserID)
+			refereeChannelID := workspace.RefereeChannelID
+			if strings.TrimSpace(refereeChannelID) == "" {
+				refereeChannelID = workspace.AdminChannelID
+			}
+			_ = s.channelRepo.AddMember(ctx, refereeChannelID, bindings[i].UserID)
 			// Bridge policy: admin/referee can enter both team channels to monitor
 			// player screen-share streams directly at source.
 			_ = s.channelRepo.AddMember(ctx, workspace.TeamAChannelID, bindings[i].UserID)
 			_ = s.channelRepo.AddMember(ctx, workspace.TeamBChannelID, bindings[i].UserID)
+			_ = s.channelRepo.AddMember(ctx, workspace.CasterChannelID, bindings[i].UserID)
 			// Referee/admin can also observe public room without publishing their own screen.
 			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, bindings[i].UserID)
 		case models.TournamentRoleSpectator:
@@ -1385,7 +1513,14 @@ func (s *tournamentService) GenerateMatchObserverTokens(ctx context.Context, act
 	}
 
 	buildToken := func(channelID string) (services.TournamentObserverToken, error) {
-		token, tkErr := s.liveKitSvc.GenerateAccessToken(channelID, actorID, actor.Username, string(metadataBytes))
+		token, tkErr := s.liveKitSvc.GenerateAccessTokenWithGrant(
+			channelID,
+			actorID,
+			actor.Username,
+			string(metadataBytes),
+			false,
+			true,
+		)
 		if tkErr != nil {
 			return services.TournamentObserverToken{}, tkErr
 		}
@@ -1408,11 +1543,16 @@ func (s *tournamentService) GenerateMatchObserverTokens(ctx context.Context, act
 	if err != nil {
 		return nil, err
 	}
+	spectator, err := buildToken(workspace.SpectatorChannelID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &services.TournamentObserverTokenBundle{
-		TeamA:  teamA,
-		TeamB:  teamB,
-		Caster: &caster,
+		TeamA:     teamA,
+		TeamB:     teamB,
+		Caster:    &caster,
+		Spectator: &spectator,
 	}, nil
 }
 
@@ -1454,7 +1594,7 @@ func (s *tournamentService) canUseObserverMode(ctx context.Context, tournament *
 			continue
 		}
 		code := roleByID[bindings[i].RoleID]
-		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee {
+		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee || code == models.TournamentRoleCaster {
 			return true
 		}
 	}

@@ -85,6 +85,7 @@ type TournamentRepository interface {
 	ListRoleBindings(ctx context.Context, tournamentID string) ([]models.TournamentRoleBinding, error)
 	DeleteRoleBinding(ctx context.Context, tournamentID, roleID, userID string) error
 	FindMatchWorkspace(ctx context.Context, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error)
+	FindMatchWorkspaceByChannelID(ctx context.Context, channelID string) (*models.TournamentMatchWorkspace, error)
 	CreateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error
 	ListMatchWorkspaces(ctx context.Context, tournamentID string) ([]models.TournamentMatchWorkspace, error)
 }

@@ -5,6 +5,8 @@ export type VoiceTokenResponse = {
   url: string
 }
 
+export type LivestreamMode = 'viewer' | 'streamer'
+
 export type RecordingItem = {
   id: string
   channel_id: string
@@ -28,8 +30,24 @@ export type VoiceParticipantSnapshot = {
   is_screen_sharing?: boolean
 }
 
+export type LivestreamStateResponse = {
+  channel_id: string
+  participants: VoiceParticipantSnapshot[]
+  viewer_count: number
+  streamer_count: number
+}
+
 export const getVoiceToken = async (channelId: string): Promise<VoiceTokenResponse> =>
   apiClient.post<VoiceTokenResponse>(`/api/v1/channels/${channelId}/voice/token`)
+
+export const getLivestreamToken = async (
+  channelId: string,
+  mode: LivestreamMode = 'viewer',
+): Promise<VoiceTokenResponse> =>
+  apiClient.post<VoiceTokenResponse>(`/api/v1/channels/${channelId}/livestream/token`, { mode })
+
+export const getLivestreamState = async (channelId: string): Promise<LivestreamStateResponse> =>
+  apiClient.get<LivestreamStateResponse>(`/api/v1/channels/${channelId}/livestream/state`)
 
 export const listVoiceParticipants = async (channelId: string): Promise<{ items: VoiceParticipantSnapshot[] }> =>
   apiClient.get<{ items: VoiceParticipantSnapshot[] }>(`/api/v1/channels/${channelId}/voice/participants`)

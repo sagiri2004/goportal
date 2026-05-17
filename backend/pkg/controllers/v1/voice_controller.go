@@ -40,6 +40,61 @@ func (ctrl *voiceController) GenerateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, serializers.Success("OK", "Voice token generated", serializers.NewVoiceTokenResponse(result.Token, result.URL)))
 }
 
+func (ctrl *voiceController) GenerateLivestreamToken(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	channelID := c.Param("id")
+	var req serializers.LivestreamTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+
+	result, err := containers.VoiceService().GenerateLivestreamToken(c.Request.Context(), userID, channelID, req.Mode)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, serializers.Success("OK", "Livestream token generated", serializers.NewVoiceTokenResponse(result.Token, result.URL)))
+}
+
+func (ctrl *voiceController) GetLivestreamState(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+
+	channelID := c.Param("id")
+	state, err := containers.VoiceService().GetLivestreamState(c.Request.Context(), userID, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok {
+			c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, serializers.Error("INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, serializers.Success("OK", "Livestream state fetched", serializers.LivestreamStateResponse{
+		ChannelID:     state.ChannelID,
+		Participants:  state.Participants,
+		ViewerCount:   state.ViewerCount,
+		StreamerCount: state.StreamerCount,
+	}))
+}
+
 func (ctrl *voiceController) ListParticipants(c *gin.Context) {
 	userID, err := getCurrentUserID(c)
 	if err != nil {

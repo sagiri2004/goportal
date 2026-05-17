@@ -32,11 +32,15 @@ func NewLiveKitService() services.LiveKitService {
 }
 
 func (s *liveKitService) GenerateAccessToken(channelID, userID, displayName, metadata string) (string, error) {
+	return s.GenerateAccessTokenWithGrant(channelID, userID, displayName, metadata, true, true)
+}
+
+func (s *liveKitService) GenerateAccessTokenWithGrant(channelID, userID, displayName, metadata string, canPublish, canSubscribe bool) (string, error) {
 	channelID = strings.TrimSpace(channelID)
 	userID = strings.TrimSpace(userID)
 	displayName = strings.TrimSpace(displayName)
 	metadata = strings.TrimSpace(metadata)
-	log.Printf("[voice-debug] livekit-generate-token:start channel_id=%s user_id=%s display_name=%s metadata_len=%d", channelID, userID, displayName, len(metadata))
+	log.Printf("[voice-debug] livekit-generate-token:start channel_id=%s user_id=%s display_name=%s metadata_len=%d can_publish=%t can_subscribe=%t", channelID, userID, displayName, len(metadata), canPublish, canSubscribe)
 	if channelID == "" || userID == "" {
 		log.Printf("[voice-debug] livekit-generate-token:missing-fields channel_id=%s user_id=%s", channelID, userID)
 		return "", apperr.E("MISSING_FIELDS", nil)
@@ -55,8 +59,6 @@ func (s *liveKitService) GenerateAccessToken(channelID, userID, displayName, met
 		token.SetMetadata(metadata)
 	}
 	token.SetValidFor(time.Hour)
-	canPublish := true
-	canSubscribe := true
 	token.AddGrant(&auth.VideoGrant{
 		Room:         channelID,
 		RoomJoin:     true,

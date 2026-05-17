@@ -172,3 +172,9 @@ release/
 dist-electron/
 
 .idea/
+
+.zip
+
+samples/
+
+uploads/

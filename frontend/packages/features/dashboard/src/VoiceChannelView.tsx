@@ -11,7 +11,7 @@ import {
 } from '@goportal/ui'
 import { useOutletContext } from 'react-router-dom'
 import { VideoTrack, useLocalParticipant, useParticipants, useTracks } from '@livekit/components-react'
-import { Room, Track } from 'livekit-client'
+import { Room, RoomEvent, Track } from 'livekit-client'
 import {
   Camera,
   Gamepad2,
@@ -48,7 +48,7 @@ type VoiceState = {
 type CategoryChannel = {
   id: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   activeMembers?: Array<{ id: string }>
   isLive?: boolean
 }
@@ -67,7 +67,16 @@ type ShellContext = {
   joinVoiceChannel?: (channelId: string) => Promise<void>
   requestTournamentObserverTokens?: (
     channelId: string,
-  ) => Promise<Array<{ channelId: string; channelName: string; token: string; url: string }>>
+  ) => Promise<{
+    matchId: string
+    feeds: Array<{
+      role: 'team-a' | 'team-b'
+      channelId: string
+      channelName: string
+      token: string
+      url: string
+    }>
+  } | null>
   leaveVoiceChannel: () => Promise<void>
   toggleMicrophone: () => Promise<void>
   toggleCamera: () => Promise<void>
@@ -88,9 +97,12 @@ type ParticipantTileModel = {
 }
 
 type ObserverRoomState = {
+  role: 'team-a' | 'team-b'
   channelId: string
   channelName: string
   room: Room
+  status: 'connecting' | 'live' | 'no-share' | 'disconnected' | 'error'
+  error?: string
 }
 
 const colorFromId = (id: string): string => {
@@ -122,29 +134,13 @@ const parseAvatarURL = (metadata?: string): string | undefined => {
   }
 }
 
-const normalizeTournamentVoiceRole = (name: string): 'team-a' | 'team-b' | 'admin' | 'spectator' | 'caster' | null => {
+const normalizeTournamentVoiceRole = (name: string): 'team-a' | 'team-b' | 'referee' | 'spectator' | 'caster' | null => {
   const lower = name.toLowerCase()
   if (lower.startsWith('team-a-') || lower === 'team-a-comms') return 'team-a'
   if (lower.startsWith('team-b-') || lower === 'team-b-comms') return 'team-b'
-  if (lower.startsWith('admin-') || lower === 'admin-observer') return 'admin'
+  if (lower.startsWith('referee-') || lower.startsWith('admin-') || lower === 'admin-observer' || lower === 'referee-observer') return 'referee'
   if (lower.startsWith('spectator-') || lower === 'spectator-live') return 'spectator'
   if (lower.startsWith('caster-') || lower === 'caster-booth') return 'caster'
-  return null
-}
-
-const extractMatchTag = (name: string): string | null => {
-  const lower = name.toLowerCase()
-  const match = lower.match(/(r\d+-m\d+)$/)
-  if (match?.[1]) return match[1]
-  if (
-    lower === 'team-a-comms' ||
-    lower === 'team-b-comms' ||
-    lower === 'admin-observer' ||
-    lower === 'spectator-live' ||
-    lower === 'caster-booth'
-  ) {
-    return 'legacy'
-  }
   return null
 }
 
@@ -209,7 +205,12 @@ const ParticipantTile: React.FC<{
   </div>
 )
 
-const ObserverRoomPanel: React.FC<{ room: Room; channelName: string }> = ({ room, channelName }) => {
+const ObserverRoomPanel: React.FC<{
+  room: Room
+  channelName: string
+  isMuted: boolean
+  onToggleMute: () => void
+}> = ({ room, channelName, isMuted, onToggleMute }) => {
   const remoteParticipants = useParticipants({ room })
   const videoTracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     room,
@@ -246,7 +247,16 @@ const ObserverRoomPanel: React.FC<{ room: Room; channelName: string }> = ({ room
 
   return (
     <div className="rounded-lg border border-white/10 bg-black/25 p-2">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-300">{channelName}</p>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-300">{channelName}</p>
+        <button
+          type="button"
+          onClick={onToggleMute}
+          className="rounded border border-white/15 bg-black/30 px-2 py-1 text-[10px] text-zinc-200 hover:border-cyan-400/40"
+        >
+          {isMuted ? 'Unmute feed' : 'Mute feed'}
+        </button>
+      </div>
       {participantTiles.length === 0 ? (
         <div className="rounded border border-dashed border-white/15 bg-black/30 px-3 py-4 text-xs text-zinc-400">
           Waiting for player stream...
@@ -291,10 +301,8 @@ const InviteActions: React.FC<{
 export const VoiceChannelView: React.FC = () => {
   const {
     activeChannelId,
-    activeCategories = [],
     voiceState,
     canManageVoiceTools,
-    joinVoiceChannel,
     requestTournamentObserverTokens,
     leaveVoiceChannel,
     toggleMicrophone,
@@ -312,6 +320,9 @@ export const VoiceChannelView: React.FC = () => {
   const [isFooterHovered, setIsFooterHovered] = useState(false)
   const [footerInteractionTick, setFooterInteractionTick] = useState(0)
   const [observerRooms, setObserverRooms] = useState<ObserverRoomState[]>([])
+  const [observerMuteAll, setObserverMuteAll] = useState(true)
+  const [observerMutedChannels, setObserverMutedChannels] = useState<Record<string, boolean>>({})
+  const [observerError, setObserverError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const fallbackRoomRef = useRef<Room | null>(null)
   if (!fallbackRoomRef.current) {
@@ -320,35 +331,10 @@ export const VoiceChannelView: React.FC = () => {
 
   const channelName = voiceState?.channelName ?? (activeChannelId || 'voice')
   const chatChannelId = voiceState?.channelId ?? activeChannelId
+  const observerSourceChannelId = voiceState?.channelId ?? activeChannelId
   const livekitRoom = voiceState?.room ?? fallbackRoomRef.current
-  const activeMatchTag = useMemo(() => extractMatchTag(channelName), [channelName])
-  const isTournamentVoice = useMemo(() => normalizeTournamentVoiceRole(channelName) !== null, [channelName])
-  const tournamentMonitorTargets = useMemo(() => {
-    if (!activeMatchTag) return []
-    return activeCategories
-      .flatMap((group) => group.channels)
-      .filter((channel) => channel.type === 'voice')
-      .filter((channel) => extractMatchTag(channel.name) === activeMatchTag)
-      .map((channel) => ({
-        id: channel.id,
-        name: channel.name,
-        role: normalizeTournamentVoiceRole(channel.name),
-        activeCount: channel.activeMembers?.length ?? 0,
-        isLive: Boolean(channel.isLive),
-      }))
-      .filter((channel) => channel.role !== null)
-      .sort((left, right) => {
-        const order: Record<string, number> = { 'team-a': 1, 'team-b': 2, admin: 3, caster: 4, spectator: 5 }
-        return (order[left.role ?? ''] ?? 99) - (order[right.role ?? ''] ?? 99)
-      })
-  }, [activeCategories, activeMatchTag])
   const currentChannelRole = useMemo(() => normalizeTournamentVoiceRole(channelName), [channelName])
-  const observerTargetChannels = useMemo(() => {
-    if (currentChannelRole !== 'admin') return []
-    return tournamentMonitorTargets
-      .filter((target) => target.role === 'team-a' || target.role === 'team-b')
-      .map((target) => ({ id: target.id, name: target.name }))
-  }, [currentChannelRole, tournamentMonitorTargets])
+  const isRefereeVarView = currentChannelRole === 'referee'
 
   const { localParticipant } = useLocalParticipant({ room: livekitRoom })
   const remoteParticipants = useParticipants({ room: livekitRoom })
@@ -480,6 +466,12 @@ export const VoiceChannelView: React.FC = () => {
       window.clearInterval(timer)
     }
   }, [primaryVideoTrackRef])
+
+  useEffect(() => {
+    if (isRefereeVarView) {
+      setShowThread(false)
+    }
+  }, [isRefereeVarView])
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -628,42 +620,81 @@ export const VoiceChannelView: React.FC = () => {
     const createdRooms: Room[] = []
 
     const connectObserverRooms = async () => {
-      if (!requestTournamentObserverTokens || observerTargetChannels.length === 0) {
+      if (currentChannelRole !== 'referee' || !requestTournamentObserverTokens) {
         setObserverRooms((prev) => {
           prev.forEach((item) => {
             void item.room.disconnect()
           })
           return []
         })
+        setObserverError(null)
         return
       }
 
       const connected: ObserverRoomState[] = []
       try {
-        const observerTokens = await requestTournamentObserverTokens(activeChannelId)
-        const tokenByChannel = new Map(
-          observerTokens.map((item) => [item.channelId, item] as const),
-        )
-        for (const target of observerTargetChannels) {
-          const resolved = tokenByChannel.get(target.id)
-          if (!resolved) {
-            continue
-          }
+        if (!observerSourceChannelId) {
+          // eslint-disable-next-line no-console
+          console.warn('[observer] observer:token-fail', { activeChannelId, observerSourceChannelId, reason: 'missing-channel-id' })
+          setObserverError('Khong xac dinh duoc channel hien tai de khoi tao VAR.')
+          setObserverRooms([])
+          return
+        }
+        // eslint-disable-next-line no-console
+        console.info('[observer] observer:init', { activeChannelId, observerSourceChannelId, currentChannelRole })
+        const observerBundle = await requestTournamentObserverTokens(observerSourceChannelId)
+        if (!observerBundle || observerBundle.feeds.length === 0) {
+          // eslint-disable-next-line no-console
+          console.warn('[observer] observer:token-fail', { activeChannelId, observerSourceChannelId, reason: 'empty-feeds' })
+          setObserverError('Khong tai duoc feed Team A/Team B cho VAR.')
+          setObserverRooms([])
+          return
+        }
+        // eslint-disable-next-line no-console
+        console.info('[observer] observer:token-success', {
+          activeChannelId,
+          observerSourceChannelId,
+          matchId: observerBundle.matchId,
+          feedCount: observerBundle.feeds.length,
+          feeds: observerBundle.feeds.map((feed) => ({ role: feed.role, channelId: feed.channelId, channelName: feed.channelName })),
+        })
+        for (const resolved of observerBundle.feeds) {
           const room = new Room()
           createdRooms.push(room)
           if (cancelled) {
             await room.disconnect()
             continue
           }
-          await room.connect(resolved.url, resolved.token)
-          connected.push({
-            channelId: target.id,
-            channelName: target.name,
-            room,
-          })
+          try {
+            await room.connect(resolved.url, resolved.token)
+            connected.push({
+              role: resolved.role,
+              channelId: resolved.channelId,
+              channelName: resolved.channelName,
+              room,
+              status: 'connecting',
+            })
+            // eslint-disable-next-line no-console
+            console.info('[observer] observer:room-connect-success', {
+              channelId: resolved.channelId,
+              channelName: resolved.channelName,
+              role: resolved.role,
+            })
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('[observer] observer:room-connect-fail', {
+              channelId: resolved.channelId,
+              channelName: resolved.channelName,
+              role: resolved.role,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            void room.disconnect()
+          }
         }
       } catch {
-        // ignore observer flow error and keep normal voice flow running
+        // eslint-disable-next-line no-console
+        console.error('[observer] observer:token-fail', { activeChannelId, observerSourceChannelId })
+        setObserverError('Khong the tao ket noi VAR. Vui long thu lai.')
       }
 
       if (cancelled) {
@@ -673,11 +704,19 @@ export const VoiceChannelView: React.FC = () => {
         return
       }
 
+      setObserverError(null)
       setObserverRooms((prev) => {
         prev.forEach((item) => {
           void item.room.disconnect()
         })
         return connected
+      })
+      setObserverMutedChannels(() => {
+        const muted: Record<string, boolean> = {}
+        for (const roomState of connected) {
+          muted[roomState.channelId] = true
+        }
+        return muted
       })
     }
 
@@ -689,7 +728,72 @@ export const VoiceChannelView: React.FC = () => {
         void room.disconnect()
       })
     }
-  }, [activeChannelId, observerTargetChannels, requestTournamentObserverTokens])
+  }, [activeChannelId, currentChannelRole, observerSourceChannelId, requestTournamentObserverTokens])
+
+  const observerRoomStatuses = useMemo<ObserverRoomState[]>(() => {
+    const statuses = observerRooms.map((observer) => {
+      const participants = Array.from(observer.room.remoteParticipants.values())
+      if (participants.length === 0) {
+        return { ...observer, status: 'disconnected' as const }
+      }
+      const hasShare = participants.some((participant) => {
+        let found = false
+        participant.videoTrackPublications.forEach((publication) => {
+          if (publication.trackSid && publication.source === Track.Source.ScreenShare) {
+            found = true
+          }
+        })
+        return found
+      })
+      const status: ObserverRoomState['status'] = hasShare ? 'live' : 'no-share'
+      return { ...observer, status }
+    })
+    if (currentChannelRole === 'referee' && statuses.length > 0) {
+      // eslint-disable-next-line no-console
+      console.info(
+        '[observer] observer:render-state',
+        statuses.map((item) => ({
+          channelId: item.channelId,
+          channelName: item.channelName,
+          role: item.role,
+          status: item.status,
+          participantCount: item.room.remoteParticipants.size,
+        })),
+      )
+    }
+    return statuses
+  }, [currentChannelRole, observerRooms])
+
+  useEffect(() => {
+    const unsubscribe: Array<() => void> = []
+    observerRooms.forEach((observer) => {
+      const shouldMute = observerMuteAll || observerMutedChannels[observer.channelId] !== false
+      const syncParticipantAudio = () => {
+        observer.room.remoteParticipants.forEach((participant) => {
+          participant.audioTrackPublications.forEach((publication) => {
+            if (shouldMute && publication.isSubscribed) {
+              void publication.setSubscribed(false)
+              return
+            }
+            if (!shouldMute && !publication.isSubscribed) {
+              void publication.setSubscribed(true)
+            }
+          })
+        })
+      }
+      syncParticipantAudio()
+      const onTrackSubscribed = () => {
+        syncParticipantAudio()
+      }
+      observer.room.on(RoomEvent.TrackSubscribed, onTrackSubscribed)
+      unsubscribe.push(() => {
+        observer.room.off(RoomEvent.TrackSubscribed, onTrackSubscribed)
+      })
+    })
+    return () => {
+      unsubscribe.forEach((fn) => fn())
+    }
+  }, [observerMutedChannels, observerMuteAll, observerRooms])
 
   const shareOwnerName = screenShareParticipant?.name ?? focusedParticipant?.name ?? ''
   const hasQualityInfo = qualityBadge !== 'N/A'
@@ -791,51 +895,49 @@ export const VoiceChannelView: React.FC = () => {
         </header>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3 md:p-4">
-          {isTournamentVoice && tournamentMonitorTargets.length > 1 && (
-            <div className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-500/10 p-2">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-200">
-                Tournament Monitor Bridge
+          {isRefereeVarView ? (
+            <div className="h-full rounded-xl border border-cyan-300/20 bg-gradient-to-b from-cyan-500/10 via-transparent to-transparent p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">Referee VAR Monitor</div>
+                  <div className="text-[11px] text-zinc-400">Giam sat Team A va Team B theo thoi gian thuc</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setObserverMuteAll((prev) => !prev)}
+                  className="rounded-md border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:border-cyan-400/40"
+                >
+                  {observerMuteAll ? 'Unmute all feeds' : 'Mute all feeds'}
+                </button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {tournamentMonitorTargets.map((target) => (
-                  <button
-                    key={target.id}
-                    type="button"
-                    onClick={() => {
-                      if (!joinVoiceChannel) return
-                      void joinVoiceChannel(target.id)
-                    }}
-                    className={cn(
-                      'rounded-md border px-2.5 py-1.5 text-xs',
-                      target.id === activeChannelId
-                        ? 'border-cyan-300/60 bg-cyan-400/20 text-cyan-100'
-                        : 'border-white/15 bg-black/20 text-zinc-200 hover:border-cyan-400/40 hover:text-cyan-100',
-                    )}
-                  >
-                    <span className="font-semibold">{target.name}</span>
-                    <span className="ml-1 text-[10px] text-zinc-300">({target.activeCount})</span>
-                    {target.isLive ? <span className="ml-1 text-[10px] text-red-300">LIVE</span> : null}
-                  </button>
+              {observerError ? (
+                <div className="mb-3 rounded-md border border-red-400/30 bg-red-500/15 px-2.5 py-2 text-xs text-red-100">
+                  {observerError}
+                </div>
+              ) : null}
+              <div className="grid h-[calc(100%-72px)] min-h-[320px] grid-cols-1 gap-3 xl:grid-cols-2">
+                {observerRoomStatuses.map((observer) => (
+                  <ObserverRoomPanel
+                    key={observer.channelId}
+                    room={observer.room}
+                    channelName={observer.channelName}
+                    isMuted={observerMuteAll || observerMutedChannels[observer.channelId] !== false}
+                    onToggleMute={() =>
+                      setObserverMutedChannels((prev) => ({
+                        ...prev,
+                        [observer.channelId]: !(prev[observer.channelId] ?? true),
+                      }))
+                    }
+                  />
                 ))}
-              </div>
-              <p className="mt-2 text-[11px] text-cyan-100/90">
-                Admin/referee dùng các nút này để theo dõi nhanh team-a/team-b và kiểm tra màn hình tuyển thủ.
-              </p>
-            </div>
-          )}
-          {currentChannelRole === 'admin' && observerRooms.length > 0 && (
-            <div className="mb-3 rounded-lg border border-amber-400/25 bg-amber-500/10 p-2">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100">
-                Admin Multi-View (All Player Streams)
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {observerRooms.map((observer) => (
-                  <ObserverRoomPanel key={observer.channelId} room={observer.room} channelName={observer.channelName} />
-                ))}
+                {observerRoomStatuses.length === 0 ? (
+                  <div className="rounded-md border border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-zinc-300 xl:col-span-2">
+                    Dang cho Team A/Team B bat chia se man hinh...
+                  </div>
+                ) : null}
               </div>
             </div>
-          )}
-          {isFocusLayout && focusedParticipant ? (
+          ) : isFocusLayout && focusedParticipant ? (
             <div className="flex h-full min-h-0 flex-col gap-3">
               <div className="min-h-0 flex-1">
                 <ParticipantTile
@@ -877,7 +979,51 @@ export const VoiceChannelView: React.FC = () => {
             !isFullscreen || showFooter ? 'opacity-100' : 'pointer-events-none opacity-0'
           )}
         >
-          {isFocusLayout ? (
+          {isRefereeVarView ? (
+            <div className="flex items-center justify-center">
+              <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-2 py-1.5 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => void toggleMicrophone()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors',
+                    voiceState?.isMicrophoneEnabled
+                      ? 'text-foreground hover:bg-white/10'
+                      : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                  )}
+                >
+                  {voiceState?.isMicrophoneEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleCamera()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10',
+                    voiceState?.isCameraEnabled ? 'text-green-400' : 'text-foreground'
+                  )}
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleScreenShare()}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-white/10',
+                    voiceState?.isScreenShareEnabled ? 'text-green-400' : 'text-foreground'
+                  )}
+                >
+                  <Monitor className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void leaveVoiceChannel()}
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+                >
+                  <PhoneOff className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          ) : isFocusLayout ? (
             <div className="flex items-center justify-center">
               <div className="flex max-w-full flex-nowrap items-center justify-center gap-2 overflow-x-auto rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 backdrop-blur-sm">
                 <button
@@ -1044,3 +1190,4 @@ export const VoiceChannelView: React.FC = () => {
     </div>
   )
 }
+

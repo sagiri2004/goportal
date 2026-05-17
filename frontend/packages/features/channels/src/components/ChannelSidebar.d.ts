@@ -13,7 +13,7 @@ type ChannelSidebarProps = {
         channels: Array<{
             id: string;
             name: string;
-            type: 'text' | 'voice';
+            type: 'text' | 'voice' | 'livestream';
             unread: number;
             activeMembers?: ChannelMember[];
             liveLabel?: string;
@@ -22,7 +22,7 @@ type ChannelSidebarProps = {
     }>;
     activeChannelId?: string;
     activeVoiceChannelId?: string;
-    onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void;
+    onSelectChannel?: (channelId: string, type: 'text' | 'voice' | 'livestream', channelName?: string) => void;
     onCreateChannel?: () => void;
     onInviteMember?: () => void;
     onOpenServerSettings?: () => void;
@@ -44,14 +44,37 @@ type ChannelSidebarProps = {
     onSelectTournament?: (tournamentId: string) => void;
     onCreateTournament?: () => void;
     canCreateTournament?: boolean;
-    tournamentVoiceChannels?: Array<{
+    tournamentChannelTree?: Array<{
         id: string;
         name: string;
-        type: 'voice';
-        unread: number;
-        activeMembers?: ChannelMember[];
-        liveLabel?: string;
-        isLive?: boolean;
+        status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled';
+        generalTextChannelId?: string | null;
+        generalChannel?: {
+            id: string;
+            name: string;
+            type: 'text' | 'voice' | 'livestream';
+            role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream';
+            unread: number;
+            activeMembers?: ChannelMember[];
+            liveLabel?: string;
+            isLive?: boolean;
+        } | null;
+        matches: Array<{
+            matchId: string;
+            round: number;
+            matchNumber: number;
+            label: string;
+            channels: Array<{
+                id: string;
+                name: string;
+                type: 'text' | 'voice' | 'livestream';
+                role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream';
+                unread: number;
+                activeMembers?: ChannelMember[];
+                liveLabel?: string;
+                isLive?: boolean;
+            }>;
+        }>;
     }>;
 };
 type ChannelMember = {

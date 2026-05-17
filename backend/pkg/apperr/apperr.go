@@ -77,6 +77,8 @@ var registry = map[string]errDef{
 	"LIVEKIT_EGRESS_FAILED":                {http.StatusBadGateway, "LiveKit egress request failed"},
 	"LIVEKIT_WEBHOOK_INVALID":              {http.StatusUnauthorized, "Invalid LiveKit webhook signature"},
 	"VOICE_CHANNEL_REQUIRED":               {http.StatusBadRequest, "Channel must be a voice channel"},
+	"LIVESTREAM_CHANNEL_REQUIRED":          {http.StatusBadRequest, "Channel must be a livestream channel"},
+	"LIVESTREAM_MODE_INVALID":              {http.StatusBadRequest, "Invalid livestream mode"},
 	"RECORDING_NOT_FOUND":                  {http.StatusNotFound, "Recording not found"},
 	"RECORDING_ALREADY_ACTIVE":             {http.StatusConflict, "Recording or stream is already active"},
 	"INVALID_RTMP_URL":                     {http.StatusBadRequest, "Invalid RTMP URL"},
