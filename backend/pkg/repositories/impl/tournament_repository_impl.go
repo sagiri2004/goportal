@@ -548,8 +548,8 @@ func (r *tournamentRepository) FindMatchWorkspaceByChannelID(ctx context.Context
 	var row models.TournamentMatchWorkspace
 	if err := r.db.WithContext(ctx).
 		Where(
-			"team_a_channel_id = ? OR team_b_channel_id = ? OR caster_channel_id = ? OR admin_channel_id = ? OR referee_channel_id = ? OR spectator_channel_id = ?",
-			channelID, channelID, channelID, channelID, channelID, channelID,
+			"team_a_channel_id = ? OR team_b_channel_id = ? OR caster_channel_id = ? OR admin_channel_id = ? OR referee_channel_id = ? OR spectator_channel_id = ? OR livestream_channel_id = ?",
+			channelID, channelID, channelID, channelID, channelID, channelID, channelID,
 		).
 		First(&row).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

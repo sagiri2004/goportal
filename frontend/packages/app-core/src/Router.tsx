@@ -13,7 +13,7 @@ import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
-import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
+import { DashboardView, LivestreamChannelView, VoiceChannelView } from '@goportal/feature-dashboard'
 import { TournamentDetailPage, TournamentListPage } from './tournaments'
 import { GameDetailPage, GamePlayerPage, GamesCatalogPage, GamesDeveloperPage } from './games/GameViews'
 import { GameSDKDocsPage } from './games/GameSDKDocsPage'
@@ -292,6 +292,7 @@ export const Router: React.FC = () => {
           <Route path="@me" element={<DMHomePage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<DashboardView />} />
           <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
+          <Route path="servers/:serverId/live/:channelId" element={<LivestreamChannelView />} />
           <Route path="servers/:serverId/tournaments" element={<TournamentListPage />} />
           <Route path="servers/:serverId/tournaments/:tournamentId" element={<TournamentDetailPage />} />
         </Route>

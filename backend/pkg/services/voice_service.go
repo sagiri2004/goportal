@@ -12,8 +12,17 @@ type VoiceTokenResult struct {
 	URL   string
 }
 
+type LivestreamStateResult struct {
+	ChannelID     string                                   `json:"channel_id"`
+	Participants  []models.VoiceChannelParticipantSnapshot `json:"participants"`
+	ViewerCount   int                                      `json:"viewer_count"`
+	StreamerCount int                                      `json:"streamer_count"`
+}
+
 type VoiceService interface {
 	GenerateVoiceToken(ctx context.Context, actorID, channelID string) (*VoiceTokenResult, error)
+	GenerateLivestreamToken(ctx context.Context, actorID, channelID, mode string) (*VoiceTokenResult, error)
+	GetLivestreamState(ctx context.Context, actorID, channelID string) (*LivestreamStateResult, error)
 	ListChannelParticipants(ctx context.Context, actorID, channelID string) ([]models.VoiceChannelParticipantSnapshot, error)
 	StartChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error)
 	StopChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error)

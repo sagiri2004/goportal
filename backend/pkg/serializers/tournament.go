@@ -221,15 +221,15 @@ type UpdateTournamentMatchStatusRequest struct {
 
 type ReportTournamentMatchResultRequest struct {
 	WinnerID      string  `json:"winner_id" binding:"required"`
-	Score1        int     `json:"score1" binding:"required"`
-	Score2        int     `json:"score2" binding:"required"`
+	Score1        int     `json:"score1"`
+	Score2        int     `json:"score2"`
 	ScreenshotURL *string `json:"screenshot_url"`
 }
 
 type OverrideTournamentMatchRequest struct {
 	WinnerID string `json:"winner_id" binding:"required"`
-	Score1   int    `json:"score1" binding:"required"`
-	Score2   int    `json:"score2" binding:"required"`
+	Score1   int    `json:"score1"`
+	Score2   int    `json:"score2"`
 	Reason   string `json:"reason" binding:"required"`
 }
 

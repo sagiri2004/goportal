@@ -202,7 +202,7 @@ func (s *channelService) UpdatePosition(ctx context.Context, actorID, channelID 
 
 func isValidChannelType(channelType string) bool {
 	switch channelType {
-	case models.ChannelTypeText, models.ChannelTypeVoice, models.ChannelTypeCategory:
+	case models.ChannelTypeText, models.ChannelTypeVoice, models.ChannelTypeCategory, models.ChannelTypeLivestream:
 		return true
 	default:
 		return false

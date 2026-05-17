@@ -259,19 +259,20 @@ func (b *TournamentRoleBinding) BeforeCreate(_ *gorm.DB) error {
 }
 
 type TournamentMatchWorkspace struct {
-	ID                 string `gorm:"type:char(36);primaryKey" json:"id"`
-	TournamentID       string `gorm:"type:char(36);not null;index" json:"tournament_id"`
-	MatchID            string `gorm:"type:char(36);not null;index" json:"match_id"`
-	ServerID           string `gorm:"type:char(36);not null;index" json:"server_id"`
-	CategoryChannelID  string `gorm:"type:char(36);not null" json:"category_channel_id"`
-	TeamAChannelID     string `gorm:"type:char(36);not null" json:"team_a_channel_id"`
-	TeamBChannelID     string `gorm:"type:char(36);not null" json:"team_b_channel_id"`
-	CasterChannelID    string `gorm:"type:char(36);not null" json:"caster_channel_id"`
-	AdminChannelID     string `gorm:"type:char(36);not null" json:"admin_channel_id"`
-	RefereeChannelID   string `gorm:"type:char(36);not null" json:"referee_channel_id"`
-	SpectatorChannelID string `gorm:"type:char(36);not null" json:"spectator_channel_id"`
-	CreatedBy          string `gorm:"type:char(36);not null;index" json:"created_by"`
-	CreatedAt          int64  `gorm:"not null;autoCreateTime" json:"created_at"`
+	ID                  string  `gorm:"type:char(36);primaryKey" json:"id"`
+	TournamentID        string  `gorm:"type:char(36);not null;index" json:"tournament_id"`
+	MatchID             string  `gorm:"type:char(36);not null;index" json:"match_id"`
+	ServerID            string  `gorm:"type:char(36);not null;index" json:"server_id"`
+	CategoryChannelID   string  `gorm:"type:char(36);not null" json:"category_channel_id"`
+	TeamAChannelID      string  `gorm:"type:char(36);not null" json:"team_a_channel_id"`
+	TeamBChannelID      string  `gorm:"type:char(36);not null" json:"team_b_channel_id"`
+	CasterChannelID     string  `gorm:"type:char(36);not null" json:"caster_channel_id"`
+	AdminChannelID      string  `gorm:"type:char(36);not null" json:"admin_channel_id"`
+	RefereeChannelID    string  `gorm:"type:char(36);not null" json:"referee_channel_id"`
+	SpectatorChannelID  string  `gorm:"type:char(36);not null" json:"spectator_channel_id"`
+	LivestreamChannelID *string `gorm:"type:char(36)" json:"livestream_channel_id,omitempty"`
+	CreatedBy           string  `gorm:"type:char(36);not null;index" json:"created_by"`
+	CreatedAt           int64   `gorm:"not null;autoCreateTime" json:"created_at"`
 }
 
 func (TournamentMatchWorkspace) TableName() string {

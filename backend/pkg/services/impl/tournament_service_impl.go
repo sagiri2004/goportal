@@ -1279,18 +1279,24 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 	if err != nil {
 		return nil, err
 	}
+	livestream, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeLivestream, fmt.Sprintf("live-%s", channelSuffix), false)
+	if err != nil {
+		return nil, err
+	}
+	livestreamID := livestream.ID
 	workspace := &models.TournamentMatchWorkspace{
-		TournamentID:       t.ID,
-		MatchID:            matchID,
-		ServerID:           t.ServerID,
-		CategoryChannelID:  category.ID,
-		TeamAChannelID:     teamA.ID,
-		TeamBChannelID:     teamB.ID,
-		CasterChannelID:    caster.ID,
-		AdminChannelID:     referee.ID,
-		RefereeChannelID:   referee.ID,
-		SpectatorChannelID: spectator.ID,
-		CreatedBy:          actorID,
+		TournamentID:        t.ID,
+		MatchID:             matchID,
+		ServerID:            t.ServerID,
+		CategoryChannelID:   category.ID,
+		TeamAChannelID:      teamA.ID,
+		TeamBChannelID:      teamB.ID,
+		CasterChannelID:     caster.ID,
+		AdminChannelID:      referee.ID,
+		RefereeChannelID:    referee.ID,
+		SpectatorChannelID:  spectator.ID,
+		LivestreamChannelID: &livestreamID,
+		CreatedBy:           actorID,
 	}
 	if err := s.repo.CreateMatchWorkspace(ctx, workspace); err != nil {
 		return nil, err
@@ -1507,7 +1513,14 @@ func (s *tournamentService) GenerateMatchObserverTokens(ctx context.Context, act
 	}
 
 	buildToken := func(channelID string) (services.TournamentObserverToken, error) {
-		token, tkErr := s.liveKitSvc.GenerateAccessToken(channelID, actorID, actor.Username, string(metadataBytes))
+		token, tkErr := s.liveKitSvc.GenerateAccessTokenWithGrant(
+			channelID,
+			actorID,
+			actor.Username,
+			string(metadataBytes),
+			false,
+			true,
+		)
 		if tkErr != nil {
 			return services.TournamentObserverToken{}, tkErr
 		}
@@ -1581,7 +1594,7 @@ func (s *tournamentService) canUseObserverMode(ctx context.Context, tournament *
 			continue
 		}
 		code := roleByID[bindings[i].RoleID]
-		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee {
+		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee || code == models.TournamentRoleCaster {
 			return true
 		}
 	}

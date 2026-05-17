@@ -2,6 +2,7 @@ export { DashboardView } from './DashboardView'
 export { DMView } from './DMView'
 export { DirectMessagesSidebar } from './DirectMessagesSidebar'
 export { VoiceChannelView } from './VoiceChannelView'
+export { LivestreamChannelView } from './LivestreamChannelView'
 export {
   mockCurrentUser,
   mockServers,

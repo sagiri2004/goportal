@@ -54,6 +54,8 @@ import {
   getServerById,
   getServers,
   getInvitePreview,
+  getLivestreamState,
+  getLivestreamToken,
   getTournamentMatchObserverTokens,
   joinByInviteCode,
   getVoiceToken,
@@ -152,12 +154,24 @@ const isTournamentMatchVoiceChannelName = (name: string): boolean => {
   )
 }
 
-type TournamentSidebarChannelRole = 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator'
+const isTournamentMatchLivestreamChannelName = (name: string): boolean => {
+  const lower = name.toLowerCase()
+  return lower.startsWith('live-r')
+}
+
+type TournamentSidebarChannelRole =
+  | 'general'
+  | 'team-a'
+  | 'team-b'
+  | 'caster'
+  | 'referee'
+  | 'spectator'
+  | 'livestream'
 
 type TournamentSidebarChannelNode = {
   id: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   role: TournamentSidebarChannelRole
   unread: number
   activeMembers?: ChannelMember[]
@@ -636,6 +650,7 @@ export const AppShell: React.FC = () => {
       admin_channel_id: string
       referee_channel_id?: string
       spectator_channel_id: string
+      livestream_channel_id?: string | null
     }>>
   >({})
   const [loadedTournamentTreeById, setLoadedTournamentTreeById] = useState<Record<string, boolean>>({})
@@ -672,6 +687,7 @@ export const AppShell: React.FC = () => {
   const mainRef = useRef<PanelImperativeHandle>(null)
   const toastTimerRef = useRef<number | null>(null)
   const voiceStateRef = useRef<VoiceState | null>(null)
+  const forbiddenRealtimeChannelsRef = useRef<Set<string>>(new Set())
   const joinVoiceInFlightRef = useRef<string | null>(null)
   const pendingVoiceRoomRef = useRef<Room | null>(null)
   const voiceJoinAttemptRef = useRef(0)
@@ -867,7 +883,11 @@ export const AppShell: React.FC = () => {
       if (!eventType || eventType === 'CONNECTED') {
         return
       }
-      if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' && eventType !== 'VOICE_ACTIVITY_UPDATED') {
+      if (
+        eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' &&
+        eventType !== 'VOICE_ACTIVITY_UPDATED' &&
+        eventType !== 'LIVESTREAM_ACTIVITY_UPDATED'
+      ) {
         return
       }
       logVoiceDebug('notification:voice-activity-event', {
@@ -970,29 +990,22 @@ export const AppShell: React.FC = () => {
     }
 
     const categories = channelsByServer[serverId] ?? []
-    const voiceChannels = categories.flatMap((category) =>
-      category.channels.filter((channel) => channel.type === 'voice')
+    const realtimeChannels = categories.flatMap((category) =>
+      category.channels.filter((channel) => channel.type === 'voice' || channel.type === 'livestream')
     )
-    const knownVoiceIds = new Set(voiceChannels.map((channel) => channel.id))
-    const tournamentVoiceChannels = Object.values(tournamentWorkspacesById)
-      .flatMap((workspaces) => workspaces ?? [])
-      .flatMap((workspace) => [
-        workspace.team_a_channel_id,
-        workspace.team_b_channel_id,
-        workspace.caster_channel_id,
-        workspace.referee_channel_id ?? workspace.admin_channel_id,
-        workspace.spectator_channel_id,
-      ])
-      .filter((channelId): channelId is string => Boolean(channelId))
-      .filter((channelId) => !knownVoiceIds.has(channelId))
-      .map((channelId) => ({ id: channelId, name: channelId, type: 'voice' as const }))
-    const allVoiceChannels = [...voiceChannels, ...tournamentVoiceChannels]
-    if (allVoiceChannels.length === 0) {
+    const allRealtimeChannels = realtimeChannels.filter(
+      (channel) => !forbiddenRealtimeChannelsRef.current.has(channel.id),
+    )
+    if (allRealtimeChannels.length === 0) {
       return
     }
 
     const results = await Promise.allSettled(
-      allVoiceChannels.map(async (channel) => {
+      allRealtimeChannels.map(async (channel) => {
+        if (channel.type === 'livestream') {
+          const response = await getLivestreamState(channel.id)
+          return { channelId: channel.id, participants: response.participants ?? [] }
+        }
         const response = await listVoiceParticipants(channel.id)
         return { channelId: channel.id, participants: response.items ?? [] }
       }),
@@ -1000,14 +1013,24 @@ export const AppShell: React.FC = () => {
 
     setVoiceActivityByChannel((prev) => {
       const next = { ...prev }
-      allVoiceChannels.forEach((channel) => {
+      allRealtimeChannels.forEach((channel) => {
         if (!next[channel.id]) {
           next[channel.id] = mapVoiceParticipantsToActivity([])
         }
       })
 
-      results.forEach((result) => {
+      results.forEach((result, index) => {
+        const channel = allRealtimeChannels[index]
         if (result.status !== 'fulfilled') {
+          const reason: any = result.reason
+          const statusCode = reason?.statusCode ?? reason?.response?.status
+          const errorCode = reason?.code ?? reason?.response?.data?.code
+          if (
+            channel &&
+            (statusCode === 403 || errorCode === 'CHANNEL_ACCESS_DENIED' || errorCode === 'NOT_SERVER_MEMBER')
+          ) {
+            forbiddenRealtimeChannelsRef.current.add(channel.id)
+          }
           return
         }
         const participants: VoiceParticipantSummary[] = result.value.participants.map((participant) => ({
@@ -1021,7 +1044,7 @@ export const AppShell: React.FC = () => {
 
       return next
     })
-  }, [channelsByServer, mapVoiceParticipantsToActivity, tournamentWorkspacesById])
+  }, [channelsByServer, mapVoiceParticipantsToActivity])
 
   // After showMembers flips, imperatively resize main panel.
   // useEffect runs after render so mainRef is guaranteed to be attached.
@@ -1055,9 +1078,15 @@ export const AppShell: React.FC = () => {
   }, [params.serverId])
 
   useEffect(() => {
+    forbiddenRealtimeChannelsRef.current.clear()
+  }, [activeServerId])
+
+  useEffect(() => {
     const isTextChannelRoute =
       location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/')
-    if (isTextChannelRoute && params.channelId) {
+    const isLivestreamRoute =
+      location.pathname.includes('/app/servers/') && location.pathname.includes('/live/')
+    if ((isTextChannelRoute || isLivestreamRoute) && params.channelId) {
       setActiveChannelId(params.channelId)
     }
   }, [location.pathname, params.channelId])
@@ -1488,7 +1517,7 @@ export const AppShell: React.FC = () => {
     })
   }, [])
 
-  const handleCreateChannel = useCallback(async (payload: { name: string; type: 'TEXT' | 'VOICE' }) => {
+  const handleCreateChannel = useCallback(async (payload: { name: string; type: 'TEXT' | 'VOICE' | 'LIVESTREAM' }) => {
     if (!activeServerId) {
       return
     }
@@ -2011,7 +2040,7 @@ export const AppShell: React.FC = () => {
       activeCategories.map((category) => ({
         ...category,
         channels: category.channels.map((channel) => {
-          if (channel.type !== 'voice') {
+          if (channel.type !== 'voice' && channel.type !== 'livestream') {
             return channel
           }
           const activity = voiceActivityByChannel[channel.id]
@@ -2047,21 +2076,25 @@ export const AppShell: React.FC = () => {
       channelId: string | undefined,
       role: TournamentSidebarChannelRole,
       fallbackName: string,
-      type: 'text' | 'voice',
+      type: 'text' | 'voice' | 'livestream',
     ): TournamentSidebarChannelNode | null => {
       if (!channelId) {
         return null
       }
       const channel = tournamentChannelMap.get(channelId)
+      // Only show channels user can actually access (already resolved in server channel list).
+      if (!channel) {
+        return null
+      }
       return {
         id: channelId,
-        name: channel?.name ?? fallbackName,
-        type: channel?.type ?? type,
+        name: channel.name ?? fallbackName,
+        type: channel.type ?? type,
         role,
-        unread: channel?.unread ?? 0,
-        activeMembers: channel?.activeMembers,
-        liveLabel: channel?.liveLabel,
-        isLive: channel?.isLive,
+        unread: channel.unread ?? 0,
+        activeMembers: channel.activeMembers,
+        liveLabel: channel.liveLabel,
+        isLive: channel.isLive,
       }
     }
 
@@ -2084,6 +2117,7 @@ export const AppShell: React.FC = () => {
           buildNode(workspace?.caster_channel_id, 'caster', `caster-r${match.round}-m${match.match_number}`, 'voice'),
           buildNode(workspace?.referee_channel_id ?? workspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
           buildNode(workspace?.spectator_channel_id, 'spectator', `spectator-r${match.round}-m${match.match_number}`, 'voice'),
+          buildNode(workspace?.livestream_channel_id ?? undefined, 'livestream', `live-r${match.round}-m${match.match_number}`, 'livestream'),
         ]
         for (const node of roleNodes) {
           if (node) channels.push(node)
@@ -2119,18 +2153,24 @@ export const AppShell: React.FC = () => {
           .map((tournament) => tournament.tournament_general_channel_id)
           .filter((id): id is string => Boolean(id)),
       )
+      const tournamentLivestreamIds = new Set(
+        (tournamentWorkspacesById[activeServerId] ?? [])
+          .map((workspace) => workspace.livestream_channel_id)
+          .filter((id): id is string => Boolean(id)),
+      )
       return (
       categoriesWithVoiceActivity.map((category) => ({
         ...category,
         channels: category.channels.filter(
           (channel) =>
             !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)) &&
+            !(channel.type === 'livestream' && (isTournamentMatchLivestreamChannelName(channel.name) || tournamentLivestreamIds.has(channel.id))) &&
             !(channel.type === 'text' && tournamentGeneralIds.has(channel.id)),
         ),
       }))
       )
     },
-    [activeTournaments, categoriesWithVoiceActivity],
+    [activeServerId, activeTournaments, categoriesWithVoiceActivity, tournamentWorkspacesById],
   )
   const activeMembers = useMemo(
     () => membersByServer[activeServerId] ?? [],
@@ -2151,6 +2191,7 @@ export const AppShell: React.FC = () => {
           admin_channel_id: string
           referee_channel_id?: string
           spectator_channel_id: string
+          livestream_channel_id?: string | null
         }>
         try {
           workspaces = await listTournamentMatchWorkspaces(tournament.id)
@@ -2166,6 +2207,7 @@ export const AppShell: React.FC = () => {
             item.admin_channel_id,
             item.referee_channel_id,
             item.spectator_channel_id,
+            item.livestream_channel_id,
           ].includes(channelId),
         )
         if (!workspace) {
@@ -2196,6 +2238,15 @@ export const AppShell: React.FC = () => {
       return null
     },
     [activeServerId, activeTournaments],
+  )
+  const requestLivestreamToken = useCallback(
+    async (channelId: string, mode: 'viewer' | 'streamer' = 'viewer') =>
+      getLivestreamToken(channelId, mode),
+    [],
+  )
+  const requestLivestreamState = useCallback(
+    async (channelId: string) => getLivestreamState(channelId),
+    [],
   )
   const hasManageVoicePermission = useMemo(() => {
     if (!currentUser) {
@@ -2252,6 +2303,8 @@ export const AppShell: React.FC = () => {
       subscribeNotificationEvents,
       sendNotificationSocketMessage,
       requestTournamentObserverTokens,
+      requestLivestreamToken,
+      requestLivestreamState,
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
@@ -2285,6 +2338,8 @@ export const AppShell: React.FC = () => {
       subscribeNotificationEvents,
       sendNotificationSocketMessage,
       pushToast,
+      requestLivestreamState,
+      requestLivestreamToken,
       incrementChannelUnread,
       resetChannelUnread,
       setChannelUnread,
@@ -2382,6 +2437,23 @@ export const AppShell: React.FC = () => {
                         navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
                       }
                       void joinVoiceChannel(channelId, channelName)
+                      return
+                    }
+
+                    if (type === 'livestream') {
+                      if (!activeServerId) {
+                        return
+                      }
+                      logRouteDebug('sidebar-click-livestream', {
+                        channelId,
+                        fromPath: location.pathname,
+                        toPath: `/app/servers/${activeServerId}/live/${channelId}`,
+                        activeServerId,
+                        activeChannelId,
+                        voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                      })
+                      setActiveChannelId(channelId)
+                      navigate(`/app/servers/${activeServerId}/live/${channelId}`)
                       return
                     }
 

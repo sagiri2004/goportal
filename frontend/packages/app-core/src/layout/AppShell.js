@@ -27,7 +27,7 @@ import { Copy } from 'lucide-react';
 import { useVoiceSessionStore } from '../stores/voice-session.store';
 import { MemberListPanel } from './MemberListPanel';
 import { ServerSettingsOverlay } from './ServerSettingsOverlay';
-import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, getTournamentMatchObserverTokens, joinByInviteCode, getVoiceToken, listTournamentMatchWorkspaces, listTournamentMatches, listTournamentsByServer, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
+import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, getLivestreamState, getLivestreamToken, getTournamentMatchObserverTokens, joinByInviteCode, getVoiceToken, listTournamentMatchWorkspaces, listTournamentMatches, listTournamentsByServer, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
 // ─── Panel size constants (% of PanelGroup width, must sum ≤ 100) ────────────
 const SIZE = {
     sidebar: { default: 22, min: 18, max: 35 },
@@ -62,6 +62,10 @@ const isTournamentMatchVoiceChannelName = (name) => {
         lower === 'caster-booth' ||
         lower === 'admin-observer' ||
         lower === 'referee-observer');
+};
+const isTournamentMatchLivestreamChannelName = (name) => {
+    const lower = name.toLowerCase();
+    return lower.startsWith('live-r');
 };
 const logVoiceDebug = (step, data) => {
     if (data) {
@@ -368,6 +372,7 @@ export const AppShell = () => {
     const mainRef = useRef(null);
     const toastTimerRef = useRef(null);
     const voiceStateRef = useRef(null);
+    const forbiddenRealtimeChannelsRef = useRef(new Set());
     const joinVoiceInFlightRef = useRef(null);
     const pendingVoiceRoomRef = useRef(null);
     const voiceJoinAttemptRef = useRef(0);
@@ -533,7 +538,9 @@ export const AppShell = () => {
             if (!eventType || eventType === 'CONNECTED') {
                 return;
             }
-            if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' && eventType !== 'VOICE_ACTIVITY_UPDATED') {
+            if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' &&
+                eventType !== 'VOICE_ACTIVITY_UPDATED' &&
+                eventType !== 'LIVESTREAM_ACTIVITY_UPDATED') {
                 return;
             }
             logVoiceDebug('notification:voice-activity-event', {
@@ -624,37 +631,36 @@ export const AppShell = () => {
             return;
         }
         const categories = channelsByServer[serverId] ?? [];
-        const voiceChannels = categories.flatMap((category) => category.channels.filter((channel) => channel.type === 'voice'));
-        const knownVoiceIds = new Set(voiceChannels.map((channel) => channel.id));
-        const tournamentVoiceChannels = Object.values(tournamentWorkspacesById)
-            .flatMap((workspaces) => workspaces ?? [])
-            .flatMap((workspace) => [
-            workspace.team_a_channel_id,
-            workspace.team_b_channel_id,
-            workspace.caster_channel_id,
-            workspace.referee_channel_id ?? workspace.admin_channel_id,
-            workspace.spectator_channel_id,
-        ])
-            .filter((channelId) => Boolean(channelId))
-            .filter((channelId) => !knownVoiceIds.has(channelId))
-            .map((channelId) => ({ id: channelId, name: channelId, type: 'voice' }));
-        const allVoiceChannels = [...voiceChannels, ...tournamentVoiceChannels];
-        if (allVoiceChannels.length === 0) {
+        const realtimeChannels = categories.flatMap((category) => category.channels.filter((channel) => channel.type === 'voice' || channel.type === 'livestream'));
+        const allRealtimeChannels = realtimeChannels.filter((channel) => !forbiddenRealtimeChannelsRef.current.has(channel.id));
+        if (allRealtimeChannels.length === 0) {
             return;
         }
-        const results = await Promise.allSettled(allVoiceChannels.map(async (channel) => {
+        const results = await Promise.allSettled(allRealtimeChannels.map(async (channel) => {
+            if (channel.type === 'livestream') {
+                const response = await getLivestreamState(channel.id);
+                return { channelId: channel.id, participants: response.participants ?? [] };
+            }
             const response = await listVoiceParticipants(channel.id);
             return { channelId: channel.id, participants: response.items ?? [] };
         }));
         setVoiceActivityByChannel((prev) => {
             const next = { ...prev };
-            allVoiceChannels.forEach((channel) => {
+            allRealtimeChannels.forEach((channel) => {
                 if (!next[channel.id]) {
                     next[channel.id] = mapVoiceParticipantsToActivity([]);
                 }
             });
-            results.forEach((result) => {
+            results.forEach((result, index) => {
+                const channel = allRealtimeChannels[index];
                 if (result.status !== 'fulfilled') {
+                    const reason = result.reason;
+                    const statusCode = reason?.statusCode ?? reason?.response?.status;
+                    const errorCode = reason?.code ?? reason?.response?.data?.code;
+                    if (channel &&
+                        (statusCode === 403 || errorCode === 'CHANNEL_ACCESS_DENIED' || errorCode === 'NOT_SERVER_MEMBER')) {
+                        forbiddenRealtimeChannelsRef.current.add(channel.id);
+                    }
                     return;
                 }
                 const participants = result.value.participants.map((participant) => ({
@@ -667,7 +673,7 @@ export const AppShell = () => {
             });
             return next;
         });
-    }, [channelsByServer, mapVoiceParticipantsToActivity, tournamentWorkspacesById]);
+    }, [channelsByServer, mapVoiceParticipantsToActivity]);
     // After showMembers flips, imperatively resize main panel.
     // useEffect runs after render so mainRef is guaranteed to be attached.
     useEffect(() => {
@@ -696,8 +702,12 @@ export const AppShell = () => {
         }
     }, [params.serverId]);
     useEffect(() => {
+        forbiddenRealtimeChannelsRef.current.clear();
+    }, [activeServerId]);
+    useEffect(() => {
         const isTextChannelRoute = location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/');
-        if (isTextChannelRoute && params.channelId) {
+        const isLivestreamRoute = location.pathname.includes('/app/servers/') && location.pathname.includes('/live/');
+        if ((isTextChannelRoute || isLivestreamRoute) && params.channelId) {
             setActiveChannelId(params.channelId);
         }
     }, [location.pathname, params.channelId]);
@@ -1546,7 +1556,7 @@ export const AppShell = () => {
     const categoriesWithVoiceActivity = useMemo(() => activeCategories.map((category) => ({
         ...category,
         channels: category.channels.map((channel) => {
-            if (channel.type !== 'voice') {
+            if (channel.type !== 'voice' && channel.type !== 'livestream') {
                 return channel;
             }
             const activity = voiceActivityByChannel[channel.id];
@@ -1577,15 +1587,19 @@ export const AppShell = () => {
                 return null;
             }
             const channel = tournamentChannelMap.get(channelId);
+            // Only show channels user can actually access (already resolved in server channel list).
+            if (!channel) {
+                return null;
+            }
             return {
                 id: channelId,
-                name: channel?.name ?? fallbackName,
-                type: channel?.type ?? type,
+                name: channel.name ?? fallbackName,
+                type: channel.type ?? type,
                 role,
-                unread: channel?.unread ?? 0,
-                activeMembers: channel?.activeMembers,
-                liveLabel: channel?.liveLabel,
-                isLive: channel?.isLive,
+                unread: channel.unread ?? 0,
+                activeMembers: channel.activeMembers,
+                liveLabel: channel.liveLabel,
+                isLive: channel.isLive,
             };
         };
         return activeTournaments.map((tournament) => {
@@ -1606,6 +1620,7 @@ export const AppShell = () => {
                     buildNode(workspace?.caster_channel_id, 'caster', `caster-r${match.round}-m${match.match_number}`, 'voice'),
                     buildNode(workspace?.referee_channel_id ?? workspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
                     buildNode(workspace?.spectator_channel_id, 'spectator', `spectator-r${match.round}-m${match.match_number}`, 'voice'),
+                    buildNode(workspace?.livestream_channel_id ?? undefined, 'livestream', `live-r${match.round}-m${match.match_number}`, 'livestream'),
                 ];
                 for (const node of roleNodes) {
                     if (node)
@@ -1633,12 +1648,16 @@ export const AppShell = () => {
         const tournamentGeneralIds = new Set(activeTournaments
             .map((tournament) => tournament.tournament_general_channel_id)
             .filter((id) => Boolean(id)));
+        const tournamentLivestreamIds = new Set((tournamentWorkspacesById[activeServerId] ?? [])
+            .map((workspace) => workspace.livestream_channel_id)
+            .filter((id) => Boolean(id)));
         return (categoriesWithVoiceActivity.map((category) => ({
             ...category,
             channels: category.channels.filter((channel) => !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)) &&
+                !(channel.type === 'livestream' && (isTournamentMatchLivestreamChannelName(channel.name) || tournamentLivestreamIds.has(channel.id))) &&
                 !(channel.type === 'text' && tournamentGeneralIds.has(channel.id))),
         })));
-    }, [activeTournaments, categoriesWithVoiceActivity]);
+    }, [activeServerId, activeTournaments, categoriesWithVoiceActivity, tournamentWorkspacesById]);
     const activeMembers = useMemo(() => membersByServer[activeServerId] ?? [], [activeServerId, membersByServer]);
     const requestTournamentObserverTokens = useCallback(async (channelId) => {
         if (!activeServerId || activeTournaments.length === 0) {
@@ -1659,6 +1678,7 @@ export const AppShell = () => {
                 item.admin_channel_id,
                 item.referee_channel_id,
                 item.spectator_channel_id,
+                item.livestream_channel_id,
             ].includes(channelId));
             if (!workspace) {
                 continue;
@@ -1686,6 +1706,8 @@ export const AppShell = () => {
         }
         return null;
     }, [activeServerId, activeTournaments]);
+    const requestLivestreamToken = useCallback(async (channelId, mode = 'viewer') => getLivestreamToken(channelId, mode), []);
+    const requestLivestreamState = useCallback(async (channelId) => getLivestreamState(channelId), []);
     const hasManageVoicePermission = useMemo(() => {
         if (!currentUser) {
             return false;
@@ -1738,6 +1760,8 @@ export const AppShell = () => {
         subscribeNotificationEvents,
         sendNotificationSocketMessage,
         requestTournamentObserverTokens,
+        requestLivestreamToken,
+        requestLivestreamState,
         pushToast,
         incrementChannelUnread,
         resetChannelUnread,
@@ -1770,6 +1794,8 @@ export const AppShell = () => {
         subscribeNotificationEvents,
         sendNotificationSocketMessage,
         pushToast,
+        requestLivestreamState,
+        requestLivestreamToken,
         incrementChannelUnread,
         resetChannelUnread,
         setChannelUnread,
@@ -1818,6 +1844,22 @@ export const AppShell = () => {
                                                 navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
                                             }
                                             void joinVoiceChannel(channelId, channelName);
+                                            return;
+                                        }
+                                        if (type === 'livestream') {
+                                            if (!activeServerId) {
+                                                return;
+                                            }
+                                            logRouteDebug('sidebar-click-livestream', {
+                                                channelId,
+                                                fromPath: location.pathname,
+                                                toPath: `/app/servers/${activeServerId}/live/${channelId}`,
+                                                activeServerId,
+                                                activeChannelId,
+                                                voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                                            });
+                                            setActiveChannelId(channelId);
+                                            navigate(`/app/servers/${activeServerId}/live/${channelId}`);
                                             return;
                                         }
                                         logRouteDebug('sidebar-click-text', {

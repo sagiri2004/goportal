@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import React, { useState } from 'react';
 import { useChannels } from '../hooks/useChannels';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger, } from '@goportal/ui';
-import { Plus, Hash, Volume2, ChevronDown, UserPlus, Settings, Mic, Headphones, Bell, Users, LogOut, Zap, Monitor, Activity, MonitorOff, PhoneOff, Sparkles, Wifi, } from 'lucide-react';
+import { Plus, Hash, Volume2, ChevronDown, UserPlus, Settings, Mic, Headphones, Bell, Users, LogOut, Zap, Monitor, Activity, MonitorOff, PhoneOff, Sparkles, Wifi, Radio, } from 'lucide-react';
 const sectionLabelClassName = 'text-[11px] uppercase tracking-[0.04em] font-semibold text-muted-foreground/70 whitespace-nowrap';
 const tournamentStatusBadgeClass = (status) => {
     if (status === 'registration')
@@ -35,7 +35,8 @@ const ChannelRow = ({ channel, active, onSelect, onInviteMember }) => {
     const unreadCount = typeof channel.unread === 'number' ? channel.unread : 0;
     const hasUnread = unreadCount > 0;
     const isVoice = channel.type === 'voice';
-    const Icon = isVoice ? Volume2 : Hash;
+    const isLivestream = channel.type === 'livestream';
+    const Icon = isVoice ? Volume2 : isLivestream ? Radio : Hash;
     const rowClassName = active
         ? 'bg-[hsl(240,5%,17%)] text-[hsl(0,0%,96%)]'
         : hasUnread
@@ -57,7 +58,7 @@ const ChannelRow = ({ channel, active, onSelect, onInviteMember }) => {
                                                     }, className: "flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]", children: _jsx(UserPlus, { className: "h-[14px] w-[14px]" }) }) }), _jsx(TooltipContent, { children: "Invite" })] }), _jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("span", { className: "flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-[hsl(0,0%,70%)] transition-colors hover:bg-black/15 hover:text-[hsl(0,0%,96%)]", children: _jsx(Settings, { className: "h-[14px] w-[14px]" }) }) }), _jsx(TooltipContent, { children: "Settings" })] })] })] })] })] }));
 };
 const VoiceActivityRow = ({ channel }) => {
-    if (channel.type !== 'voice' || !channel.activeMembers?.length)
+    if ((channel.type !== 'voice' && channel.type !== 'livestream') || !channel.activeMembers?.length)
         return null;
     return (_jsxs("div", { className: "mb-0.5 ml-[22px]", children: [_jsxs("div", { className: "flex items-center gap-1.5 px-2 py-[3px]", children: [channel.liveLabel && (_jsx("span", { className: "min-w-0 flex-1 truncate text-[11px] text-muted-foreground/70", children: channel.liveLabel })), channel.isLive && (_jsx("span", { className: "flex-shrink-0 rounded-sm bg-red-500 px-1.5 py-[2px] text-[10px] font-bold leading-none tracking-wide text-white", children: "TR\u1EF0C TI\u1EBEP" }))] }), _jsx("div", { className: "flex items-center gap-1 px-2 py-[2px]", children: _jsxs("div", { className: "flex items-center", children: [channel.activeMembers.slice(0, 4).map((member, index) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("div", { className: `flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ring-[1.5px] ring-[hsl(240,6%,10%)] ${member.color} ${index > 0 ? '-ml-1.5' : ''}`, children: member.avatarUrl ? (_jsx("img", { src: member.avatarUrl, alt: member.name ?? member.initials, className: "h-full w-full rounded-full object-cover" })) : (member.initials) }) }), _jsx(TooltipContent, { children: member.name ?? member.initials })] }, member.id))), channel.activeMembers.length > 4 && (_jsxs("div", { className: "flex h-5 w-5 -ml-1.5 items-center justify-center rounded-full bg-[hsl(240,4%,22%)] text-[9px] font-semibold text-muted-foreground ring-[1.5px] ring-[hsl(240,6%,10%)]", children: ["+", channel.activeMembers.length - 4] }))] }) })] }));
 };
@@ -87,6 +88,7 @@ export const ChannelSidebar = ({ serverId = 'default', serverName = 'Server', se
     const { data: channels = [] } = useChannels(serverId);
     const [expandedText, setExpandedText] = useState(true);
     const [expandedVoice, setExpandedVoice] = useState(true);
+    const [expandedLivestream, setExpandedLivestream] = useState(true);
     const [expandedTournaments, setExpandedTournaments] = useState(true);
     const [expandedTournamentIds, setExpandedTournamentIds] = useState({});
     const [expandedMatchIds, setExpandedMatchIds] = useState({});
@@ -98,6 +100,9 @@ export const ChannelSidebar = ({ serverId = 'default', serverName = 'Server', se
     const voiceChannels = fromCategories
         ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'voice'))
         : channels.filter((c) => c.type === 'VOICE');
+    const livestreamChannels = fromCategories
+        ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'livestream'))
+        : channels.filter((c) => c.type === 'LIVESTREAM');
     const toggleCategory = (id) => {
         setExpandedCategories((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
     };
@@ -118,7 +123,7 @@ export const ChannelSidebar = ({ serverId = 'default', serverName = 'Server', se
                                                             }
                                                         }, className: "rounded-md bg-black/30 p-1.5 text-white/70 transition-colors hover:bg-black/50 hover:text-white", children: _jsx(UserPlus, { className: "h-4 w-4" }) }) }), _jsx(TooltipContent, { children: "Invite People" })] }) }), _jsxs("div", { className: "absolute bottom-0 left-0 right-0 z-10 flex items-center gap-2 px-3 pb-2.5 pt-1", children: [serverIconUrl ? (_jsx("img", { src: serverIconUrl, alt: serverName, className: "h-8 w-8 flex-shrink-0 rounded-full object-cover ring-2 ring-black/30" })) : (_jsx("div", { className: `flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${serverColor} text-sm font-bold text-white ring-2 ring-black/30`, children: initials })), _jsx("span", { className: "min-w-0 flex-1 truncate text-left text-[15px] font-semibold text-white drop-shadow-md", children: serverName }), typeof serverBoostLevel === 'number' && serverBoostLevel > 0 && (_jsxs("span", { className: "flex flex-shrink-0 items-center gap-1 rounded-full bg-indigo-500/80 px-1.5 py-0.5 text-[10px] font-semibold text-white", children: [_jsx(Zap, { className: "h-2.5 w-2.5" }), "BOOST ", serverBoostLevel] })), _jsx(ChevronDown, { className: "h-4 w-4 flex-shrink-0 text-white/80 drop-shadow-md" })] })] }) }) })) : (_jsx(DropdownMenuTrigger, { asChild: true, children: _jsxs("button", { type: "button", className: "flex h-12 w-full items-center gap-3 border-b border-[hsl(240,4%,13%)] px-3 transition-colors hover:bg-white/[0.03]", children: [serverIconUrl ? (_jsx("img", { src: serverIconUrl, alt: serverName, className: "h-8 w-8 flex-shrink-0 rounded-lg object-cover" })) : (_jsx("div", { className: `flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${serverColor} text-sm font-bold text-white`, children: initials })), _jsx("span", { className: "flex-1 truncate text-left text-[15px] font-semibold text-[hsl(0,0%,96%)]", children: serverName }), _jsx(ChevronDown, { className: "h-4 w-4 flex-shrink-0 text-[hsl(0,0%,72%)]" })] }) })), _jsxs(DropdownMenuContent, { className: "w-56", align: "start", side: "bottom", children: [_jsxs(DropdownMenuItem, { onClick: onCreateChannel, children: [_jsx(Plus, { className: "mr-2 h-4 w-4" }), " T\u1EA1o K\u00EAnh"] }), _jsxs(DropdownMenuItem, { onClick: onInviteMember, children: [_jsx(UserPlus, { className: "mr-2 h-4 w-4" }), " L\u1EDDi m\u1EDDi"] }), _jsxs(DropdownMenuItem, { onClick: onOpenServerSettings, children: [_jsx(Settings, { className: "mr-2 h-4 w-4" }), " Server Settings"] }), _jsxs(DropdownMenuItem, { onClick: onOpenServerMembers, children: [_jsx(Users, { className: "mr-2 h-4 w-4" }), " Members"] }), _jsx(DropdownMenuSeparator, {}), _jsxs(DropdownMenuItem, { children: [_jsx(Bell, { className: "mr-2 h-4 w-4" }), " Notifications"] }), _jsx(DropdownMenuSeparator, {}), _jsxs(DropdownMenuItem, { className: "text-red-400 focus:bg-red-500/10 focus:text-red-400", children: [_jsx(LogOut, { className: "mr-2 h-4 w-4" }), " Leave Server"] })] })] }), _jsxs("div", { className: "flex-1 overflow-y-auto px-2 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [fromCategories && (_jsx("div", { className: "space-y-0.5", children: categories.map((cat, index) => {
                             const isExpanded = expandedCategories[cat.id] ?? true;
-                            return (_jsxs("div", { children: [_jsx(SectionHeader, { name: cat.name, expanded: isExpanded, onToggle: () => toggleCategory(cat.id), onCreateChannel: onCreateChannel, className: index === 0 ? 'mt-0' : 'mt-4' }), isExpanded && (_jsx("div", { className: "space-y-0.5", children: cat.channels.map((ch) => (_jsxs(React.Fragment, { children: [_jsx(ChannelRow, { channel: ch, active: ch.type === 'voice' ? ch.id === activeVoiceChannelId : ch.id === activeChannelId, onSelect: () => onSelectChannel(ch.id, ch.type, ch.name), onInviteMember: onInviteMember }), ch.type === 'voice' && _jsx(VoiceActivityRow, { channel: ch })] }, ch.id))) }))] }, cat.id));
+                            return (_jsxs("div", { children: [_jsx(SectionHeader, { name: cat.name, expanded: isExpanded, onToggle: () => toggleCategory(cat.id), onCreateChannel: onCreateChannel, className: index === 0 ? 'mt-0' : 'mt-4' }), isExpanded && (_jsx("div", { className: "space-y-0.5", children: cat.channels.map((ch) => (_jsxs(React.Fragment, { children: [_jsx(ChannelRow, { channel: ch, active: ch.type === 'voice' ? ch.id === activeVoiceChannelId : ch.id === activeChannelId, onSelect: () => onSelectChannel(ch.id, ch.type, ch.name), onInviteMember: onInviteMember }), (ch.type === 'voice' || ch.type === 'livestream') && _jsx(VoiceActivityRow, { channel: ch })] }, ch.id))) }))] }, cat.id));
                         }) })), !fromCategories && textChannels.length > 0 && (_jsxs("div", { children: [_jsx(SectionHeader, { name: "Text Channels", expanded: expandedText, onToggle: () => setExpandedText(!expandedText), onCreateChannel: onCreateChannel, className: "mt-0" }), expandedText && (_jsx("div", { className: "space-y-0.5", children: textChannels.map((channel) => (_jsx(ChannelRow, { channel: {
                                         id: channel.id,
                                         name: channel.name,
@@ -136,6 +141,22 @@ export const ChannelSidebar = ({ serverId = 'default', serverName = 'Server', se
                                                 id: channel.id,
                                                 name: channel.name,
                                                 type: 'voice',
+                                                unread: channel?.unreadCount ?? channel?.unread_count,
+                                                activeMembers: channel?.activeMembers,
+                                                liveLabel: channel?.liveLabel,
+                                                isLive: channel?.isLive,
+                                            } })] }, channel.id))) }))] })), !fromCategories && livestreamChannels.length > 0 && (_jsxs("div", { children: [_jsx(SectionHeader, { name: "Livestream Channels", expanded: expandedLivestream, onToggle: () => setExpandedLivestream(!expandedLivestream), onCreateChannel: onCreateChannel }), expandedLivestream && (_jsx("div", { className: "space-y-0.5", children: livestreamChannels.map((channel) => (_jsxs(React.Fragment, { children: [_jsx(ChannelRow, { channel: {
+                                                id: channel.id,
+                                                name: channel.name,
+                                                type: 'livestream',
+                                                unread: channel?.unreadCount ?? channel?.unread_count,
+                                                activeMembers: channel?.activeMembers,
+                                                liveLabel: channel?.liveLabel,
+                                                isLive: channel?.isLive,
+                                            }, active: channel.id === activeChannelId, onSelect: () => onSelectChannel(channel.id, 'livestream', channel.name), onInviteMember: onInviteMember }), _jsx(VoiceActivityRow, { channel: {
+                                                id: channel.id,
+                                                name: channel.name,
+                                                type: 'livestream',
                                                 unread: channel?.unreadCount ?? channel?.unread_count,
                                                 activeMembers: channel?.activeMembers,
                                                 liveLabel: channel?.liveLabel,

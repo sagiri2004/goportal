@@ -22,7 +22,8 @@ const (
 	NotificationStatusDeliveredToClient = "DELIVERED_TO_CLIENT"
 	NotificationStatusFailed            = "FAILED"
 
-	VoiceEventTypeActivityUpdated = "VOICE_CHANNEL_ACTIVITY_UPDATED"
+	VoiceEventTypeActivityUpdated      = "VOICE_CHANNEL_ACTIVITY_UPDATED"
+	LivestreamEventTypeActivityUpdated = "LIVESTREAM_ACTIVITY_UPDATED"
 )
 
 type MessageCreatedEvent struct {
@@ -103,6 +104,15 @@ type VoiceChannelActivityUpdatedEvent struct {
 	ServerID     string                            `json:"server_id"`
 	ChannelID    string                            `json:"channel_id"`
 	Participants []VoiceChannelParticipantSnapshot `json:"participants"`
+}
+
+type LivestreamChannelActivityUpdatedEvent struct {
+	EventType     string                            `json:"event_type"`
+	ServerID      string                            `json:"server_id"`
+	ChannelID     string                            `json:"channel_id"`
+	Participants  []VoiceChannelParticipantSnapshot `json:"participants"`
+	ViewerCount   int                               `json:"viewer_count"`
+	StreamerCount int                               `json:"streamer_count"`
 }
 
 type NotificationDeliveryEvent struct {

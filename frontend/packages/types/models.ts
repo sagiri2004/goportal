@@ -24,7 +24,7 @@ export type Channel = {
   id: string
   serverId: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   position?: number
   isPrivate?: boolean
   parentId?: string | null

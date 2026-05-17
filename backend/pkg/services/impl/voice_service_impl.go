@@ -16,15 +16,20 @@ import (
 )
 
 type voiceService struct {
-	serverRepo    repositories.ServerRepository
-	channelRepo   repositories.ChannelRepository
+	serverRepo     repositories.ServerRepository
+	channelRepo    repositories.ChannelRepository
 	tournamentRepo repositories.TournamentRepository
-	userRepo      repositories.UserRepository
-	recordingRepo repositories.RecordingRepository
-	notification  services.NotificationService
-	liveKitSvc    services.LiveKitService
-	egressSvc     services.EgressService
+	userRepo       repositories.UserRepository
+	recordingRepo  repositories.RecordingRepository
+	notification   services.NotificationService
+	liveKitSvc     services.LiveKitService
+	egressSvc      services.EgressService
 }
+
+const (
+	livestreamModeViewer   = "viewer"
+	livestreamModeStreamer = "streamer"
+)
 
 func NewVoiceService(
 	serverRepo repositories.ServerRepository,
@@ -37,14 +42,14 @@ func NewVoiceService(
 	egressSvc services.EgressService,
 ) services.VoiceService {
 	return &voiceService{
-		serverRepo:    serverRepo,
-		channelRepo:   channelRepo,
+		serverRepo:     serverRepo,
+		channelRepo:    channelRepo,
 		tournamentRepo: tournamentRepo,
-		userRepo:      userRepo,
-		recordingRepo: recordingRepo,
-		notification:  notification,
-		liveKitSvc:    liveKitSvc,
-		egressSvc:     egressSvc,
+		userRepo:       userRepo,
+		recordingRepo:  recordingRepo,
+		notification:   notification,
+		liveKitSvc:     liveKitSvc,
+		egressSvc:      egressSvc,
 	}
 }
 
@@ -128,6 +133,161 @@ func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelI
 	return &services.VoiceTokenResult{
 		Token: token,
 		URL:   global.Config.LiveKit.URL,
+	}, nil
+}
+
+func (s *voiceService) canStreamTournamentLivestreamChannel(ctx context.Context, actorID, channelID string) (bool, error) {
+	if s.tournamentRepo == nil {
+		return false, nil
+	}
+	workspace, err := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok && ae.Code == "TOURNAMENT_WORKSPACE_NOT_FOUND" {
+			return false, nil
+		}
+		return false, err
+	}
+	if workspace.LivestreamChannelID == nil || strings.TrimSpace(*workspace.LivestreamChannelID) != strings.TrimSpace(channelID) {
+		return false, nil
+	}
+	tournament, err := s.tournamentRepo.FindTournamentByID(ctx, workspace.TournamentID)
+	if err != nil {
+		return false, err
+	}
+	roles, err := s.tournamentRepo.ListRoles(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	roleByID := make(map[string]string, len(roles))
+	for i := range roles {
+		roleByID[roles[i].ID] = strings.TrimSpace(roles[i].Code)
+	}
+	bindings, err := s.tournamentRepo.ListRoleBindings(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	for i := range bindings {
+		if strings.TrimSpace(bindings[i].UserID) != strings.TrimSpace(actorID) {
+			continue
+		}
+		code := roleByID[bindings[i].RoleID]
+		// Livestream streamer is intentionally limited to caster role.
+		if code == models.TournamentRoleCaster {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *voiceService) GenerateLivestreamToken(ctx context.Context, actorID, channelID, mode string) (*services.VoiceTokenResult, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		mode = livestreamModeViewer
+	}
+	if mode != livestreamModeViewer && mode != livestreamModeStreamer {
+		return nil, apperr.E("LIVESTREAM_MODE_INVALID", nil)
+	}
+
+	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if channel.Type != models.ChannelTypeLivestream {
+		return nil, apperr.E("LIVESTREAM_CHANNEL_REQUIRED", nil)
+	}
+
+	if mode == livestreamModeStreamer {
+		canTournament, canErr := s.canStreamTournamentLivestreamChannel(ctx, actorID, channel.ID)
+		if canErr != nil {
+			return nil, canErr
+		}
+		if !canTournament {
+			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+		}
+	}
+
+	actor, err := s.userRepo.FindByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataBytes, err := json.Marshal(map[string]any{
+		"user_id":         actor.ID,
+		"username":        actor.Username,
+		"display_name":    actor.Username,
+		"avatar_url":      strings.TrimSpace(stringValue(actor.AvatarURL)),
+		"livestream_mode": mode,
+	})
+	if err != nil {
+		return nil, apperr.E("INTERNAL_ERROR", err)
+	}
+
+	canPublish := mode == livestreamModeStreamer
+	canSubscribe := true
+	token, err := s.liveKitSvc.GenerateAccessTokenWithGrant(channel.ID, actorID, actor.Username, string(metadataBytes), canPublish, canSubscribe)
+	if err != nil {
+		return nil, err
+	}
+
+	return &services.VoiceTokenResult{
+		Token: token,
+		URL:   global.Config.LiveKit.URL,
+	}, nil
+}
+
+func (s *voiceService) GetLivestreamState(ctx context.Context, actorID, channelID string) (*services.LivestreamStateResult, error) {
+	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if channel.Type != models.ChannelTypeLivestream {
+		return nil, apperr.E("LIVESTREAM_CHANNEL_REQUIRED", nil)
+	}
+
+	_, participantInfos, err := s.liveKitSvc.GetRoomInfo(ctx, channel.ID)
+	if err != nil {
+		if isAppErrCode(err, "LIVEKIT_ROOM_NOT_FOUND") {
+			return &services.LivestreamStateResult{
+				ChannelID:     channel.ID,
+				Participants:  []models.VoiceChannelParticipantSnapshot{},
+				ViewerCount:   0,
+				StreamerCount: 0,
+			}, nil
+		}
+		return nil, err
+	}
+
+	participants, err := s.buildParticipantSnapshots(ctx, participantInfos)
+	if err != nil {
+		return nil, err
+	}
+
+	streamerCount := 0
+	for _, p := range participantInfos {
+		hasPublish := false
+		for _, track := range p.GetTracks() {
+			if track.GetSource() == livekit.TrackSource_CAMERA ||
+				track.GetSource() == livekit.TrackSource_MICROPHONE ||
+				track.GetSource() == livekit.TrackSource_SCREEN_SHARE ||
+				track.GetSource() == livekit.TrackSource_SCREEN_SHARE_AUDIO {
+				hasPublish = true
+				break
+			}
+		}
+		if hasPublish {
+			streamerCount += 1
+		}
+	}
+	viewerCount := len(participantInfos) - streamerCount
+	if viewerCount < 0 {
+		viewerCount = 0
+	}
+
+	return &services.LivestreamStateResult{
+		ChannelID:     channel.ID,
+		Participants:  participants,
+		ViewerCount:   viewerCount,
+		StreamerCount: streamerCount,
 	}, nil
 }
 
@@ -330,7 +490,7 @@ func (s *voiceService) dispatchVoiceActivityUpdate(ctx context.Context, evt *liv
 	if err != nil {
 		return err
 	}
-	if channel.Type != models.ChannelTypeVoice {
+	if channel.Type != models.ChannelTypeVoice && channel.Type != models.ChannelTypeLivestream {
 		return nil
 	}
 
@@ -344,12 +504,45 @@ func (s *voiceService) dispatchVoiceActivityUpdate(ctx context.Context, evt *liv
 		return err
 	}
 
-	payload, err := json.Marshal(models.VoiceChannelActivityUpdatedEvent{
-		EventType:    models.VoiceEventTypeActivityUpdated,
-		ServerID:     channel.ServerID,
-		ChannelID:    channel.ID,
-		Participants: participants,
-	})
+	streamerCount := 0
+	for _, info := range participantInfos {
+		hasPublish := false
+		for _, track := range info.GetTracks() {
+			if track.GetSource() == livekit.TrackSource_CAMERA ||
+				track.GetSource() == livekit.TrackSource_MICROPHONE ||
+				track.GetSource() == livekit.TrackSource_SCREEN_SHARE ||
+				track.GetSource() == livekit.TrackSource_SCREEN_SHARE_AUDIO {
+				hasPublish = true
+				break
+			}
+		}
+		if hasPublish {
+			streamerCount++
+		}
+	}
+	viewerCount := len(participantInfos) - streamerCount
+	if viewerCount < 0 {
+		viewerCount = 0
+	}
+
+	var payload []byte
+	if channel.Type == models.ChannelTypeLivestream {
+		payload, err = json.Marshal(models.LivestreamChannelActivityUpdatedEvent{
+			EventType:     models.LivestreamEventTypeActivityUpdated,
+			ServerID:      channel.ServerID,
+			ChannelID:     channel.ID,
+			Participants:  participants,
+			ViewerCount:   viewerCount,
+			StreamerCount: streamerCount,
+		})
+	} else {
+		payload, err = json.Marshal(models.VoiceChannelActivityUpdatedEvent{
+			EventType:    models.VoiceEventTypeActivityUpdated,
+			ServerID:     channel.ServerID,
+			ChannelID:    channel.ID,
+			Participants: participants,
+		})
+	}
 	if err != nil {
 		return apperr.E("INTERNAL_ERROR", err)
 	}

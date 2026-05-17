@@ -1,14 +1,18 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Button, Input, Label, } from '@goportal/ui';
-import { Hash, Volume2 } from 'lucide-react';
+import { Hash, Radio, Volume2 } from 'lucide-react';
 export const CreateChannelModal = ({ isOpen, onOpenChange, onCreate, }) => {
     const [channelType, setChannelType] = useState('TEXT');
     const [name, setName] = useState('');
     const [nameError, setNameError] = useState(null);
     const [submitError, setSubmitError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const placeholder = useMemo(() => (channelType === 'TEXT' ? 'text-channel' : 'voice-channel'), [channelType]);
+    const placeholder = useMemo(() => channelType === 'TEXT'
+        ? 'text-channel'
+        : channelType === 'VOICE'
+            ? 'voice-channel'
+            : 'livestream-channel', [channelType]);
     const normalizeName = (value) => value.toLowerCase().trim().replace(/\s+/g, '-');
     const resetState = () => {
         setName('');
@@ -62,11 +66,13 @@ export const CreateChannelModal = ({ isOpen, onOpenChange, onCreate, }) => {
             setIsSubmitting(false);
         }
     };
-    return (_jsx(Dialog, { open: isOpen, onOpenChange: handleOpenChange, children: _jsxs(DialogContent, { children: [_jsxs(DialogHeader, { children: [_jsx(DialogTitle, { children: "T\u1EA1o K\u00EAnh" }), _jsx(DialogDescription, { children: "T\u1EA1o k\u00EAnh v\u0103n b\u1EA3n ho\u1EB7c tho\u1EA1i cho server n\u00E0y." })] }), _jsxs("form", { onSubmit: handleSubmit, className: "space-y-4", children: [_jsxs("div", { className: "space-y-1.5", children: [_jsx(Label, { htmlFor: "channel-name", children: "Lo\u1EA1i K\u00EAnh" }), _jsxs("div", { className: "grid grid-cols-2 gap-2", children: [_jsxs("button", { type: "button", onClick: () => setChannelType('TEXT'), className: `flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${channelType === 'TEXT'
+    return (_jsx(Dialog, { open: isOpen, onOpenChange: handleOpenChange, children: _jsxs(DialogContent, { children: [_jsxs(DialogHeader, { children: [_jsx(DialogTitle, { children: "T\u1EA1o K\u00EAnh" }), _jsx(DialogDescription, { children: "T\u1EA1o k\u00EAnh v\u0103n b\u1EA3n ho\u1EB7c tho\u1EA1i cho server n\u00E0y." })] }), _jsxs("form", { onSubmit: handleSubmit, className: "space-y-4", children: [_jsxs("div", { className: "space-y-1.5", children: [_jsx(Label, { htmlFor: "channel-name", children: "Lo\u1EA1i K\u00EAnh" }), _jsxs("div", { className: "grid grid-cols-3 gap-2", children: [_jsxs("button", { type: "button", onClick: () => setChannelType('TEXT'), className: `flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${channelType === 'TEXT'
                                                 ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
                                                 : 'border-border bg-background text-muted-foreground hover:text-foreground'}`, children: [_jsx(Hash, { className: "h-4 w-4" }), _jsx("span", { className: "text-sm font-medium", children: "Text Channel" })] }), _jsxs("button", { type: "button", onClick: () => setChannelType('VOICE'), className: `flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${channelType === 'VOICE'
                                                 ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
-                                                : 'border-border bg-background text-muted-foreground hover:text-foreground'}`, children: [_jsx(Volume2, { className: "h-4 w-4" }), _jsx("span", { className: "text-sm font-medium", children: "Voice Channel" })] })] })] }), _jsxs("div", { className: "space-y-1.5", children: [_jsx(Label, { htmlFor: "channel-name", children: "T\u00EAn K\u00EAnh" }), _jsx(Input, { id: "channel-name", placeholder: placeholder, value: name, onChange: (e) => {
+                                                : 'border-border bg-background text-muted-foreground hover:text-foreground'}`, children: [_jsx(Volume2, { className: "h-4 w-4" }), _jsx("span", { className: "text-sm font-medium", children: "Voice Channel" })] }), _jsxs("button", { type: "button", onClick: () => setChannelType('LIVESTREAM'), className: `flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${channelType === 'LIVESTREAM'
+                                                ? 'border-indigo-500 bg-indigo-500/15 text-foreground'
+                                                : 'border-border bg-background text-muted-foreground hover:text-foreground'}`, children: [_jsx(Radio, { className: "h-4 w-4" }), _jsx("span", { className: "text-sm font-medium", children: "Livestream" })] })] })] }), _jsxs("div", { className: "space-y-1.5", children: [_jsx(Label, { htmlFor: "channel-name", children: "T\u00EAn K\u00EAnh" }), _jsx(Input, { id: "channel-name", placeholder: placeholder, value: name, onChange: (e) => {
                                         const next = normalizeName(e.target.value).slice(0, 100);
                                         setName(next);
                                         setNameError(validate(next));

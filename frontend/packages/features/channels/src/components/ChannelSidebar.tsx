@@ -33,6 +33,7 @@ import {
   PhoneOff,
   Sparkles,
   Wifi,
+  Radio,
 } from 'lucide-react'
 
 type ChannelSidebarProps = {
@@ -49,7 +50,7 @@ type ChannelSidebarProps = {
     channels: Array<{
       id: string
       name: string
-      type: 'text' | 'voice'
+      type: 'text' | 'voice' | 'livestream'
       unread: number
       activeMembers?: ChannelMember[]
       liveLabel?: string
@@ -58,7 +59,7 @@ type ChannelSidebarProps = {
   }>
   activeChannelId?: string
   activeVoiceChannelId?: string
-  onSelectChannel?: (channelId: string, type: 'text' | 'voice', channelName?: string) => void
+  onSelectChannel?: (channelId: string, type: 'text' | 'voice' | 'livestream', channelName?: string) => void
   onCreateChannel?: () => void
   onInviteMember?: () => void
   onOpenServerSettings?: () => void
@@ -88,8 +89,8 @@ type ChannelSidebarProps = {
     generalChannel?: {
       id: string
       name: string
-      type: 'text' | 'voice'
-      role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator'
+      type: 'text' | 'voice' | 'livestream'
+      role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream'
       unread: number
       activeMembers?: ChannelMember[]
       liveLabel?: string
@@ -103,8 +104,8 @@ type ChannelSidebarProps = {
       channels: Array<{
         id: string
         name: string
-        type: 'text' | 'voice'
-        role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator'
+        type: 'text' | 'voice' | 'livestream'
+        role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream'
         unread: number
         activeMembers?: ChannelMember[]
         liveLabel?: string
@@ -126,7 +127,7 @@ type ChannelMember = {
 type SidebarChannel = {
   id: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   unread?: number
   activeMembers?: ChannelMember[]
   liveLabel?: string
@@ -199,7 +200,8 @@ const ChannelRow: React.FC<{
   const unreadCount = typeof channel.unread === 'number' ? channel.unread : 0
   const hasUnread = unreadCount > 0
   const isVoice = channel.type === 'voice'
-  const Icon = isVoice ? Volume2 : Hash
+  const isLivestream = channel.type === 'livestream'
+  const Icon = isVoice ? Volume2 : isLivestream ? Radio : Hash
 
   const rowClassName = active
     ? 'bg-[hsl(240,5%,17%)] text-[hsl(0,0%,96%)]'
@@ -274,7 +276,7 @@ const ChannelRow: React.FC<{
 const VoiceActivityRow: React.FC<{
   channel: SidebarChannel
 }> = ({ channel }) => {
-  if (channel.type !== 'voice' || !channel.activeMembers?.length) return null
+  if ((channel.type !== 'voice' && channel.type !== 'livestream') || !channel.activeMembers?.length) return null
 
   return (
     <div className="mb-0.5 ml-[22px]">
@@ -528,6 +530,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
   const [expandedVoice, setExpandedVoice] = useState(true)
+  const [expandedLivestream, setExpandedLivestream] = useState(true)
   const [expandedTournaments, setExpandedTournaments] = useState(true)
   const [expandedTournamentIds, setExpandedTournamentIds] = useState<Record<string, boolean>>({})
   const [expandedMatchIds, setExpandedMatchIds] = useState<Record<string, boolean>>({})
@@ -540,6 +543,9 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   const voiceChannels = fromCategories
     ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'voice'))
     : channels.filter((c) => c.type === 'VOICE')
+  const livestreamChannels = fromCategories
+    ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'livestream'))
+    : channels.filter((c) => c.type === 'LIVESTREAM')
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
@@ -704,7 +710,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                             onSelect={() => onSelectChannel(ch.id, ch.type, ch.name)}
                             onInviteMember={onInviteMember}
                           />
-                          {ch.type === 'voice' && <VoiceActivityRow channel={ch} />}
+                          {(ch.type === 'voice' || ch.type === 'livestream') && <VoiceActivityRow channel={ch} />}
                         </React.Fragment>
                       ))}
                     </div>
@@ -778,6 +784,51 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         id: channel.id,
                         name: channel.name,
                         type: 'voice',
+                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
+                        activeMembers: (channel as any)?.activeMembers,
+                        liveLabel: (channel as any)?.liveLabel,
+                        isLive: (channel as any)?.isLive,
+                      }}
+                    />
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!fromCategories && livestreamChannels.length > 0 && (
+          <div>
+            <SectionHeader
+              name="Livestream Channels"
+              expanded={expandedLivestream}
+              onToggle={() => setExpandedLivestream(!expandedLivestream)}
+              onCreateChannel={onCreateChannel}
+            />
+
+            {expandedLivestream && (
+              <div className="space-y-0.5">
+                {livestreamChannels.map((channel) => (
+                  <React.Fragment key={channel.id}>
+                    <ChannelRow
+                      channel={{
+                        id: channel.id,
+                        name: channel.name,
+                        type: 'livestream',
+                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
+                        activeMembers: (channel as any)?.activeMembers,
+                        liveLabel: (channel as any)?.liveLabel,
+                        isLive: (channel as any)?.isLive,
+                      }}
+                      active={channel.id === activeChannelId}
+                      onSelect={() => onSelectChannel(channel.id, 'livestream', channel.name)}
+                      onInviteMember={onInviteMember}
+                    />
+                    <VoiceActivityRow
+                      channel={{
+                        id: channel.id,
+                        name: channel.name,
+                        type: 'livestream',
                         unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
                         activeMembers: (channel as any)?.activeMembers,
                         liveLabel: (channel as any)?.liveLabel,

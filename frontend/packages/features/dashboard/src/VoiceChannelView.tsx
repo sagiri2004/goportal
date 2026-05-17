@@ -48,7 +48,7 @@ type VoiceState = {
 type CategoryChannel = {
   id: string
   name: string
-  type: 'text' | 'voice'
+  type: 'text' | 'voice' | 'livestream'
   activeMembers?: Array<{ id: string }>
   isLive?: boolean
 }

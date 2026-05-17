@@ -55,7 +55,7 @@ type ShellContext = {
     channels: Array<{
       id: string
       name: string
-      type: 'text' | 'voice'
+      type: 'text' | 'voice' | 'livestream'
     }>
   }>
   incrementChannelUnread?: (channelId: string) => void

@@ -138,6 +138,14 @@ export const mockChannelsData = [
         is_private: false,
     },
     {
+        id: 'c6',
+        server_id: 's1',
+        name: 'live-main',
+        type: 'LIVESTREAM',
+        position: 3,
+        is_private: false,
+    },
+    {
         id: 'c4',
         server_id: 's2',
         name: 'sdk-help',

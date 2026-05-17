@@ -13,7 +13,7 @@ type ChannelSidebarProps = {
         channels: Array<{
             id: string;
             name: string;
-            type: 'text' | 'voice';
+            type: 'text' | 'voice' | 'livestream';
             unread: number;
             activeMembers?: ChannelMember[];
             liveLabel?: string;
@@ -22,7 +22,7 @@ type ChannelSidebarProps = {
     }>;
     activeChannelId?: string;
     activeVoiceChannelId?: string;
-    onSelectChannel?: (channelId: string, type: 'text' | 'voice', channelName?: string) => void;
+    onSelectChannel?: (channelId: string, type: 'text' | 'voice' | 'livestream', channelName?: string) => void;
     onCreateChannel?: () => void;
     onInviteMember?: () => void;
     onOpenServerSettings?: () => void;
@@ -52,8 +52,8 @@ type ChannelSidebarProps = {
         generalChannel?: {
             id: string;
             name: string;
-            type: 'text' | 'voice';
-            role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator';
+            type: 'text' | 'voice' | 'livestream';
+            role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream';
             unread: number;
             activeMembers?: ChannelMember[];
             liveLabel?: string;
@@ -67,8 +67,8 @@ type ChannelSidebarProps = {
             channels: Array<{
                 id: string;
                 name: string;
-                type: 'text' | 'voice';
-                role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator';
+                type: 'text' | 'voice' | 'livestream';
+                role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator' | 'livestream';
                 unread: number;
                 activeMembers?: ChannelMember[];
                 liveLabel?: string;
