@@ -734,6 +734,13 @@ func (ctrl *tournamentController) GenerateObserverTokens(c *gin.Context) {
 			URL:       bundle.Caster.URL,
 		}
 	}
+	if bundle.Spectator != nil {
+		resp.Spectator = &serializers.TournamentObserverTokenResponse{
+			ChannelID: bundle.Spectator.ChannelID,
+			Token:     bundle.Spectator.Token,
+			URL:       bundle.Spectator.URL,
+		}
+	}
 	c.JSON(http.StatusOK, serializers.Success("OK", "Observer tokens generated", resp))
 }
 

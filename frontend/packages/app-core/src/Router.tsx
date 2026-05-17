@@ -13,7 +13,7 @@ import { AuthLayout } from './AuthLayout'
 import { PrivateRoute } from './PrivateRoute'
 import { AppShell } from './layout/AppShell'
 import { AuthView } from '@goportal/feature-auth'
-import { DashboardView } from '@goportal/feature-dashboard'
+import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard'
 import { TournamentDetailPage, TournamentListPage } from './tournaments'
 import { GameDetailPage, GamePlayerPage, GamesCatalogPage, GamesDeveloperPage } from './games/GameViews'
 import { GameSDKDocsPage } from './games/GameSDKDocsPage'
@@ -291,7 +291,7 @@ export const Router: React.FC = () => {
           <Route index element={<AppIndexRedirect />} />
           <Route path="@me" element={<DMHomePage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<DashboardView />} />
-          <Route path="servers/:serverId/voice/:channelId" element={<VoiceLegacyRedirect />} />
+          <Route path="servers/:serverId/voice/:channelId" element={<VoiceChannelView />} />
           <Route path="servers/:serverId/tournaments" element={<TournamentListPage />} />
           <Route path="servers/:serverId/tournaments/:tournamentId" element={<TournamentDetailPage />} />
         </Route>
@@ -342,45 +342,5 @@ export const Router: React.FC = () => {
         <Route path="*" element={<Navigate to="/auth/login" replace />} />
       </Routes>
     </BrowserRouter>
-  )
-}
-
-const VoiceLegacyRedirect: React.FC = () => {
-  const { serverId = '', channelId = '' } = useParams<{ serverId: string; channelId: string }>()
-  const navigate = useNavigate()
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    const run = async () => {
-      try {
-        const channels = await getChannels(serverId)
-        if (cancelled) {
-          return
-        }
-        const flatChannels = channels.categories.flatMap((category) => category.channels)
-        const firstText = flatChannels.find((channel) => channel.type === 'text') ?? flatChannels[0]
-        if (!firstText) {
-          navigate('/app/@me', { replace: true })
-          return
-        }
-        navigate(`/app/servers/${serverId}/channels/${firstText.id}`, { replace: true })
-      } catch {
-        if (!cancelled) {
-          navigate('/app/@me', { replace: true })
-        }
-      }
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [channelId, navigate, serverId])
-
-  return (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
-    </div>
   )
 }

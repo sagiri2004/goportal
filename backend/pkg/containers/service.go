@@ -71,6 +71,7 @@ func MessageService() services.MessageService {
 			MessageRepository(),
 			ServerRepository(),
 			ChannelRepository(),
+			TournamentRepository(),
 			UserRepository(),
 			StorageService(),
 			pkgglobal.Publisher,
@@ -117,6 +118,7 @@ func VoiceService() services.VoiceService {
 		voiceSvc = svcimpl.NewVoiceService(
 			ServerRepository(),
 			ChannelRepository(),
+			TournamentRepository(),
 			UserRepository(),
 			RecordingRepository(),
 			NotificationService(),

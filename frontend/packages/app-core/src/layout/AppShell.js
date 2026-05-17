@@ -27,7 +27,7 @@ import { Copy } from 'lucide-react';
 import { useVoiceSessionStore } from '../stores/voice-session.store';
 import { MemberListPanel } from './MemberListPanel';
 import { ServerSettingsOverlay } from './ServerSettingsOverlay';
-import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, getTournamentMatchObserverTokens, joinByInviteCode, getVoiceToken, listTournamentMatchWorkspaces, listTournamentsByServer, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
+import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, getTournamentMatchObserverTokens, joinByInviteCode, getVoiceToken, listTournamentMatchWorkspaces, listTournamentMatches, listTournamentsByServer, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
 // ─── Panel size constants (% of PanelGroup width, must sum ≤ 100) ────────────
 const SIZE = {
     sidebar: { default: 22, min: 18, max: 35 },
@@ -53,13 +53,15 @@ const isTournamentMatchVoiceChannelName = (name) => {
         lower.includes('team-b-r') ||
         lower.includes('spectator-r') ||
         lower.includes('caster-r') ||
+        lower.includes('referee-r') ||
         lower.includes('admin-r') ||
         // legacy names from previous workspace versions
         lower === 'team-a-comms' ||
         lower === 'team-b-comms' ||
         lower === 'spectator-live' ||
         lower === 'caster-booth' ||
-        lower === 'admin-observer');
+        lower === 'admin-observer' ||
+        lower === 'referee-observer');
 };
 const logVoiceDebug = (step, data) => {
     if (data) {
@@ -331,6 +333,9 @@ export const AppShell = () => {
     const [channelsByServer, setChannelsByServer] = useState({});
     const [membersByServer, setMembersByServer] = useState({});
     const [tournamentsByServer, setTournamentsByServer] = useState({});
+    const [tournamentMatchesById, setTournamentMatchesById] = useState({});
+    const [tournamentWorkspacesById, setTournamentWorkspacesById] = useState({});
+    const [loadedTournamentTreeById, setLoadedTournamentTreeById] = useState({});
     const [isCreateTournamentModalOpen, setIsCreateTournamentModalOpen] = useState(false);
     const [voiceActivityByChannel, setVoiceActivityByChannel] = useState({});
     const voiceSession = useVoiceSessionStore((state) => state.session);
@@ -620,16 +625,30 @@ export const AppShell = () => {
         }
         const categories = channelsByServer[serverId] ?? [];
         const voiceChannels = categories.flatMap((category) => category.channels.filter((channel) => channel.type === 'voice'));
-        if (voiceChannels.length === 0) {
+        const knownVoiceIds = new Set(voiceChannels.map((channel) => channel.id));
+        const tournamentVoiceChannels = Object.values(tournamentWorkspacesById)
+            .flatMap((workspaces) => workspaces ?? [])
+            .flatMap((workspace) => [
+            workspace.team_a_channel_id,
+            workspace.team_b_channel_id,
+            workspace.caster_channel_id,
+            workspace.referee_channel_id ?? workspace.admin_channel_id,
+            workspace.spectator_channel_id,
+        ])
+            .filter((channelId) => Boolean(channelId))
+            .filter((channelId) => !knownVoiceIds.has(channelId))
+            .map((channelId) => ({ id: channelId, name: channelId, type: 'voice' }));
+        const allVoiceChannels = [...voiceChannels, ...tournamentVoiceChannels];
+        if (allVoiceChannels.length === 0) {
             return;
         }
-        const results = await Promise.allSettled(voiceChannels.map(async (channel) => {
+        const results = await Promise.allSettled(allVoiceChannels.map(async (channel) => {
             const response = await listVoiceParticipants(channel.id);
             return { channelId: channel.id, participants: response.items ?? [] };
         }));
         setVoiceActivityByChannel((prev) => {
             const next = { ...prev };
-            voiceChannels.forEach((channel) => {
+            allVoiceChannels.forEach((channel) => {
                 if (!next[channel.id]) {
                     next[channel.id] = mapVoiceParticipantsToActivity([]);
                 }
@@ -648,7 +667,7 @@ export const AppShell = () => {
             });
             return next;
         });
-    }, [channelsByServer, mapVoiceParticipantsToActivity]);
+    }, [channelsByServer, mapVoiceParticipantsToActivity, tournamentWorkspacesById]);
     // After showMembers flips, imperatively resize main panel.
     // useEffect runs after render so mainRef is guaranteed to be attached.
     useEffect(() => {
@@ -905,6 +924,7 @@ export const AppShell = () => {
                     id: item.id,
                     name: item.name,
                     status: item.status,
+                    tournament_general_channel_id: item.tournament_general_channel_id ?? null,
                 })),
             }));
         }
@@ -915,12 +935,48 @@ export const AppShell = () => {
             }));
         }
     }, []);
+    const loadTournamentTreeData = useCallback(async (tournamentId) => {
+        if (!tournamentId) {
+            return;
+        }
+        if (loadedTournamentTreeById[tournamentId]) {
+            return;
+        }
+        const [matches, workspaces] = await Promise.all([
+            listTournamentMatches(tournamentId, {}),
+            listTournamentMatchWorkspaces(tournamentId),
+        ]);
+        setTournamentMatchesById((prev) => ({
+            ...prev,
+            [tournamentId]: (matches ?? []).map((match) => ({
+                id: match.id,
+                round: match.round,
+                match_number: match.match_number,
+            })),
+        }));
+        setTournamentWorkspacesById((prev) => ({
+            ...prev,
+            [tournamentId]: workspaces ?? [],
+        }));
+        setLoadedTournamentTreeById((prev) => ({
+            ...prev,
+            [tournamentId]: true,
+        }));
+    }, [loadedTournamentTreeById]);
     useEffect(() => {
         if (!activeServerId) {
             return;
         }
         void refreshTournaments(activeServerId);
     }, [activeServerId, refreshTournaments]);
+    useEffect(() => {
+        if (!params.tournamentId) {
+            return;
+        }
+        void loadTournamentTreeData(params.tournamentId).catch(() => {
+            // no-op
+        });
+    }, [loadTournamentTreeData, params.tournamentId]);
     const incrementChannelUnread = useCallback((channelId) => {
         if (!channelId) {
             return;
@@ -1106,7 +1162,7 @@ export const AppShell = () => {
             channelId: fallback.id,
         });
     }, [clearVoiceSession, navigate, resolveFallbackTextChannel]);
-    const joinVoiceChannel = useCallback(async (channelId) => {
+    const joinVoiceChannel = useCallback(async (channelId, preferredChannelName) => {
         logVoiceDebug('join:click', {
             activeServerId,
             channelId,
@@ -1140,7 +1196,7 @@ export const AppShell = () => {
         const selectedChannel = categories
             .flatMap((category) => category.channels)
             .find((channel) => channel.id === channelId && channel.type === 'voice');
-        const channelName = selectedChannel?.name ?? channelId;
+        const channelName = selectedChannel?.name ?? preferredChannelName ?? channelId;
         const serverName = serverDetails[activeServerId]?.name ??
             servers.find((server) => server.id === activeServerId)?.name ??
             'Server';
@@ -1505,18 +1561,88 @@ export const AppShell = () => {
             };
         }),
     })), [activeCategories, voiceActivityByChannel]);
-    const tournamentVoiceChannels = useMemo(() => categoriesWithVoiceActivity
-        .flatMap((category) => category.channels)
-        .filter((channel) => channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)), [categoriesWithVoiceActivity]);
-    const categoriesForSidebar = useMemo(() => categoriesWithVoiceActivity.map((category) => ({
-        ...category,
-        channels: category.channels.filter((channel) => !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name))),
-    })), [categoriesWithVoiceActivity]);
-    const activeMembers = useMemo(() => membersByServer[activeServerId] ?? [], [activeServerId, membersByServer]);
     const activeTournaments = useMemo(() => tournamentsByServer[activeServerId] ?? [], [activeServerId, tournamentsByServer]);
+    const tournamentChannelMap = useMemo(() => {
+        const map = new Map();
+        for (const category of categoriesWithVoiceActivity) {
+            for (const channel of category.channels) {
+                map.set(channel.id, channel);
+            }
+        }
+        return map;
+    }, [categoriesWithVoiceActivity]);
+    const tournamentChannelTree = useMemo(() => {
+        const buildNode = (channelId, role, fallbackName, type) => {
+            if (!channelId) {
+                return null;
+            }
+            const channel = tournamentChannelMap.get(channelId);
+            return {
+                id: channelId,
+                name: channel?.name ?? fallbackName,
+                type: channel?.type ?? type,
+                role,
+                unread: channel?.unread ?? 0,
+                activeMembers: channel?.activeMembers,
+                liveLabel: channel?.liveLabel,
+                isLive: channel?.isLive,
+            };
+        };
+        return activeTournaments.map((tournament) => {
+            const matches = (tournamentMatchesById[tournament.id] ?? []).slice().sort((a, b) => {
+                if (a.round !== b.round) {
+                    return a.round - b.round;
+                }
+                return a.match_number - b.match_number;
+            });
+            const workspaces = tournamentWorkspacesById[tournament.id] ?? [];
+            const workspaceByMatch = new Map(workspaces.map((workspace) => [workspace.match_id, workspace]));
+            const matchNodes = matches.map((match) => {
+                const workspace = workspaceByMatch.get(match.id);
+                const channels = [];
+                const roleNodes = [
+                    buildNode(workspace?.team_a_channel_id, 'team-a', `team-a-r${match.round}-m${match.match_number}`, 'voice'),
+                    buildNode(workspace?.team_b_channel_id, 'team-b', `team-b-r${match.round}-m${match.match_number}`, 'voice'),
+                    buildNode(workspace?.caster_channel_id, 'caster', `caster-r${match.round}-m${match.match_number}`, 'voice'),
+                    buildNode(workspace?.referee_channel_id ?? workspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
+                    buildNode(workspace?.spectator_channel_id, 'spectator', `spectator-r${match.round}-m${match.match_number}`, 'voice'),
+                ];
+                for (const node of roleNodes) {
+                    if (node)
+                        channels.push(node);
+                }
+                return {
+                    matchId: match.id,
+                    round: match.round,
+                    matchNumber: match.match_number,
+                    label: `Round ${match.round} - Match ${match.match_number}`,
+                    channels,
+                };
+            });
+            return {
+                id: tournament.id,
+                name: tournament.name,
+                status: tournament.status,
+                generalTextChannelId: tournament.tournament_general_channel_id ?? null,
+                generalChannel: buildNode(tournament.tournament_general_channel_id ?? undefined, 'general', 'tournament-general', 'text'),
+                matches: matchNodes,
+            };
+        });
+    }, [activeTournaments, tournamentChannelMap, tournamentMatchesById, tournamentWorkspacesById]);
+    const categoriesForSidebar = useMemo(() => {
+        const tournamentGeneralIds = new Set(activeTournaments
+            .map((tournament) => tournament.tournament_general_channel_id)
+            .filter((id) => Boolean(id)));
+        return (categoriesWithVoiceActivity.map((category) => ({
+            ...category,
+            channels: category.channels.filter((channel) => !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)) &&
+                !(channel.type === 'text' && tournamentGeneralIds.has(channel.id))),
+        })));
+    }, [activeTournaments, categoriesWithVoiceActivity]);
+    const activeMembers = useMemo(() => membersByServer[activeServerId] ?? [], [activeServerId, membersByServer]);
     const requestTournamentObserverTokens = useCallback(async (channelId) => {
         if (!activeServerId || activeTournaments.length === 0) {
-            return [];
+            return null;
         }
         for (const tournament of activeTournaments) {
             let workspaces = [];
@@ -1531,28 +1657,34 @@ export const AppShell = () => {
                 item.team_b_channel_id,
                 item.caster_channel_id,
                 item.admin_channel_id,
+                item.referee_channel_id,
                 item.spectator_channel_id,
             ].includes(channelId));
             if (!workspace) {
                 continue;
             }
             const bundle = await getTournamentMatchObserverTokens(tournament.id, workspace.match_id);
-            return [
-                {
-                    channelId: bundle.team_a.channel_id,
-                    channelName: `team-a`,
-                    token: bundle.team_a.token,
-                    url: bundle.team_a.url,
-                },
-                {
-                    channelId: bundle.team_b.channel_id,
-                    channelName: `team-b`,
-                    token: bundle.team_b.token,
-                    url: bundle.team_b.url,
-                },
-            ];
+            return {
+                matchId: workspace.match_id,
+                feeds: [
+                    {
+                        role: 'team-a',
+                        channelId: bundle.team_a.channel_id,
+                        channelName: 'team-a',
+                        token: bundle.team_a.token,
+                        url: bundle.team_a.url,
+                    },
+                    {
+                        role: 'team-b',
+                        channelId: bundle.team_b.channel_id,
+                        channelName: 'team-b',
+                        token: bundle.team_b.token,
+                        url: bundle.team_b.url,
+                    },
+                ],
+            };
         }
-        return [];
+        return null;
     }, [activeServerId, activeTournaments]);
     const hasManageVoicePermission = useMemo(() => {
         if (!currentUser) {
@@ -1577,8 +1709,7 @@ export const AppShell = () => {
             return;
         }
         syncCurrentRoomActivity(voiceState);
-        syncVoiceStateFromRoom(voiceState.room);
-    }, [syncCurrentRoomActivity, syncVoiceStateFromRoom, voiceState]);
+    }, [syncCurrentRoomActivity, voiceState?.room]);
     // Context passed to all child routes via <Outlet>
     const outletContext = useMemo(() => ({
         showMembers,
@@ -1654,7 +1785,7 @@ export const AppShell = () => {
                             catch {
                                 navigate('/app/@me');
                             }
-                        }, onOpenGames: () => navigate('/games'), onCreateServer: () => openCreateServerModal() }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: categoriesForSidebar, tournamentVoiceChannels: tournamentVoiceChannels, activeChannelId: activeChannelId, activeVoiceChannelId: voiceState?.channelId ?? undefined, onSelectChannel: (channelId, type) => {
+                        }, onOpenGames: () => navigate('/games'), onCreateServer: () => openCreateServerModal() }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: categoriesForSidebar, tournamentChannelTree: tournamentChannelTree, activeChannelId: activeChannelId, activeVoiceChannelId: voiceState?.channelId ?? undefined, onSelectChannel: (channelId, type, channelName) => {
                                         if (type === 'voice') {
                                             const connectedVoice = voiceStateRef.current;
                                             if (connectedVoice &&
@@ -1664,6 +1795,7 @@ export const AppShell = () => {
                                                     channelId,
                                                     activeServerId,
                                                 });
+                                                navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
                                                 return;
                                             }
                                             logRouteDebug('sidebar-click-voice', {
@@ -1683,8 +1815,9 @@ export const AppShell = () => {
                                                     activeServerId,
                                                     pathname: location.pathname,
                                                 });
+                                                navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
                                             }
-                                            void joinVoiceChannel(channelId);
+                                            void joinVoiceChannel(channelId, channelName);
                                             return;
                                         }
                                         logRouteDebug('sidebar-click-text', {
@@ -1707,6 +1840,9 @@ export const AppShell = () => {
                                         if (!activeServerId) {
                                             return;
                                         }
+                                        void loadTournamentTreeData(tournamentId).catch(() => {
+                                            // no-op: tournament detail page can still load independently
+                                        });
                                         logRouteDebug('sidebar-click-tournament', {
                                             tournamentId,
                                             fromPath: location.pathname,

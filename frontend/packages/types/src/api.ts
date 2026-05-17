@@ -372,6 +372,7 @@ export type TournamentDTO = {
   created_by: string
   started_at?: number | null
   completed_at?: number | null
+  tournament_general_channel_id?: string | null
   created_at: number
   updated_at: number
 }
@@ -502,6 +503,7 @@ export type TournamentMatchWorkspaceDTO = {
   team_b_channel_id: string
   caster_channel_id: string
   admin_channel_id: string
+  referee_channel_id?: string
   spectator_channel_id: string
   created_by: string
   created_at: number
@@ -517,4 +519,5 @@ export type TournamentObserverTokenBundleDTO = {
   team_a: TournamentObserverTokenDTO
   team_b: TournamentObserverTokenDTO
   caster?: TournamentObserverTokenDTO | null
+  spectator?: TournamentObserverTokenDTO | null
 }

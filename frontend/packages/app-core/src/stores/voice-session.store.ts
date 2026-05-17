@@ -57,15 +57,26 @@ const initialSession: VoiceSession = {
 export const useVoiceSessionStore = create<VoiceSessionStore>((set) => ({
   session: initialSession,
   setConnecting: (serverId, channelId) =>
-    set((state) => ({
-      session: {
-        ...state.session,
-        connectionState: 'connecting',
-        serverId,
-        channelId,
-        errorMessage: null,
-      },
-    })),
+    set((state) => {
+      const current = state.session
+      if (
+        current.connectionState === 'connecting' &&
+        current.serverId === serverId &&
+        current.channelId === channelId &&
+        current.errorMessage == null
+      ) {
+        return state
+      }
+      return {
+        session: {
+          ...current,
+          connectionState: 'connecting',
+          serverId,
+          channelId,
+          errorMessage: null,
+        },
+      }
+    }),
   setConnected: (next) =>
     set({
       session: {
@@ -83,20 +94,35 @@ export const useVoiceSessionStore = create<VoiceSessionStore>((set) => ({
       },
     }),
   setError: (message) =>
-    set((state) => ({
-      session: {
-        ...state.session,
-        connectionState: 'error',
-        errorMessage: message,
-      },
-    })),
+    set((state) => {
+      const current = state.session
+      if (current.connectionState === 'error' && current.errorMessage === message) {
+        return state
+      }
+      return {
+        session: {
+          ...current,
+          connectionState: 'error',
+          errorMessage: message,
+        },
+      }
+    }),
   patchMediaState: (next) =>
-    set((state) => ({
-      session: {
-        ...state.session,
-        ...next,
-      },
-    })),
+    set((state) => {
+      const current = state.session
+      if (
+        current.isMicrophoneEnabled === next.isMicrophoneEnabled &&
+        current.isCameraEnabled === next.isCameraEnabled &&
+        current.isScreenShareEnabled === next.isScreenShareEnabled
+      ) {
+        return state
+      }
+      return {
+        session: {
+          ...current,
+          ...next,
+        },
+      }
+    }),
   clear: () => set({ session: initialSession }),
 }))
-

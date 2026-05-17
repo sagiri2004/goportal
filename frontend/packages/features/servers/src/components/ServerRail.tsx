@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
   Button,
   Separator,
@@ -33,7 +33,6 @@ export const ServerRail: React.FC<ServerRailProps> = ({
   servers: serversProp,
 }) => {
   const servers = serversProp ?? []
-  const [hoveredServerId, setHoveredServerId] = useState<string | null>(null)
 
   return (
     <aside className="h-full w-[72px] bg-[hsl(240,10%,6%)] border-r border-border flex flex-col overflow-hidden">
@@ -61,14 +60,11 @@ export const ServerRail: React.FC<ServerRailProps> = ({
         <div className="flex flex-col items-center gap-2">
           {servers.map((server) => {
             const isActive = server.id === activeServerId
-            const isHovered = server.id === hoveredServerId
 
             return (
               <div
                 key={server.id}
                 className="relative w-12 group"
-                onMouseEnter={() => setHoveredServerId(server.id)}
-                onMouseLeave={() => setHoveredServerId(null)}
               >
                 <div
                   className={[
@@ -82,9 +78,9 @@ export const ServerRail: React.FC<ServerRailProps> = ({
                     <button
                       onClick={() => onSelectServer(server.id)}
                       className={`cursor-pointer w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all duration-200 ${
-                        isActive || isHovered
+                        isActive
                           ? 'rounded-[16px] bg-indigo-500 text-white'
-                          : 'rounded-[24px] bg-secondary text-foreground hover:bg-indigo-500 hover:text-white hover:rounded-[16px]'
+                          : 'rounded-[24px] bg-secondary text-foreground group-hover:bg-indigo-500 group-hover:text-white group-hover:rounded-[16px]'
                       }`}
                       type="button"
                     >

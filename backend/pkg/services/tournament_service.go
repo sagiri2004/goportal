@@ -85,9 +85,10 @@ type TournamentObserverToken struct {
 }
 
 type TournamentObserverTokenBundle struct {
-	TeamA  TournamentObserverToken  `json:"team_a"`
-	TeamB  TournamentObserverToken  `json:"team_b"`
-	Caster *TournamentObserverToken `json:"caster,omitempty"`
+	TeamA     TournamentObserverToken  `json:"team_a"`
+	TeamB     TournamentObserverToken  `json:"team_b"`
+	Caster    *TournamentObserverToken `json:"caster,omitempty"`
+	Spectator *TournamentObserverToken `json:"spectator,omitempty"`
 }
 
 type TournamentService interface {

@@ -18,6 +18,7 @@ import (
 type voiceService struct {
 	serverRepo    repositories.ServerRepository
 	channelRepo   repositories.ChannelRepository
+	tournamentRepo repositories.TournamentRepository
 	userRepo      repositories.UserRepository
 	recordingRepo repositories.RecordingRepository
 	notification  services.NotificationService
@@ -28,6 +29,7 @@ type voiceService struct {
 func NewVoiceService(
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
+	tournamentRepo repositories.TournamentRepository,
 	userRepo repositories.UserRepository,
 	recordingRepo repositories.RecordingRepository,
 	notification services.NotificationService,
@@ -37,12 +39,55 @@ func NewVoiceService(
 	return &voiceService{
 		serverRepo:    serverRepo,
 		channelRepo:   channelRepo,
+		tournamentRepo: tournamentRepo,
 		userRepo:      userRepo,
 		recordingRepo: recordingRepo,
 		notification:  notification,
 		liveKitSvc:    liveKitSvc,
 		egressSvc:     egressSvc,
 	}
+}
+
+func (s *voiceService) canAccessTournamentPrivateChannelByRole(ctx context.Context, actorID, channelID string) (bool, error) {
+	if s.tournamentRepo == nil {
+		return false, nil
+	}
+	workspace, err := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok && ae.Code == "TOURNAMENT_WORKSPACE_NOT_FOUND" {
+			return false, nil
+		}
+		return false, err
+	}
+	tournament, err := s.tournamentRepo.FindTournamentByID(ctx, workspace.TournamentID)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(tournament.CreatedBy) == strings.TrimSpace(actorID) {
+		return true, nil
+	}
+	roles, err := s.tournamentRepo.ListRoles(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	roleByID := make(map[string]string, len(roles))
+	for i := range roles {
+		roleByID[roles[i].ID] = strings.TrimSpace(roles[i].Code)
+	}
+	bindings, err := s.tournamentRepo.ListRoleBindings(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	for i := range bindings {
+		if strings.TrimSpace(bindings[i].UserID) != strings.TrimSpace(actorID) {
+			continue
+		}
+		code := roleByID[bindings[i].RoleID]
+		if code == models.TournamentRoleAdmin || code == models.TournamentRoleReferee {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *voiceService) GenerateVoiceToken(ctx context.Context, actorID, channelID string) (*services.VoiceTokenResult, error) {
@@ -328,7 +373,10 @@ func (s *voiceService) dispatchVoiceActivityUpdate(ctx context.Context, evt *liv
 		if channel.IsPrivate {
 			isMember, err := s.channelRepo.IsMember(ctx, channel.ID, memberID)
 			if err != nil || !isMember {
-				continue
+				canOverride, overrideErr := s.canAccessTournamentPrivateChannelByRole(ctx, memberID, channel.ID)
+				if overrideErr != nil || !canOverride {
+					continue
+				}
 			}
 		}
 
@@ -450,8 +498,16 @@ func (s *voiceService) ensureChannelAccess(ctx context.Context, actorID, channel
 			return nil, err
 		}
 		if !isMember {
-			log.Printf("[voice-debug] ensure-access:private-membership-denied actor_id=%s channel_id=%s", actorID, channel.ID)
-			return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			canTournamentOverride, overrideErr := s.canAccessTournamentPrivateChannelByRole(ctx, actorID, channel.ID)
+			if overrideErr != nil {
+				log.Printf("[voice-debug] ensure-access:tournament-role-override-check-failed actor_id=%s channel_id=%s err=%v", actorID, channel.ID, overrideErr)
+				return nil, overrideErr
+			}
+			if !canTournamentOverride {
+				log.Printf("[voice-debug] ensure-access:private-membership-denied actor_id=%s channel_id=%s", actorID, channel.ID)
+				return nil, apperr.E("CHANNEL_ACCESS_DENIED", nil)
+			}
+			log.Printf("[voice-debug] ensure-access:private-membership-bypassed-by-tournament-role actor_id=%s channel_id=%s", actorID, channel.ID)
 		}
 	}
 	log.Printf("[voice-debug] ensure-access:success actor_id=%s channel_id=%s server_id=%s channel_type=%s private=%t", actorID, channel.ID, channel.ServerID, channel.Type, channel.IsPrivate)

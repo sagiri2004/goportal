@@ -58,7 +58,7 @@ type ChannelSidebarProps = {
   }>
   activeChannelId?: string
   activeVoiceChannelId?: string
-  onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void
+  onSelectChannel?: (channelId: string, type: 'text' | 'voice', channelName?: string) => void
   onCreateChannel?: () => void
   onInviteMember?: () => void
   onOpenServerSettings?: () => void
@@ -80,14 +80,37 @@ type ChannelSidebarProps = {
   onSelectTournament?: (tournamentId: string) => void
   onCreateTournament?: () => void
   canCreateTournament?: boolean
-  tournamentVoiceChannels?: Array<{
+  tournamentChannelTree?: Array<{
     id: string
     name: string
-    type: 'voice'
-    unread: number
-    activeMembers?: ChannelMember[]
-    liveLabel?: string
-    isLive?: boolean
+    status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled'
+    generalTextChannelId?: string | null
+    generalChannel?: {
+      id: string
+      name: string
+      type: 'text' | 'voice'
+      role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator'
+      unread: number
+      activeMembers?: ChannelMember[]
+      liveLabel?: string
+      isLive?: boolean
+    } | null
+    matches: Array<{
+      matchId: string
+      round: number
+      matchNumber: number
+      label: string
+      channels: Array<{
+        id: string
+        name: string
+        type: 'text' | 'voice'
+        role: 'general' | 'team-a' | 'team-b' | 'caster' | 'referee' | 'spectator'
+        unread: number
+        activeMembers?: ChannelMember[]
+        liveLabel?: string
+        isLive?: boolean
+      }>
+    }>
   }>
 }
 
@@ -500,12 +523,14 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onSelectTournament = () => {},
   onCreateTournament = () => {},
   canCreateTournament = false,
-  tournamentVoiceChannels = [],
+  tournamentChannelTree = [],
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
   const [expandedVoice, setExpandedVoice] = useState(true)
   const [expandedTournaments, setExpandedTournaments] = useState(true)
+  const [expandedTournamentIds, setExpandedTournamentIds] = useState<Record<string, boolean>>({})
+  const [expandedMatchIds, setExpandedMatchIds] = useState<Record<string, boolean>>({})
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
 
   const fromCategories = Array.isArray(categories) && categories.length > 0
@@ -676,7 +701,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                           <ChannelRow
                             channel={ch}
                             active={ch.type === 'voice' ? ch.id === activeVoiceChannelId : ch.id === activeChannelId}
-                            onSelect={() => onSelectChannel(ch.id, ch.type)}
+                            onSelect={() => onSelectChannel(ch.id, ch.type, ch.name)}
                             onInviteMember={onInviteMember}
                           />
                           {ch.type === 'voice' && <VoiceActivityRow channel={ch} />}
@@ -712,7 +737,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                       unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
                     }}
                     active={channel.id === activeChannelId}
-                    onSelect={() => onSelectChannel(channel.id, 'text')}
+                    onSelect={() => onSelectChannel(channel.id, 'text', channel.name)}
                     onInviteMember={onInviteMember}
                   />
                 ))}
@@ -745,7 +770,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         isLive: (channel as any)?.isLive,
                       }}
                       active={channel.id === activeVoiceChannelId}
-                      onSelect={() => onSelectChannel(channel.id, 'voice')}
+                      onSelect={() => onSelectChannel(channel.id, 'voice', channel.name)}
                       onInviteMember={onInviteMember}
                     />
                     <VoiceActivityRow
@@ -805,39 +830,106 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                   </p>
                 ) : (
                   tournaments.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onSelectTournament(item.id)}
-                      className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-[hsl(0,0%,75%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,92%)]"
-                    >
-                      <span className="truncate">{item.name}</span>
-                      <span
-                        className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] ${tournamentStatusBadgeClass(item.status)}`}
+                    <div key={item.id} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectTournament(item.id)
+                          setExpandedTournamentIds((prev) => ({ ...prev, [item.id]: !(prev[item.id] ?? false) }))
+                        }}
+                        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-[hsl(0,0%,75%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,92%)]"
                       >
-                        {tournamentStatusLabel(item.status)}
-                      </span>
-                    </button>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <ChevronDown
+                            className={`h-3 w-3 flex-shrink-0 text-muted-foreground/70 transition-transform ${
+                              !(expandedTournamentIds[item.id] ?? false) ? '-rotate-90' : ''
+                            }`}
+                          />
+                          <span className="truncate">{item.name}</span>
+                        </span>
+                        <span
+                          className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] ${tournamentStatusBadgeClass(item.status)}`}
+                        >
+                          {tournamentStatusLabel(item.status)}
+                        </span>
+                      </button>
+                      {(expandedTournamentIds[item.id] ?? false) && (
+                        <div className="space-y-1 pl-3">
+                          {(() => {
+                            const tree = tournamentChannelTree.find((node) => node.id === item.id)
+                            if (!tree) {
+                              return null
+                            }
+                            return (
+                              <>
+                                {tree.generalTextChannelId ? (
+                                  <ChannelRow
+                                    channel={tree.generalChannel ?? {
+                                      id: tree.generalTextChannelId,
+                                      name: 'tournament-general',
+                                      type: 'text',
+                                      unread: 0,
+                                    }}
+                                    active={tree.generalTextChannelId === activeChannelId}
+                                    onSelect={() => onSelectChannel(tree.generalTextChannelId as string, 'text', tree.generalChannel?.name ?? 'tournament-general')}
+                                    onInviteMember={onInviteMember}
+                                  />
+                                ) : null}
+                                {tree.matches.map((match) => {
+                                  const matchKey = `${tree.id}:${match.matchId}`
+                                  const isMatchExpanded = expandedMatchIds[matchKey] ?? false
+                                  return (
+                                    <div key={match.matchId} className="space-y-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedMatchIds((prev) => ({ ...prev, [matchKey]: !isMatchExpanded }))
+                                        }
+                                        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,90%)]"
+                                      >
+                                        <ChevronDown
+                                          className={`h-3 w-3 flex-shrink-0 transition-transform ${
+                                            !isMatchExpanded ? '-rotate-90' : ''
+                                          }`}
+                                        />
+                                        <span className="truncate">{match.label}</span>
+                                      </button>
+                                      {isMatchExpanded && (
+                                        <div className="space-y-0.5 pl-3">
+                                          {match.channels.length === 0 ? (
+                                            <div className="px-2 py-1 text-[11px] text-muted-foreground/60">
+                                              Chưa tạo workspace
+                                            </div>
+                                          ) : (
+                                            match.channels.map((channel) => (
+                                              <React.Fragment key={channel.id}>
+                                                <ChannelRow
+                                                  channel={channel}
+                                                  active={
+                                                    channel.type === 'voice'
+                                                      ? channel.id === activeVoiceChannelId
+                                                      : channel.id === activeChannelId
+                                                  }
+                                                  onSelect={() => onSelectChannel(channel.id, channel.type, channel.name)}
+                                                  onInviteMember={onInviteMember}
+                                                />
+                                                <VoiceActivityRow channel={channel} />
+                                              </React.Fragment>
+                                            ))
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   ))
                 )}
-              </div>
-            )}
-            {expandedTournaments && tournamentVoiceChannels.length > 0 && (
-              <div className="mt-2 space-y-0.5">
-                <div className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
-                  Tournament Voice
-                </div>
-                {tournamentVoiceChannels.map((channel) => (
-                  <React.Fragment key={channel.id}>
-                    <ChannelRow
-                      channel={channel}
-                      active={channel.id === activeVoiceChannelId}
-                      onSelect={() => onSelectChannel(channel.id, 'voice')}
-                      onInviteMember={onInviteMember}
-                    />
-                    <VoiceActivityRow channel={channel} />
-                  </React.Fragment>
-                ))}
               </div>
             )}
           </div>
