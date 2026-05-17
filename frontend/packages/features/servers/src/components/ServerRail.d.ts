@@ -3,6 +3,7 @@ type ServerRailProps = {
     activeServerId?: string;
     onSelectServer?: (serverId: string) => void;
     onCreateServer?: () => void;
+    onOpenGames?: () => void;
     servers?: Array<{
         id: string;
         name: string;

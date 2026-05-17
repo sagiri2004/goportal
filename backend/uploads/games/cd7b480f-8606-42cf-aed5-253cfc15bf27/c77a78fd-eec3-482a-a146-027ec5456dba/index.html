@@ -7,18 +7,39 @@
 </head>
 <body onload="setup();">
 
-<h1>Thomas Fisher's and Max Shvartsman's Chess Project</h1>
-<p id="turnInfo">Player's turn: <b>White</b></p>
-<section id="multiplayerControls" style="max-width:512px;margin:0 auto 16px;padding:10px;border:1px solid #ccc;background:#f8f8f8;">
-    <p style="margin:0 0 8px 0;"><b>GoPortal Multiplayer (2 players)</b></p>
-    <p id="mpStatus" style="margin:0 0 8px 0;">Initializing SDK...</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button id="createRoomBtn" type="button">Create Room</button>
-        <input id="roomIdInput" type="text" placeholder="Room ID" style="min-width:220px;">
-        <button id="joinRoomBtn" type="button">Join Room</button>
-        <button id="copyRoomBtn" type="button">Copy Room ID</button>
+<main class="page-shell">
+<header class="page-header">
+    <h1>Thomas Fisher's and Max Shvartsman's Chess Project</h1>
+    <p id="turnInfo">Player's turn: <b>White</b></p>
+</header>
+<section id="multiplayerControls" class="mp-card">
+    <div class="mp-title-row">
+        <p class="mp-title"><b>GoPortal Multiplayer (2 players)</b></p>
+        <p id="mpStatus" class="mp-status">Initializing SDK...</p>
     </div>
-    <p id="myRoleInfo" style="margin:8px 0 0 0;">Role: Spectator</p>
+    <div class="mp-row">
+        <button id="createRoomBtn" type="button">Create Room</button>
+        <input id="roomIdInput" type="text" placeholder="Room ID">
+        <button id="joinRoomBtn" type="button">Join Room</button>
+    </div>
+    <div class="mp-row">
+        <button id="copyRoomBtn" type="button">Copy Room ID</button>
+        <button id="refreshRoomsBtn" type="button">Refresh Open Rooms</button>
+        <button id="shareRoomBtn" type="button">Share Room</button>
+        <button id="toggleReadyBtn" type="button">Ready</button>
+        <button id="startMatchBtn" type="button">Start Match</button>
+    </div>
+    <div id="openRoomsList" class="mp-open-rooms"></div>
+    <p id="lobbyInfo" class="mp-meta">Lobby: waiting players...</p>
+    <p id="myRoleInfo" class="mp-meta">Role: Spectator</p>
+    <p id="userInfo" class="mp-meta">User: (loading)</p>
+    <div class="mp-row">
+        <button id="saveProgressBtn" type="button">Save Progress</button>
+        <button id="loadProgressBtn" type="button">Load Progress</button>
+        <button id="submitScoreBtn" type="button">Submit Score</button>
+        <button id="shareScoreBtn" type="button">Share Score</button>
+    </div>
+    <p id="scoreInfo" class="mp-score">Score: White 0 - Black 0</p>
 </section>
 <section id="board">
     <div class="overlay" id="promotionMessage">
@@ -48,6 +69,7 @@
 		</div>
 	</div>
 </section>
+</main>
 <script type="text/javascript" src="./goportal-game-sdk.js"></script>
 <script type="text/javascript" src="js/scripts.js"></script>
 

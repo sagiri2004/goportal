@@ -567,6 +567,27 @@ func (r *gameRepository) CloseExpiredRooms(ctx context.Context, nowUnix int64) e
 	return nil
 }
 
+func (r *gameRepository) CloseOpenRoomsWithoutMembers(ctx context.Context, nowUnix int64) error {
+	if err := r.db.WithContext(ctx).
+		Model(&models.GameRoom{}).
+		Where("deleted_at = 0 AND status = ?", models.GameRoomStatusOpen).
+		Where("NOT EXISTS (?)",
+			r.db.WithContext(ctx).
+				Model(&models.GameRoomMember{}).
+				Select("1").
+				Where("game_room_members.room_id = game_rooms.id").
+				Where("game_room_members.deleted_at = 0").
+				Where("game_room_members.status = ?", models.GameRoomMemberStatusJoined),
+		).
+		Updates(map[string]any{
+			"status":         models.GameRoomStatusClosed,
+			"last_active_at": nowUnix,
+		}).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
 func (r *gameRepository) UpsertRoomMember(ctx context.Context, member *models.GameRoomMember) error {
 	var existing models.GameRoomMember
 	err := r.db.WithContext(ctx).

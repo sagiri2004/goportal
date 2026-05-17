@@ -173,8 +173,16 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		tournaments.POST("/:id/matches/:matchId/result", v1.Tournament.ReportMatchResult)
 		tournaments.POST("/:id/matches/:matchId/dispute", v1.Tournament.DisputeMatch)
 		tournaments.PATCH("/:id/matches/:matchId/override", v1.Tournament.OverrideMatch)
+		tournaments.POST("/:id/matches/:matchId/start", v1.Tournament.StartMatch)
+		tournaments.POST("/:id/matches/:matchId/observer-token", v1.Tournament.GenerateObserverTokens)
 		tournaments.GET("/:id/standings", v1.Tournament.Standings)
 		tournaments.GET("/:id/participants/:participantId/matches", v1.Tournament.ParticipantMatches)
+		tournaments.POST("/:id/roles/ensure", v1.Tournament.EnsureRoles)
+		tournaments.GET("/:id/roles/bindings", v1.Tournament.ListRoleBindings)
+		tournaments.POST("/:id/roles/bindings", v1.Tournament.BindRole)
+		tournaments.DELETE("/:id/roles/:roleCode/bindings/:userId", v1.Tournament.UnbindRole)
+		tournaments.POST("/:id/match-workspaces/provision", v1.Tournament.ProvisionMatchWorkspace)
+		tournaments.GET("/:id/match-workspaces", v1.Tournament.ListMatchWorkspaces)
 	}
 
 	usersHistory := api.Group("/users")

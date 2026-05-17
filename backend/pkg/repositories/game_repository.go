@@ -93,6 +93,7 @@ type GameRepository interface {
 	ListOpenRoomsByGameID(ctx context.Context, gameID string, limit, offset int) ([]models.GameRoom, error)
 	UpdateRoom(ctx context.Context, room *models.GameRoom) error
 	CloseExpiredRooms(ctx context.Context, nowUnix int64) error
+	CloseOpenRoomsWithoutMembers(ctx context.Context, nowUnix int64) error
 
 	UpsertRoomMember(ctx context.Context, member *models.GameRoomMember) error
 	SetRoomMemberLeft(ctx context.Context, roomID, userID string, leftAt int64) error

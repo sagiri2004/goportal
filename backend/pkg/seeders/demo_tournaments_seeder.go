@@ -60,7 +60,9 @@ func SeedDemoTournaments(db *gorm.DB, logger *zap.Logger) {
 	tournamentSvc := svcimpl.NewTournamentService(
 		repoimpl.NewTournamentRepository(db),
 		repoimpl.NewServerRepository(db),
+		repoimpl.NewChannelRepository(db),
 		repoimpl.NewUserRepository(db),
+		nil,
 		nil,
 	)
 

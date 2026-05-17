@@ -40,6 +40,7 @@ import { DirectMessagesSidebar } from '@goportal/feature-dashboard'
 import { TournamentCreateEditDialog } from '../tournaments'
 import { useAuthStore } from '@goportal/store'
 import { Copy } from 'lucide-react'
+import { useVoiceSessionStore } from '../stores/voice-session.store'
 import { MemberListPanel } from './MemberListPanel'
 import { ServerSettingsOverlay } from './ServerSettingsOverlay'
 import type { MockCategory, MockServer } from '../mock/servers'
@@ -53,8 +54,10 @@ import {
   getServerById,
   getServers,
   getInvitePreview,
+  getTournamentMatchObserverTokens,
   joinByInviteCode,
   getVoiceToken,
+  listTournamentMatchWorkspaces,
   listTournamentsByServer,
   listVoiceParticipants,
   updateServerProfile,
@@ -129,6 +132,22 @@ const voicePalette = [
 ]
 const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code'
 const VOICE_DEBUG_PREFIX = '[voice-debug]'
+const isTournamentMatchVoiceChannelName = (name: string): boolean => {
+  const lower = name.toLowerCase()
+  return (
+    lower.includes('team-a-r') ||
+    lower.includes('team-b-r') ||
+    lower.includes('spectator-r') ||
+    lower.includes('caster-r') ||
+    lower.includes('admin-r') ||
+    // legacy names from previous workspace versions
+    lower === 'team-a-comms' ||
+    lower === 'team-b-comms' ||
+    lower === 'spectator-live' ||
+    lower === 'caster-booth' ||
+    lower === 'admin-observer'
+  )
+}
 
 const logVoiceDebug = (step: string, data?: Record<string, unknown>) => {
   if (data) {
@@ -138,6 +157,16 @@ const logVoiceDebug = (step: string, data?: Record<string, unknown>) => {
   }
   // eslint-disable-next-line no-console
   console.info(`${VOICE_DEBUG_PREFIX} ${step}`)
+}
+
+const logRouteDebug = (step: string, data?: Record<string, unknown>) => {
+  if (data) {
+    // eslint-disable-next-line no-console
+    console.info(`[route-debug] ${step}`, data)
+    return
+  }
+  // eslint-disable-next-line no-console
+  console.info(`[route-debug] ${step}`)
 }
 
 const colorFromId = (id: string): string => {
@@ -241,19 +270,6 @@ const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: 
   const addTarget = (url: URL) => {
     setCommonParams(url)
     targets.push(url)
-  }
-
-  if (
-    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
-    parsed.port === '8080'
-  ) {
-    const preferred = new URL(parsed.toString())
-    preferred.port = '8090'
-    addTarget(preferred)
-
-    const fallback = new URL(parsed.toString())
-    fallback.port = '8085'
-    addTarget(fallback)
   }
 
   addTarget(parsed)
@@ -567,9 +583,30 @@ export const AppShell: React.FC = () => {
     Record<string, Array<{ id: string; name: string; status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled' }>>
   >({})
   const [isCreateTournamentModalOpen, setIsCreateTournamentModalOpen] = useState(false)
-  const [voiceState, setVoiceState] = useState<VoiceState | null>(null)
-  const [isVoiceConnecting, setIsVoiceConnecting] = useState(false)
   const [voiceActivityByChannel, setVoiceActivityByChannel] = useState<Record<string, VoiceChannelActivity>>({})
+  const voiceSession = useVoiceSessionStore((state) => state.session)
+  const setVoiceConnectingState = useVoiceSessionStore((state) => state.setConnecting)
+  const setVoiceConnectedState = useVoiceSessionStore((state) => state.setConnected)
+  const setVoiceErrorState = useVoiceSessionStore((state) => state.setError)
+  const patchVoiceMediaState = useVoiceSessionStore((state) => state.patchMediaState)
+  const clearVoiceSession = useVoiceSessionStore((state) => state.clear)
+  const voiceState = useMemo<VoiceState | null>(() => {
+    if (!voiceSession.room || !voiceSession.serverId || !voiceSession.channelId || !voiceSession.serverName || !voiceSession.channelName) {
+      return null
+    }
+    return {
+      channelId: voiceSession.channelId,
+      channelName: voiceSession.channelName,
+      serverId: voiceSession.serverId,
+      serverName: voiceSession.serverName,
+      room: voiceSession.room,
+      lastTextChannelId: voiceSession.lastTextChannelId,
+      isMicrophoneEnabled: voiceSession.isMicrophoneEnabled,
+      isCameraEnabled: voiceSession.isCameraEnabled,
+      isScreenShareEnabled: voiceSession.isScreenShareEnabled,
+    }
+  }, [voiceSession])
+  const isVoiceConnecting = voiceSession.connectionState === 'connecting'
   const currentUser = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const currentUsername = currentUser?.username
@@ -655,19 +692,16 @@ export const AppShell: React.FC = () => {
 
   const syncVoiceStateFromRoom = useCallback((room: Room) => {
     const localParticipant = room.localParticipant
-    setVoiceState((prev) => {
-      if (!prev || prev.room !== room) {
-        return prev
-      }
-
-      return {
-        ...prev,
-        isMicrophoneEnabled: localParticipant.isMicrophoneEnabled,
-        isCameraEnabled: localParticipant.isCameraEnabled,
-        isScreenShareEnabled: localParticipant.isScreenShareEnabled,
-      }
+    const currentRoom = useVoiceSessionStore.getState().session.room
+    if (currentRoom !== room) {
+      return
+    }
+    patchVoiceMediaState({
+      isMicrophoneEnabled: localParticipant.isMicrophoneEnabled,
+      isCameraEnabled: localParticipant.isCameraEnabled,
+      isScreenShareEnabled: localParticipant.isScreenShareEnabled,
     })
-  }, [])
+  }, [patchVoiceMediaState])
 
   const syncCurrentRoomActivity = useCallback((state: VoiceState) => {
     const remoteParticipants = Array.from(state.room.remoteParticipants.values())
@@ -950,10 +984,36 @@ export const AppShell: React.FC = () => {
   }, [params.serverId])
 
   useEffect(() => {
-    if (params.channelId) {
+    const isTextChannelRoute =
+      location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/')
+    if (isTextChannelRoute && params.channelId) {
       setActiveChannelId(params.channelId)
     }
-  }, [params.channelId])
+  }, [location.pathname, params.channelId])
+
+  useEffect(() => {
+    logRouteDebug('location-change', {
+      pathname: location.pathname,
+      activeServerId,
+      activeChannelId,
+      paramsServerId: params.serverId ?? null,
+      paramsChannelId: params.channelId ?? null,
+      isVoiceMode,
+      isTournamentMode,
+      voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+      joinInFlight: joinVoiceInFlightRef.current,
+      isVoiceConnecting,
+    })
+  }, [
+    location.pathname,
+    activeServerId,
+    activeChannelId,
+    params.serverId,
+    params.channelId,
+    isVoiceMode,
+    isTournamentMode,
+    isVoiceConnecting,
+  ])
 
   useEffect(() => {
     const isTextChannelRoute =
@@ -1397,7 +1457,7 @@ export const AppShell: React.FC = () => {
       }))
     }
 
-    setVoiceState((prev) => (prev?.room === current.room ? null : prev))
+    clearVoiceSession()
     logVoiceDebug('leave:voice-state-cleared', {
       serverId: current.serverId,
       channelId: current.channelId,
@@ -1424,7 +1484,7 @@ export const AppShell: React.FC = () => {
       serverId: current.serverId,
       channelId: fallback.id,
     })
-  }, [navigate, resolveFallbackTextChannel])
+  }, [clearVoiceSession, navigate, resolveFallbackTextChannel])
 
   const joinVoiceChannel = useCallback(async (channelId: string) => {
     logVoiceDebug('join:click', {
@@ -1452,10 +1512,6 @@ export const AppShell: React.FC = () => {
     const currentVoice = voiceStateRef.current
     if (currentVoice && currentVoice.serverId === activeServerId && currentVoice.channelId === channelId) {
       logVoiceDebug('join:already-in-target-room', { joinKey })
-      if (!location.pathname.includes(`/app/servers/${activeServerId}/voice/${channelId}`)) {
-        navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
-        logVoiceDebug('join:navigate-existing-room-route', { joinKey })
-      }
       return
     }
 
@@ -1484,7 +1540,7 @@ export const AppShell: React.FC = () => {
 
     const joinAttempt = voiceJoinAttemptRef.current + 1
     voiceJoinAttemptRef.current = joinAttempt
-    setIsVoiceConnecting(true)
+    setVoiceConnectingState(activeServerId, channelId)
     joinVoiceInFlightRef.current = joinKey
     logVoiceDebug('join:start', {
       joinAttempt,
@@ -1612,6 +1668,7 @@ export const AppShell: React.FC = () => {
         } else {
           pushToast(rawMessage)
         }
+        setVoiceErrorState(rawMessage)
         return
       }
 
@@ -1646,14 +1703,31 @@ export const AppShell: React.FC = () => {
           channelId,
           roomName: room.name,
         })
-        setVoiceState((prev) => (prev?.room === room ? null : prev))
+        const session = useVoiceSessionStore.getState().session
+        if (session.room === room) {
+          useVoiceSessionStore.getState().clear()
+        }
       })
 
-      setVoiceState(nextVoiceState)
+      setVoiceConnectedState({
+        serverId: nextVoiceState.serverId,
+        serverName: nextVoiceState.serverName,
+        channelId: nextVoiceState.channelId,
+        channelName: nextVoiceState.channelName,
+        room: nextVoiceState.room,
+        lastTextChannelId: nextVoiceState.lastTextChannelId,
+        isMicrophoneEnabled: nextVoiceState.isMicrophoneEnabled,
+        isCameraEnabled: nextVoiceState.isCameraEnabled,
+        isScreenShareEnabled: nextVoiceState.isScreenShareEnabled,
+      })
       syncCurrentRoomActivity(nextVoiceState)
       syncVoiceStateFromRoom(room)
-      setActiveChannelId(channelId)
-      navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
+      logVoiceDebug('join:connected-keep-current-route', {
+        joinAttempt,
+        channelId,
+        activeServerId,
+        pathname: location.pathname,
+      })
       logVoiceDebug('join:success', {
         joinAttempt,
         channelId,
@@ -1680,15 +1754,13 @@ export const AppShell: React.FC = () => {
       } else {
         pushToast(rawMessage)
       }
+      setVoiceErrorState(rawMessage)
     } finally {
       if (pendingVoiceRoomRef.current && voiceJoinAttemptRef.current === joinAttempt) {
         pendingVoiceRoomRef.current = null
       }
       if (joinVoiceInFlightRef.current === joinKey) {
         joinVoiceInFlightRef.current = null
-      }
-      if (voiceJoinAttemptRef.current === joinAttempt) {
-        setIsVoiceConnecting(false)
       }
       logVoiceDebug('join:finally', {
         joinAttempt,
@@ -1710,6 +1782,9 @@ export const AppShell: React.FC = () => {
     pushToast,
     serverDetails,
     servers,
+    setVoiceConnectedState,
+    setVoiceConnectingState,
+    setVoiceErrorState,
     syncCurrentRoomActivity,
     syncVoiceStateFromRoom,
   ])
@@ -1843,6 +1918,29 @@ export const AppShell: React.FC = () => {
       })),
     [activeCategories, voiceActivityByChannel]
   )
+  const tournamentVoiceChannels = useMemo(
+    () =>
+      categoriesWithVoiceActivity
+        .flatMap((category) => category.channels)
+        .filter(
+          (
+            channel,
+          ): channel is (typeof channel & {
+            type: 'voice'
+          }) => channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name),
+        ),
+    [categoriesWithVoiceActivity],
+  )
+  const categoriesForSidebar = useMemo(
+    () =>
+      categoriesWithVoiceActivity.map((category) => ({
+        ...category,
+        channels: category.channels.filter(
+          (channel) => !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)),
+        ),
+      })),
+    [categoriesWithVoiceActivity],
+  )
   const activeMembers = useMemo(
     () => membersByServer[activeServerId] ?? [],
     [activeServerId, membersByServer]
@@ -1850,6 +1948,60 @@ export const AppShell: React.FC = () => {
   const activeTournaments = useMemo(
     () => tournamentsByServer[activeServerId] ?? [],
     [activeServerId, tournamentsByServer],
+  )
+  const requestTournamentObserverTokens = useCallback(
+    async (channelId: string) => {
+      if (!activeServerId || activeTournaments.length === 0) {
+        return []
+      }
+
+      for (const tournament of activeTournaments) {
+        let workspaces = [] as Array<{
+          match_id: string
+          team_a_channel_id: string
+          team_b_channel_id: string
+          caster_channel_id: string
+          admin_channel_id: string
+          spectator_channel_id: string
+        }>
+        try {
+          workspaces = await listTournamentMatchWorkspaces(tournament.id)
+        } catch {
+          continue
+        }
+
+        const workspace = workspaces.find((item) =>
+          [
+            item.team_a_channel_id,
+            item.team_b_channel_id,
+            item.caster_channel_id,
+            item.admin_channel_id,
+            item.spectator_channel_id,
+          ].includes(channelId),
+        )
+        if (!workspace) {
+          continue
+        }
+
+        const bundle = await getTournamentMatchObserverTokens(tournament.id, workspace.match_id)
+        return [
+          {
+            channelId: bundle.team_a.channel_id,
+            channelName: `team-a`,
+            token: bundle.team_a.token,
+            url: bundle.team_a.url,
+          },
+          {
+            channelId: bundle.team_b.channel_id,
+            channelName: `team-b`,
+            token: bundle.team_b.token,
+            url: bundle.team_b.url,
+          },
+        ]
+      }
+      return []
+    },
+    [activeServerId, activeTournaments],
   )
   const hasManageVoicePermission = useMemo(() => {
     if (!currentUser) {
@@ -1906,6 +2058,7 @@ export const AppShell: React.FC = () => {
       applyVoiceChannelActivityUpdate,
       subscribeNotificationEvents,
       sendNotificationSocketMessage,
+      requestTournamentObserverTokens,
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
@@ -1945,6 +2098,7 @@ export const AppShell: React.FC = () => {
       hasManageTournamentsPermission,
       refreshTournaments,
       membersByServer,
+      requestTournamentObserverTokens,
     ],
   )
 
@@ -1996,36 +2150,56 @@ export const AppShell: React.FC = () => {
                   serverBannerUrl={activeServer?.bannerUrl}
                   serverIconUrl={activeServer?.iconUrl}
                   serverBoostLevel={activeServer?.boostLevel}
-                  categories={categoriesWithVoiceActivity}
+                  categories={categoriesForSidebar}
+                  tournamentVoiceChannels={tournamentVoiceChannels}
                   activeChannelId={activeChannelId}
+                  activeVoiceChannelId={voiceState?.channelId ?? undefined}
                   onSelectChannel={(channelId, type) => {
                     if (type === 'voice') {
+                      const connectedVoice = voiceStateRef.current
+                      if (
+                        connectedVoice &&
+                        connectedVoice.serverId === activeServerId &&
+                        connectedVoice.channelId === channelId
+                      ) {
+                        logVoiceDebug('ui:channel-sidebar-voice-already-connected', {
+                          channelId,
+                          activeServerId,
+                        })
+                        return
+                      }
+                      logRouteDebug('sidebar-click-voice', {
+                        channelId,
+                        fromPath: location.pathname,
+                        activeServerId,
+                        activeChannelId,
+                      })
                       logVoiceDebug('ui:channel-sidebar-click-voice', {
                         channelId,
                         activeServerId,
                         activeChannelId,
                       })
                       if (activeServerId) {
-                        setActiveChannelId(channelId)
-                        navigate(`/app/servers/${activeServerId}/voice/${channelId}`)
-                        logVoiceDebug('ui:channel-sidebar-navigate-voice-immediate', {
+                        logVoiceDebug('ui:channel-sidebar-join-voice-without-route-change', {
                           channelId,
                           activeServerId,
+                          pathname: location.pathname,
                         })
                       }
                       void joinVoiceChannel(channelId)
                       return
                     }
 
-                    const navigateToText = async () => {
-                      if (voiceState) {
-                        await handleLeaveVoiceChannel({ navigateToText: false })
-                      }
-                      setActiveChannelId(channelId)
-                      navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
-                    }
-
-                    void navigateToText()
+                    logRouteDebug('sidebar-click-text', {
+                      channelId,
+                      fromPath: location.pathname,
+                      toPath: `/app/servers/${activeServerId}/channels/${channelId}`,
+                      activeServerId,
+                      activeChannelId,
+                      voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                    })
+                    setActiveChannelId(channelId)
+                    navigate(`/app/servers/${activeServerId}/channels/${channelId}`)
                   }}
                   onCreateChannel={() => setIsCreateChannelModalOpen(true)}
                   onInviteMember={() => setIsInviteDialogOpen(true)}
@@ -2043,6 +2217,17 @@ export const AppShell: React.FC = () => {
                   onLeaveVoiceChannel={() => void handleLeaveVoiceChannel()}
                   tournaments={activeTournaments}
                   onSelectTournament={(tournamentId) => {
+                    if (!activeServerId) {
+                      return
+                    }
+                    logRouteDebug('sidebar-click-tournament', {
+                      tournamentId,
+                      fromPath: location.pathname,
+                      toPath: `/app/servers/${activeServerId}/tournaments/${tournamentId}`,
+                      activeServerId,
+                      activeChannelId,
+                      voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                    })
                     navigate(`/app/servers/${activeServerId}/tournaments/${tournamentId}`)
                   }}
                   onCreateTournament={() => setIsCreateTournamentModalOpen(true)}
@@ -2069,7 +2254,7 @@ export const AppShell: React.FC = () => {
               min-h-0: prevents flex children from overflowing vertically.
             */}
             <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
-              <Outlet context={outletContext} />
+              <Outlet key={location.pathname} context={outletContext} />
             </div>
           </Panel>
 
@@ -2167,3 +2352,5 @@ export const AppShell: React.FC = () => {
     </TooltipProvider>
   )
 }
+
+

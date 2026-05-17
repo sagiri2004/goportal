@@ -17,9 +17,13 @@
     "build:desktop": "turbo run build --filter=@goportal/desktop",
     "dist:win": "turbo run dist:win --filter=@goportal/desktop",
     "dist:linux": "turbo run dist:linux --filter=@goportal/desktop",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:report": "playwright show-report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "tailwind-scrollbar": "^4.0.2",
     "turbo": "^2.0.0"
   },

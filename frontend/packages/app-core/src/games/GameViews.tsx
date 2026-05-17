@@ -1890,6 +1890,19 @@ export const GamePlayerPage: React.FC = () => {
             fail('Realtime socket is not connected', 'ERR_INTERNAL', true)
             return
           }
+          const stateSessionId = await ensureSession(channelIdFromQuery)
+          await createGameEvent(gameId, stateSessionId, {
+            event_type: 'state',
+            payload: {
+              room_id: roomID,
+              state: body.state,
+              state_version: stateVersion,
+            },
+            idempotency_key:
+              typeof body.idempotency_key === 'string' && body.idempotency_key.trim()
+                ? body.idempotency_key.trim()
+                : `state-${roomID}-${stateVersion}-${Date.now()}`,
+          })
           sendResponse({
             requestId,
             ok: true,

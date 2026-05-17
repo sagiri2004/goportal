@@ -243,6 +243,45 @@ type TournamentMatchReportResponse struct {
 	CreatedAt     int64   `json:"created_at"`
 }
 
+type TournamentRoleBindingRequest struct {
+	RoleCode string `json:"role_code" binding:"required"`
+	UserID   string `json:"user_id" binding:"required"`
+}
+
+type TournamentRoleBindingResponse struct {
+	ID           string `json:"id"`
+	TournamentID string `json:"tournament_id"`
+	RoleID       string `json:"role_id"`
+	UserID       string `json:"user_id"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
+func NewTournamentRoleBindingResponse(v models.TournamentRoleBinding) TournamentRoleBindingResponse {
+	return TournamentRoleBindingResponse{
+		ID:           v.ID,
+		TournamentID: v.TournamentID,
+		RoleID:       v.RoleID,
+		UserID:       v.UserID,
+		CreatedAt:    v.CreatedAt,
+	}
+}
+
+type TournamentProvisionWorkspaceRequest struct {
+	MatchID string `json:"match_id" binding:"required"`
+}
+
+type TournamentObserverTokenResponse struct {
+	ChannelID string `json:"channel_id"`
+	Token     string `json:"token"`
+	URL       string `json:"url"`
+}
+
+type TournamentObserverTokenBundleResponse struct {
+	TeamA  TournamentObserverTokenResponse  `json:"team_a"`
+	TeamB  TournamentObserverTokenResponse  `json:"team_b"`
+	Caster *TournamentObserverTokenResponse `json:"caster,omitempty"`
+}
+
 func NewTournamentMatchReportResponse(r *models.TournamentMatchReport) TournamentMatchReportResponse {
 	return TournamentMatchReportResponse{
 		ID:            r.ID,

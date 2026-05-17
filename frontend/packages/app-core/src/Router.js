@@ -13,7 +13,10 @@ import { AuthLayout } from './AuthLayout';
 import { PrivateRoute } from './PrivateRoute';
 import { AppShell } from './layout/AppShell';
 import { AuthView } from '@goportal/feature-auth';
-import { DashboardView, VoiceChannelView } from '@goportal/feature-dashboard';
+import { DashboardView } from '@goportal/feature-dashboard';
+import { TournamentDetailPage, TournamentListPage } from './tournaments';
+import { GameDetailPage, GamePlayerPage, GamesCatalogPage, GamesDeveloperPage } from './games/GameViews';
+import { GameSDKDocsPage } from './games/GameSDKDocsPage';
 import { MessageCircle, Plus, Search, MessagesSquare } from 'lucide-react';
 import { useAuthStore } from '@goportal/store';
 import { getChannels, getServers, hydrateSession } from './services';
@@ -144,6 +147,38 @@ export const Router = () => {
         localStorage.removeItem(POST_AUTH_REDIRECT_KEY);
         window.location.href = '/app';
     };
-    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsx(Route, { path: "/invite/:code", element: _jsx(InviteEntryPage, {}) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(AppIndexRedirect, {}) }), _jsx(Route, { path: "@me", element: _jsx(DMHomePage, {}) }), _jsx(Route, { path: "servers/:serverId/channels/:channelId", element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "servers/:serverId/voice/:channelId", element: _jsx(VoiceChannelView, {}) })] }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
+    return (_jsx(BrowserRouter, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/auth/*", element: _jsx(AuthLayout, { children: _jsx(AuthView, { onAuthenticated: handleAuthSuccess }) }) }), _jsx(Route, { path: "/invite/:code", element: _jsx(InviteEntryPage, {}) }), _jsxs(Route, { path: "/app", element: _jsx(PrivateRoute, { children: _jsx(AppShell, {}) }), children: [_jsx(Route, { index: true, element: _jsx(AppIndexRedirect, {}) }), _jsx(Route, { path: "@me", element: _jsx(DMHomePage, {}) }), _jsx(Route, { path: "servers/:serverId/channels/:channelId", element: _jsx(DashboardView, {}) }), _jsx(Route, { path: "servers/:serverId/voice/:channelId", element: _jsx(VoiceLegacyRedirect, {}) }), _jsx(Route, { path: "servers/:serverId/tournaments", element: _jsx(TournamentListPage, {}) }), _jsx(Route, { path: "servers/:serverId/tournaments/:tournamentId", element: _jsx(TournamentDetailPage, {}) })] }), _jsx(Route, { path: "/games", element: _jsx(PrivateRoute, { children: _jsx(GamesCatalogPage, {}) }) }), _jsx(Route, { path: "/games/developer", element: _jsx(PrivateRoute, { children: _jsx(GamesDeveloperPage, {}) }) }), _jsx(Route, { path: "/games/sdk/docs", element: _jsx(PrivateRoute, { children: _jsx(GameSDKDocsPage, {}) }) }), _jsx(Route, { path: "/games/:gameId/play", element: _jsx(PrivateRoute, { children: _jsx(GamePlayerPage, {}) }) }), _jsx(Route, { path: "/games/:gameId", element: _jsx(PrivateRoute, { children: _jsx(GameDetailPage, {}) }) }), _jsx(Route, { path: "/", element: _jsx(Navigate, { to: "/app", replace: true }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/auth/login", replace: true }) })] }) }));
+};
+const VoiceLegacyRedirect = () => {
+    const { serverId = '', channelId = '' } = useParams();
+    const navigate = useNavigate();
+    React.useEffect(() => {
+        let cancelled = false;
+        const run = async () => {
+            try {
+                const channels = await getChannels(serverId);
+                if (cancelled) {
+                    return;
+                }
+                const flatChannels = channels.categories.flatMap((category) => category.channels);
+                const firstText = flatChannels.find((channel) => channel.type === 'text') ?? flatChannels[0];
+                if (!firstText) {
+                    navigate('/app/@me', { replace: true });
+                    return;
+                }
+                navigate(`/app/servers/${serverId}/channels/${firstText.id}`, { replace: true });
+            }
+            catch {
+                if (!cancelled) {
+                    navigate('/app/@me', { replace: true });
+                }
+            }
+        };
+        void run();
+        return () => {
+            cancelled = true;
+        };
+    }, [channelId, navigate, serverId]);
+    return (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: _jsx("div", { className: "h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" }) }));
 };
 //# sourceMappingURL=Router.js.map

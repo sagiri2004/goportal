@@ -325,8 +325,8 @@ Room constraints:
 
 ### Game Realtime WS (separate service)
 
-- Endpoint: `ws://<host>:8091/ws/game?token=<jwt>`
-- Service: `game-realtime-server` (deploy independent from backend + notification-server)
+- Endpoint: `ws://<host>:8080/ws/game?token=<jwt>&user_id=<user-id>`
+- Service: integrated in `backend` (single-cluster realtime).
 - Subscribe room from client:
 
 ```json

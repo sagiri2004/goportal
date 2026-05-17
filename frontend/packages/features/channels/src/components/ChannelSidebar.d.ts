@@ -21,6 +21,7 @@ type ChannelSidebarProps = {
         }>;
     }>;
     activeChannelId?: string;
+    activeVoiceChannelId?: string;
     onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void;
     onCreateChannel?: () => void;
     onInviteMember?: () => void;
@@ -34,6 +35,24 @@ type ChannelSidebarProps = {
         serverName: string;
     } | null;
     onLeaveVoiceChannel?: () => void;
+    onLogout?: () => void;
+    tournaments?: Array<{
+        id: string;
+        name: string;
+        status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled';
+    }>;
+    onSelectTournament?: (tournamentId: string) => void;
+    onCreateTournament?: () => void;
+    canCreateTournament?: boolean;
+    tournamentVoiceChannels?: Array<{
+        id: string;
+        name: string;
+        type: 'voice';
+        unread: number;
+        activeMembers?: ChannelMember[];
+        liveLabel?: string;
+        isLive?: boolean;
+    }>;
 };
 type ChannelMember = {
     id: string;

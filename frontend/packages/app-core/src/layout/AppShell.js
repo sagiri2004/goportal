@@ -21,11 +21,13 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogH
 import { CreateServerModal, ServerRail } from '@goportal/feature-servers';
 import { ChannelSidebar, CreateChannelModal } from '@goportal/feature-channels';
 import { DirectMessagesSidebar } from '@goportal/feature-dashboard';
+import { TournamentCreateEditDialog } from '../tournaments';
 import { useAuthStore } from '@goportal/store';
 import { Copy } from 'lucide-react';
+import { useVoiceSessionStore } from '../stores/voice-session.store';
 import { MemberListPanel } from './MemberListPanel';
 import { ServerSettingsOverlay } from './ServerSettingsOverlay';
-import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, joinByInviteCode, getVoiceToken, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
+import { createChannel, createServerInvite, createServer, getChannels, getMembers, getServerById, getServers, getInvitePreview, getTournamentMatchObserverTokens, joinByInviteCode, getVoiceToken, listTournamentMatchWorkspaces, listTournamentsByServer, listVoiceParticipants, updateServerProfile, uploadServerMedia, updateMyProfile, uploadUserAvatar, } from '../services';
 // ─── Panel size constants (% of PanelGroup width, must sum ≤ 100) ────────────
 const SIZE = {
     sidebar: { default: 22, min: 18, max: 35 },
@@ -44,6 +46,39 @@ const voicePalette = [
     'bg-rose-500',
 ];
 const PENDING_INVITE_CODE_KEY = 'goportal_pending_invite_code';
+const VOICE_DEBUG_PREFIX = '[voice-debug]';
+const isTournamentMatchVoiceChannelName = (name) => {
+    const lower = name.toLowerCase();
+    return (lower.includes('team-a-r') ||
+        lower.includes('team-b-r') ||
+        lower.includes('spectator-r') ||
+        lower.includes('caster-r') ||
+        lower.includes('admin-r') ||
+        // legacy names from previous workspace versions
+        lower === 'team-a-comms' ||
+        lower === 'team-b-comms' ||
+        lower === 'spectator-live' ||
+        lower === 'caster-booth' ||
+        lower === 'admin-observer');
+};
+const logVoiceDebug = (step, data) => {
+    if (data) {
+        // eslint-disable-next-line no-console
+        console.info(`${VOICE_DEBUG_PREFIX} ${step}`, data);
+        return;
+    }
+    // eslint-disable-next-line no-console
+    console.info(`${VOICE_DEBUG_PREFIX} ${step}`);
+};
+const logRouteDebug = (step, data) => {
+    if (data) {
+        // eslint-disable-next-line no-console
+        console.info(`[route-debug] ${step}`, data);
+        return;
+    }
+    // eslint-disable-next-line no-console
+    console.info(`[route-debug] ${step}`);
+};
 const colorFromId = (id) => {
     let hash = 0;
     for (let index = 0; index < id.length; index += 1) {
@@ -72,22 +107,6 @@ const parseParticipantMetadata = (metadata) => {
     }
     catch {
         return {};
-    }
-};
-const withTimeout = async (promise, timeoutMs) => {
-    let timeoutId = null;
-    try {
-        const timeoutPromise = new Promise((_, reject) => {
-            timeoutId = window.setTimeout(() => {
-                reject(new Error('LiveKit connection timeout'));
-            }, timeoutMs);
-        });
-        return await Promise.race([promise, timeoutPromise]);
-    }
-    finally {
-        if (timeoutId) {
-            window.clearTimeout(timeoutId);
-        }
     }
 };
 const buildConnectTargets = (url) => {
@@ -147,15 +166,6 @@ const buildNotificationSocketTargets = (rawUrl, userId, token) => {
         setCommonParams(url);
         targets.push(url);
     };
-    if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
-        parsed.port === '8080') {
-        const preferred = new URL(parsed.toString());
-        preferred.port = '8090';
-        addTarget(preferred);
-        const fallback = new URL(parsed.toString());
-        fallback.port = '8085';
-        addTarget(fallback);
-    }
     addTarget(parsed);
     return Array.from(new Set(targets.map((target) => target.toString())));
 };
@@ -298,6 +308,7 @@ export const AppShell = () => {
     const params = useParams();
     const isDmMode = useMemo(() => location.pathname.includes('/app/@me'), [location.pathname]);
     const isVoiceMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/voice/'), [location.pathname]);
+    const isTournamentMode = useMemo(() => location.pathname.includes('/app/servers/') && location.pathname.includes('/tournaments'), [location.pathname]);
     const [activeServerId, setActiveServerId] = useState('');
     const [activeChannelId, setActiveChannelId] = useState('');
     const [showMembers, setShowMembers] = useState(false);
@@ -319,9 +330,32 @@ export const AppShell = () => {
     const [serverDetails, setServerDetails] = useState({});
     const [channelsByServer, setChannelsByServer] = useState({});
     const [membersByServer, setMembersByServer] = useState({});
-    const [voiceState, setVoiceState] = useState(null);
-    const [isVoiceConnecting, setIsVoiceConnecting] = useState(false);
+    const [tournamentsByServer, setTournamentsByServer] = useState({});
+    const [isCreateTournamentModalOpen, setIsCreateTournamentModalOpen] = useState(false);
     const [voiceActivityByChannel, setVoiceActivityByChannel] = useState({});
+    const voiceSession = useVoiceSessionStore((state) => state.session);
+    const setVoiceConnectingState = useVoiceSessionStore((state) => state.setConnecting);
+    const setVoiceConnectedState = useVoiceSessionStore((state) => state.setConnected);
+    const setVoiceErrorState = useVoiceSessionStore((state) => state.setError);
+    const patchVoiceMediaState = useVoiceSessionStore((state) => state.patchMediaState);
+    const clearVoiceSession = useVoiceSessionStore((state) => state.clear);
+    const voiceState = useMemo(() => {
+        if (!voiceSession.room || !voiceSession.serverId || !voiceSession.channelId || !voiceSession.serverName || !voiceSession.channelName) {
+            return null;
+        }
+        return {
+            channelId: voiceSession.channelId,
+            channelName: voiceSession.channelName,
+            serverId: voiceSession.serverId,
+            serverName: voiceSession.serverName,
+            room: voiceSession.room,
+            lastTextChannelId: voiceSession.lastTextChannelId,
+            isMicrophoneEnabled: voiceSession.isMicrophoneEnabled,
+            isCameraEnabled: voiceSession.isCameraEnabled,
+            isScreenShareEnabled: voiceSession.isScreenShareEnabled,
+        };
+    }, [voiceSession]);
+    const isVoiceConnecting = voiceSession.connectionState === 'connecting';
     const currentUser = useAuthStore((state) => state.user);
     const token = useAuthStore((state) => state.token);
     const currentUsername = currentUser?.username;
@@ -332,6 +366,9 @@ export const AppShell = () => {
     const joinVoiceInFlightRef = useRef(null);
     const pendingVoiceRoomRef = useRef(null);
     const voiceJoinAttemptRef = useRef(0);
+    const notificationSocketRef = useRef(null);
+    const notificationListenersRef = useRef(new Set());
+    const applyVoiceChannelActivityUpdateRef = useRef(null);
     const markOnboardingSeen = useCallback(() => {
         setHasSeenOnboarding(true);
         localStorage.setItem('has_seen_onboarding', 'true');
@@ -349,6 +386,18 @@ export const AppShell = () => {
     const showDevelopingToast = useCallback(() => {
         pushToast('Tính năng đang phát triển');
     }, [pushToast]);
+    const handleLogout = useCallback(() => {
+        try {
+            useAuthStore.getState().logout();
+        }
+        catch {
+            // no-op
+        }
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth-token');
+        localStorage.removeItem('auth-store');
+        window.location.href = '/auth/login';
+    }, []);
     const openCreateServerModal = useCallback((inviteCode) => {
         setCreateServerModalInviteCode(inviteCode?.trim() || null);
         setIsCreateServerModalOpen(true);
@@ -377,18 +426,16 @@ export const AppShell = () => {
     }, []);
     const syncVoiceStateFromRoom = useCallback((room) => {
         const localParticipant = room.localParticipant;
-        setVoiceState((prev) => {
-            if (!prev || prev.room !== room) {
-                return prev;
-            }
-            return {
-                ...prev,
-                isMicrophoneEnabled: localParticipant.isMicrophoneEnabled,
-                isCameraEnabled: localParticipant.isCameraEnabled,
-                isScreenShareEnabled: localParticipant.isScreenShareEnabled,
-            };
+        const currentRoom = useVoiceSessionStore.getState().session.room;
+        if (currentRoom !== room) {
+            return;
+        }
+        patchVoiceMediaState({
+            isMicrophoneEnabled: localParticipant.isMicrophoneEnabled,
+            isCameraEnabled: localParticipant.isCameraEnabled,
+            isScreenShareEnabled: localParticipant.isScreenShareEnabled,
         });
-    }, []);
+    }, [patchVoiceMediaState]);
     const syncCurrentRoomActivity = useCallback((state) => {
         const remoteParticipants = Array.from(state.room.remoteParticipants.values());
         const participants = [
@@ -436,6 +483,23 @@ export const AppShell = () => {
         }));
     }, [activeServerId, mapVoiceParticipantsToActivity]);
     useEffect(() => {
+        applyVoiceChannelActivityUpdateRef.current = applyVoiceChannelActivityUpdate;
+    }, [applyVoiceChannelActivityUpdate]);
+    const subscribeNotificationEvents = useCallback((listener) => {
+        notificationListenersRef.current.add(listener);
+        return () => {
+            notificationListenersRef.current.delete(listener);
+        };
+    }, []);
+    const sendNotificationSocketMessage = useCallback((payload) => {
+        const socket = notificationSocketRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        socket.send(JSON.stringify(payload));
+        return true;
+    }, []);
+    useEffect(() => {
         if (!currentUser?.id) {
             return;
         }
@@ -452,6 +516,14 @@ export const AppShell = () => {
             catch {
                 return;
             }
+            notificationListenersRef.current.forEach((listener) => {
+                try {
+                    listener(event);
+                }
+                catch {
+                    // no-op
+                }
+            });
             const eventType = resolveNotificationEventType(event);
             if (!eventType || eventType === 'CONNECTED') {
                 return;
@@ -459,6 +531,10 @@ export const AppShell = () => {
             if (eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' && eventType !== 'VOICE_ACTIVITY_UPDATED') {
                 return;
             }
+            logVoiceDebug('notification:voice-activity-event', {
+                eventType,
+                rawType: event?.type ?? null,
+            });
             const payload = event.payload ?? {};
             const serverId = typeof payload.server_id === 'string' ? payload.server_id : '';
             const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : '';
@@ -466,7 +542,7 @@ export const AppShell = () => {
             if (!serverId || !channelId) {
                 return;
             }
-            applyVoiceChannelActivityUpdate({
+            applyVoiceChannelActivityUpdateRef.current?.({
                 serverId,
                 channelId,
                 participants,
@@ -483,6 +559,7 @@ export const AppShell = () => {
             const target = targets[reconnectAttempt % targets.length];
             const ws = new WebSocket(target);
             socket = ws;
+            notificationSocketRef.current = ws;
             ws.onopen = () => {
                 if (socket !== ws) {
                     return;
@@ -498,6 +575,9 @@ export const AppShell = () => {
             ws.onclose = () => {
                 if (socket === ws) {
                     socket = null;
+                }
+                if (notificationSocketRef.current === ws) {
+                    notificationSocketRef.current = null;
                 }
                 if (closedByClient) {
                     return;
@@ -531,8 +611,9 @@ export const AppShell = () => {
             }
             socket?.close();
             socket = null;
+            notificationSocketRef.current = null;
         };
-    }, [applyVoiceChannelActivityUpdate, currentUser?.id, token]);
+    }, [currentUser?.id, token]);
     const refreshVoiceSidebarActivity = useCallback(async (serverId) => {
         if (!serverId) {
             return;
@@ -596,10 +677,34 @@ export const AppShell = () => {
         }
     }, [params.serverId]);
     useEffect(() => {
-        if (params.channelId) {
+        const isTextChannelRoute = location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/');
+        if (isTextChannelRoute && params.channelId) {
             setActiveChannelId(params.channelId);
         }
-    }, [params.channelId]);
+    }, [location.pathname, params.channelId]);
+    useEffect(() => {
+        logRouteDebug('location-change', {
+            pathname: location.pathname,
+            activeServerId,
+            activeChannelId,
+            paramsServerId: params.serverId ?? null,
+            paramsChannelId: params.channelId ?? null,
+            isVoiceMode,
+            isTournamentMode,
+            voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+            joinInFlight: joinVoiceInFlightRef.current,
+            isVoiceConnecting,
+        });
+    }, [
+        location.pathname,
+        activeServerId,
+        activeChannelId,
+        params.serverId,
+        params.channelId,
+        isVoiceMode,
+        isTournamentMode,
+        isVoiceConnecting,
+    ]);
     useEffect(() => {
         const isTextChannelRoute = location.pathname.includes('/app/servers/') && location.pathname.includes('/channels/');
         if (!isTextChannelRoute || !params.serverId || !params.channelId) {
@@ -705,7 +810,7 @@ export const AppShell = () => {
             const availableChannels = data.categories.flatMap((category) => category.channels);
             const hasActiveChannel = availableChannels.some((channel) => channel.id === activeChannelId);
             if (!hasActiveChannel && availableChannels.length > 0) {
-                if (isVoiceMode) {
+                if (isVoiceMode || isTournamentMode) {
                     return;
                 }
                 const fallbackChannel = availableChannels[0];
@@ -717,7 +822,7 @@ export const AppShell = () => {
         return () => {
             isCancelled = true;
         };
-    }, [activeChannelId, activeServerId, isVoiceMode, navigate]);
+    }, [activeChannelId, activeServerId, isTournamentMode, isVoiceMode, navigate]);
     useEffect(() => {
         let isCancelled = false;
         const loadMembers = async () => {
@@ -788,6 +893,34 @@ export const AppShell = () => {
         }));
         return refreshed;
     }, []);
+    const refreshTournaments = useCallback(async (serverId) => {
+        if (!serverId) {
+            return;
+        }
+        try {
+            const response = await listTournamentsByServer(serverId, { limit: 100 });
+            setTournamentsByServer((prev) => ({
+                ...prev,
+                [serverId]: (response.items ?? []).map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    status: item.status,
+                })),
+            }));
+        }
+        catch {
+            setTournamentsByServer((prev) => ({
+                ...prev,
+                [serverId]: [],
+            }));
+        }
+    }, []);
+    useEffect(() => {
+        if (!activeServerId) {
+            return;
+        }
+        void refreshTournaments(activeServerId);
+    }, [activeServerId, refreshTournaments]);
     const incrementChannelUnread = useCallback((channelId) => {
         if (!channelId) {
             return;
@@ -894,29 +1027,49 @@ export const AppShell = () => {
     const handleLeaveVoiceChannel = useCallback(async (opts = {}) => {
         const shouldNavigate = opts.navigateToText ?? true;
         const shouldInvalidateJoinAttempt = opts.invalidateJoinAttempt ?? true;
+        logVoiceDebug('leave:start', {
+            shouldNavigate,
+            shouldInvalidateJoinAttempt,
+            hasPendingRoom: Boolean(pendingVoiceRoomRef.current),
+            hasCurrentVoiceState: Boolean(voiceStateRef.current),
+        });
         if (shouldInvalidateJoinAttempt) {
             voiceJoinAttemptRef.current += 1;
             joinVoiceInFlightRef.current = null;
+            logVoiceDebug('leave:invalidate-join-attempt', {
+                nextJoinAttempt: voiceJoinAttemptRef.current,
+            });
         }
         const pendingRoom = pendingVoiceRoomRef.current;
         if (pendingRoom) {
             pendingVoiceRoomRef.current = null;
             try {
                 await pendingRoom.disconnect();
+                logVoiceDebug('leave:pending-room-disconnected');
             }
             catch {
                 // no-op
+                logVoiceDebug('leave:pending-room-disconnect-failed');
             }
         }
         const current = voiceStateRef.current;
         if (!current) {
+            logVoiceDebug('leave:no-current-voice-state');
             return;
         }
         try {
             await current.room.disconnect();
+            logVoiceDebug('leave:current-room-disconnected', {
+                serverId: current.serverId,
+                channelId: current.channelId,
+            });
         }
         catch {
             // no-op
+            logVoiceDebug('leave:current-room-disconnect-failed', {
+                serverId: current.serverId,
+                channelId: current.channelId,
+            });
         }
         if (current.serverId) {
             setVoiceActivityByChannel((prev) => ({
@@ -928,36 +1081,59 @@ export const AppShell = () => {
                 },
             }));
         }
-        setVoiceState((prev) => (prev?.room === current.room ? null : prev));
+        clearVoiceSession();
+        logVoiceDebug('leave:voice-state-cleared', {
+            serverId: current.serverId,
+            channelId: current.channelId,
+        });
         if (!shouldNavigate) {
+            logVoiceDebug('leave:skip-navigation');
             return;
         }
         const fallback = resolveFallbackTextChannel(current.serverId, current.lastTextChannelId);
         if (!fallback) {
+            logVoiceDebug('leave:no-fallback-channel-navigate-dm', {
+                serverId: current.serverId,
+            });
             navigate('/app/@me');
             return;
         }
         setActiveServerId(current.serverId);
         setActiveChannelId(fallback.id);
         navigate(`/app/servers/${current.serverId}/channels/${fallback.id}`);
-    }, [navigate, resolveFallbackTextChannel]);
+        logVoiceDebug('leave:navigate-fallback-text-channel', {
+            serverId: current.serverId,
+            channelId: fallback.id,
+        });
+    }, [clearVoiceSession, navigate, resolveFallbackTextChannel]);
     const joinVoiceChannel = useCallback(async (channelId) => {
+        logVoiceDebug('join:click', {
+            activeServerId,
+            channelId,
+            activeChannelId,
+            pathname: location.pathname,
+            isVoiceConnecting,
+            inFlight: joinVoiceInFlightRef.current,
+            currentVoiceServerId: voiceStateRef.current?.serverId ?? null,
+            currentVoiceChannelId: voiceStateRef.current?.channelId ?? null,
+        });
         if (!activeServerId) {
             pushToast('Chưa xác định server hiện tại.');
+            logVoiceDebug('join:blocked-no-active-server');
             return;
         }
         const joinKey = `${activeServerId}:${channelId}`;
         if (joinVoiceInFlightRef.current === joinKey) {
+            logVoiceDebug('join:blocked-same-join-in-flight', { joinKey });
             return;
         }
         const currentVoice = voiceStateRef.current;
         if (currentVoice && currentVoice.serverId === activeServerId && currentVoice.channelId === channelId) {
-            if (!location.pathname.includes(`/app/servers/${activeServerId}/voice/${channelId}`)) {
-                navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
-            }
+            logVoiceDebug('join:already-in-target-room', { joinKey });
             return;
         }
         if (isVoiceConnecting) {
+            logVoiceDebug('join:blocked-is-voice-connecting', { joinKey });
             return;
         }
         const categories = channelsByServer[activeServerId] ?? [];
@@ -976,48 +1152,98 @@ export const AppShell = () => {
             : previous?.lastTextChannelId ?? null;
         const joinAttempt = voiceJoinAttemptRef.current + 1;
         voiceJoinAttemptRef.current = joinAttempt;
-        setIsVoiceConnecting(true);
+        setVoiceConnectingState(activeServerId, channelId);
         joinVoiceInFlightRef.current = joinKey;
+        logVoiceDebug('join:start', {
+            joinAttempt,
+            joinKey,
+            serverName,
+            channelName,
+            hasPreviousVoice: Boolean(previous),
+            lastTextChannelId,
+        });
         try {
             if (previous) {
                 await handleLeaveVoiceChannel({ navigateToText: false, invalidateJoinAttempt: false });
+                logVoiceDebug('join:previous-room-left', {
+                    joinAttempt,
+                    previousServerId: previous.serverId,
+                    previousChannelId: previous.channelId,
+                });
             }
             else if (pendingVoiceRoomRef.current) {
                 try {
                     await pendingVoiceRoomRef.current.disconnect();
+                    logVoiceDebug('join:stale-pending-room-disconnected', { joinAttempt });
                 }
                 catch {
                     // no-op
+                    logVoiceDebug('join:stale-pending-room-disconnect-failed', { joinAttempt });
                 }
                 pendingVoiceRoomRef.current = null;
             }
             if (voiceJoinAttemptRef.current !== joinAttempt) {
+                logVoiceDebug('join:aborted-attempt-mismatch-before-token', {
+                    joinAttempt,
+                    currentAttempt: voiceJoinAttemptRef.current,
+                });
                 return;
             }
             const { token, url } = await getVoiceToken(channelId);
+            logVoiceDebug('join:token-response', {
+                joinAttempt,
+                channelId,
+                url,
+                tokenLength: token?.length ?? 0,
+                tokenPrefix: token?.slice(0, 12) ?? '',
+            });
             if (voiceJoinAttemptRef.current !== joinAttempt) {
+                logVoiceDebug('join:aborted-attempt-mismatch-after-token', {
+                    joinAttempt,
+                    currentAttempt: voiceJoinAttemptRef.current,
+                });
                 return;
             }
             const room = new Room();
             pendingVoiceRoomRef.current = room;
             const connectTargets = buildConnectTargets(url);
+            logVoiceDebug('join:connect-targets', {
+                joinAttempt,
+                connectTargets,
+            });
             let connectError = null;
             for (const target of connectTargets) {
                 if (voiceJoinAttemptRef.current !== joinAttempt) {
+                    logVoiceDebug('join:break-attempt-mismatch-during-connect-loop', {
+                        joinAttempt,
+                        currentAttempt: voiceJoinAttemptRef.current,
+                    });
                     break;
                 }
                 try {
-                    await withTimeout(room.connect(target, token), 7000);
+                    logVoiceDebug('join:connecting-target', { joinAttempt, target });
+                    await room.connect(target, token);
                     connectError = null;
+                    logVoiceDebug('join:connected-target', { joinAttempt, target });
                     break;
                 }
                 catch (error) {
                     connectError = error;
+                    logVoiceDebug('join:connect-target-failed', {
+                        joinAttempt,
+                        target,
+                        errorMessage: error?.message ?? 'unknown',
+                        errorName: error?.name ?? 'unknown',
+                    });
                     try {
                         await room.disconnect();
                     }
                     catch {
                         // no-op
+                        logVoiceDebug('join:room-disconnect-after-failed-target-error', {
+                            joinAttempt,
+                            target,
+                        });
                     }
                 }
             }
@@ -1027,10 +1253,20 @@ export const AppShell = () => {
                 }
                 catch {
                     // no-op
+                    logVoiceDebug('join:room-disconnect-attempt-mismatch-failed', { joinAttempt });
                 }
+                logVoiceDebug('join:aborted-attempt-mismatch-after-connect-loop', {
+                    joinAttempt,
+                    currentAttempt: voiceJoinAttemptRef.current,
+                });
                 return;
             }
             if (connectError) {
+                logVoiceDebug('join:connect-failed-final', {
+                    joinAttempt,
+                    errorMessage: connectError?.message ?? 'unknown',
+                    errorName: connectError?.name ?? 'unknown',
+                });
                 const rawMessage = connectError?.message ?? 'Không thể kết nối kênh thoại.';
                 const normalized = String(rawMessage).toLowerCase();
                 if (normalized.includes('websocket') ||
@@ -1042,6 +1278,7 @@ export const AppShell = () => {
                 else {
                     pushToast(rawMessage);
                 }
+                setVoiceErrorState(rawMessage);
                 return;
             }
             pendingVoiceRoomRef.current = null;
@@ -1067,15 +1304,50 @@ export const AppShell = () => {
             room.on(RoomEvent.TrackPublished, onParticipantChanged);
             room.on(RoomEvent.TrackUnpublished, onParticipantChanged);
             room.on(RoomEvent.Disconnected, () => {
-                setVoiceState((prev) => (prev?.room === room ? null : prev));
+                logVoiceDebug('join:room-disconnected-event', {
+                    joinAttempt,
+                    channelId,
+                    roomName: room.name,
+                });
+                const session = useVoiceSessionStore.getState().session;
+                if (session.room === room) {
+                    useVoiceSessionStore.getState().clear();
+                }
             });
-            setVoiceState(nextVoiceState);
+            setVoiceConnectedState({
+                serverId: nextVoiceState.serverId,
+                serverName: nextVoiceState.serverName,
+                channelId: nextVoiceState.channelId,
+                channelName: nextVoiceState.channelName,
+                room: nextVoiceState.room,
+                lastTextChannelId: nextVoiceState.lastTextChannelId,
+                isMicrophoneEnabled: nextVoiceState.isMicrophoneEnabled,
+                isCameraEnabled: nextVoiceState.isCameraEnabled,
+                isScreenShareEnabled: nextVoiceState.isScreenShareEnabled,
+            });
             syncCurrentRoomActivity(nextVoiceState);
             syncVoiceStateFromRoom(room);
-            setActiveChannelId(channelId);
-            navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
+            logVoiceDebug('join:connected-keep-current-route', {
+                joinAttempt,
+                channelId,
+                activeServerId,
+                pathname: location.pathname,
+            });
+            logVoiceDebug('join:success', {
+                joinAttempt,
+                channelId,
+                serverId: activeServerId,
+                roomName: room.name,
+            });
         }
         catch (error) {
+            logVoiceDebug('join:exception', {
+                joinAttempt,
+                channelId,
+                errorMessage: error?.message ?? null,
+                errorName: error?.name ?? 'unknown',
+                errorStack: error?.stack ?? null,
+            });
             const rawMessage = error?.message ?? 'Không thể kết nối kênh thoại.';
             const normalized = String(rawMessage).toLowerCase();
             if (normalized.includes('websocket') ||
@@ -1087,6 +1359,7 @@ export const AppShell = () => {
             else {
                 pushToast(rawMessage);
             }
+            setVoiceErrorState(rawMessage);
         }
         finally {
             if (pendingVoiceRoomRef.current && voiceJoinAttemptRef.current === joinAttempt) {
@@ -1095,9 +1368,14 @@ export const AppShell = () => {
             if (joinVoiceInFlightRef.current === joinKey) {
                 joinVoiceInFlightRef.current = null;
             }
-            if (voiceJoinAttemptRef.current === joinAttempt) {
-                setIsVoiceConnecting(false);
-            }
+            logVoiceDebug('join:finally', {
+                joinAttempt,
+                joinKey,
+                currentAttempt: voiceJoinAttemptRef.current,
+                isConnectingWillReset: voiceJoinAttemptRef.current === joinAttempt,
+                inFlightNow: joinVoiceInFlightRef.current,
+                hasPendingRoom: Boolean(pendingVoiceRoomRef.current),
+            });
         }
     }, [
         activeChannelId,
@@ -1110,6 +1388,9 @@ export const AppShell = () => {
         pushToast,
         serverDetails,
         servers,
+        setVoiceConnectedState,
+        setVoiceConnectingState,
+        setVoiceErrorState,
         syncCurrentRoomActivity,
         syncVoiceStateFromRoom,
     ]);
@@ -1224,8 +1505,65 @@ export const AppShell = () => {
             };
         }),
     })), [activeCategories, voiceActivityByChannel]);
+    const tournamentVoiceChannels = useMemo(() => categoriesWithVoiceActivity
+        .flatMap((category) => category.channels)
+        .filter((channel) => channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name)), [categoriesWithVoiceActivity]);
+    const categoriesForSidebar = useMemo(() => categoriesWithVoiceActivity.map((category) => ({
+        ...category,
+        channels: category.channels.filter((channel) => !(channel.type === 'voice' && isTournamentMatchVoiceChannelName(channel.name))),
+    })), [categoriesWithVoiceActivity]);
     const activeMembers = useMemo(() => membersByServer[activeServerId] ?? [], [activeServerId, membersByServer]);
+    const activeTournaments = useMemo(() => tournamentsByServer[activeServerId] ?? [], [activeServerId, tournamentsByServer]);
+    const requestTournamentObserverTokens = useCallback(async (channelId) => {
+        if (!activeServerId || activeTournaments.length === 0) {
+            return [];
+        }
+        for (const tournament of activeTournaments) {
+            let workspaces = [];
+            try {
+                workspaces = await listTournamentMatchWorkspaces(tournament.id);
+            }
+            catch {
+                continue;
+            }
+            const workspace = workspaces.find((item) => [
+                item.team_a_channel_id,
+                item.team_b_channel_id,
+                item.caster_channel_id,
+                item.admin_channel_id,
+                item.spectator_channel_id,
+            ].includes(channelId));
+            if (!workspace) {
+                continue;
+            }
+            const bundle = await getTournamentMatchObserverTokens(tournament.id, workspace.match_id);
+            return [
+                {
+                    channelId: bundle.team_a.channel_id,
+                    channelName: `team-a`,
+                    token: bundle.team_a.token,
+                    url: bundle.team_a.url,
+                },
+                {
+                    channelId: bundle.team_b.channel_id,
+                    channelName: `team-b`,
+                    token: bundle.team_b.token,
+                    url: bundle.team_b.url,
+                },
+            ];
+        }
+        return [];
+    }, [activeServerId, activeTournaments]);
     const hasManageVoicePermission = useMemo(() => {
+        if (!currentUser) {
+            return false;
+        }
+        if (currentUser.is_admin) {
+            return true;
+        }
+        return activeServer?.ownerId === currentUser.id;
+    }, [activeServer?.ownerId, currentUser]);
+    const hasManageTournamentsPermission = useMemo(() => {
         if (!currentUser) {
             return false;
         }
@@ -1255,6 +1593,7 @@ export const AppShell = () => {
         shouldShowOnboarding: servers.length === 0 && !hasSeenOnboarding,
         dismissOnboarding: markOnboardingSeen,
         openCreateServerModal: () => openCreateServerModal(),
+        openInviteMemberDialog: () => setIsInviteDialogOpen(true),
         showDevelopingToast,
         voiceState,
         isVoiceConnecting,
@@ -1265,10 +1604,17 @@ export const AppShell = () => {
         toggleCamera,
         toggleScreenShare,
         applyVoiceChannelActivityUpdate,
+        subscribeNotificationEvents,
+        sendNotificationSocketMessage,
+        requestTournamentObserverTokens,
         pushToast,
         incrementChannelUnread,
         resetChannelUnread,
         setChannelUnread,
+        canManageTournaments: hasManageTournamentsPermission,
+        openTournamentCreateDialog: () => setIsCreateTournamentModalOpen(true),
+        refreshActiveServerTournaments: () => refreshTournaments(activeServerId),
+        membersByServer,
     }), [
         showMembers,
         toggleMembers,
@@ -1279,6 +1625,7 @@ export const AppShell = () => {
         hasSeenOnboarding,
         markOnboardingSeen,
         openCreateServerModal,
+        setIsInviteDialogOpen,
         showDevelopingToast,
         voiceState,
         isVoiceConnecting,
@@ -1289,10 +1636,16 @@ export const AppShell = () => {
         toggleCamera,
         toggleScreenShare,
         applyVoiceChannelActivityUpdate,
+        subscribeNotificationEvents,
+        sendNotificationSocketMessage,
         pushToast,
         incrementChannelUnread,
         resetChannelUnread,
         setChannelUnread,
+        hasManageTournamentsPermission,
+        refreshTournaments,
+        membersByServer,
+        requestTournamentObserverTokens,
     ]);
     return (_jsx(TooltipProvider, { delayDuration: 500, children: _jsxs("div", { className: "flex h-screen w-screen overflow-hidden bg-background text-foreground", children: [_jsx("div", { className: "w-[72px] flex-none overflow-hidden", children: _jsx(ServerRail, { servers: servers, activeServerId: activeServerId, onSelectServer: async (serverId) => {
                             try {
@@ -1301,30 +1654,73 @@ export const AppShell = () => {
                             catch {
                                 navigate('/app/@me');
                             }
-                        }, onCreateServer: () => openCreateServerModal() }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: categoriesWithVoiceActivity, activeChannelId: activeChannelId, onSelectChannel: (channelId, type) => {
-                                    if (type === 'voice') {
-                                        if (activeServerId) {
-                                            setActiveChannelId(channelId);
-                                            navigate(`/app/servers/${activeServerId}/voice/${channelId}`);
-                                        }
-                                        void joinVoiceChannel(channelId);
-                                        return;
-                                    }
-                                        const navigateToText = async () => {
-                                            if (voiceState) {
-                                                await handleLeaveVoiceChannel({ navigateToText: false });
+                        }, onOpenGames: () => navigate('/games'), onCreateServer: () => openCreateServerModal() }) }), _jsxs(PanelGroup, { orientation: "horizontal", className: "min-w-0 flex-1 overflow-hidden", children: [_jsx(Panel, { id: "sidebar", defaultSize: SIZE.sidebar.default, minSize: SIZE.sidebar.min, maxSize: SIZE.sidebar.max, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-w-0 flex-col overflow-hidden", children: isDmMode ? (_jsx(DirectMessagesSidebar, {})) : (_jsx(ChannelSidebar, { serverId: activeServerId, serverName: activeServer?.name ?? 'Server', serverInitials: activeServer?.initials, serverColor: activeServer?.color ?? 'bg-indigo-500', serverBannerUrl: activeServer?.bannerUrl, serverIconUrl: activeServer?.iconUrl, serverBoostLevel: activeServer?.boostLevel, categories: categoriesForSidebar, tournamentVoiceChannels: tournamentVoiceChannels, activeChannelId: activeChannelId, activeVoiceChannelId: voiceState?.channelId ?? undefined, onSelectChannel: (channelId, type) => {
+                                        if (type === 'voice') {
+                                            const connectedVoice = voiceStateRef.current;
+                                            if (connectedVoice &&
+                                                connectedVoice.serverId === activeServerId &&
+                                                connectedVoice.channelId === channelId) {
+                                                logVoiceDebug('ui:channel-sidebar-voice-already-connected', {
+                                                    channelId,
+                                                    activeServerId,
+                                                });
+                                                return;
                                             }
-                                            setActiveChannelId(channelId);
-                                            navigate(`/app/servers/${activeServerId}/channels/${channelId}`);
-                                        };
-                                        void navigateToText();
+                                            logRouteDebug('sidebar-click-voice', {
+                                                channelId,
+                                                fromPath: location.pathname,
+                                                activeServerId,
+                                                activeChannelId,
+                                            });
+                                            logVoiceDebug('ui:channel-sidebar-click-voice', {
+                                                channelId,
+                                                activeServerId,
+                                                activeChannelId,
+                                            });
+                                            if (activeServerId) {
+                                                logVoiceDebug('ui:channel-sidebar-join-voice-without-route-change', {
+                                                    channelId,
+                                                    activeServerId,
+                                                    pathname: location.pathname,
+                                                });
+                                            }
+                                            void joinVoiceChannel(channelId);
+                                            return;
+                                        }
+                                        logRouteDebug('sidebar-click-text', {
+                                            channelId,
+                                            fromPath: location.pathname,
+                                            toPath: `/app/servers/${activeServerId}/channels/${channelId}`,
+                                            activeServerId,
+                                            activeChannelId,
+                                            voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                                        });
+                                        setActiveChannelId(channelId);
+                                        navigate(`/app/servers/${activeServerId}/channels/${channelId}`);
                                     }, onCreateChannel: () => setIsCreateChannelModalOpen(true), onInviteMember: () => setIsInviteDialogOpen(true), onOpenServerSettings: () => {
                                         setServerSettingsTab('profile');
                                         setIsServerSettingsOpen(true);
                                     }, onOpenServerMembers: () => {
                                         setServerSettingsTab('members');
                                         setIsServerSettingsOpen(true);
-                                    }, onOpenUserSettings: () => setIsUserSettingsOpen(true), voiceState: voiceState, onLeaveVoiceChannel: () => void handleLeaveVoiceChannel() })) }) }), _jsx(ResizeHandle, {}), _jsx(Panel, { id: "main", panelRef: mainRef, defaultSize: showMembers ? SIZE.mainWithMembers : SIZE.mainAlone, minSize: 35, maxSize: 120, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background", children: _jsx(Outlet, { context: outletContext }) }) }), showMembers && !isVoiceMode && (_jsxs(_Fragment, { children: [_jsx(ResizeHandle, {}), _jsx(Panel, { id: "members", defaultSize: SIZE.members.default, minSize: SIZE.members.min, maxSize: SIZE.members.max, className: "overflow-hidden", children: _jsx("div", { className: "h-full overflow-hidden border-l border-border bg-[hsl(240,6%,10%)]", children: _jsx(MemberListPanel, { members: activeMembers }) }) })] }))] }), _jsx(CreateServerModal, { isOpen: isCreateServerModalOpen, onOpenChange: closeCreateServerModal, defaultServerName: `Server của ${currentUsername ?? 'bạn'}`, onCreate: handleCreateServer, onResolveInvitePreview: resolveInvitePreview, onJoinByInvite: handleJoinByInvite, initialInviteCode: createServerModalInviteCode }), activeServerId && (_jsxs(_Fragment, { children: [_jsx(CreateChannelModal, { isOpen: isCreateChannelModalOpen, onOpenChange: setIsCreateChannelModalOpen, onCreate: handleCreateChannel }), _jsx(InviteMemberDialog, { open: isInviteDialogOpen, onOpenChange: setIsInviteDialogOpen, serverId: activeServerId })] })), toastMessage && (_jsx("div", { className: "fixed bottom-4 right-4 z-[100] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-lg", children: toastMessage })), activeServer && isServerSettingsOpen && (_jsx(ServerSettingsOverlay, { open: isServerSettingsOpen, initialTab: serverSettingsTab, serverId: activeServerId, server: activeServer, onClose: () => setIsServerSettingsOpen(false), onServerUpdated: refreshActiveServer, onToast: pushToast })), _jsx(UserSettingsDialog, { open: isUserSettingsOpen, onOpenChange: setIsUserSettingsOpen, username: currentUser?.username ?? 'you', avatarURL: currentUser?.avatar_url ?? null, onUpdated: (username, avatarURL) => {
+                                    }, onOpenUserSettings: () => setIsUserSettingsOpen(true), onLogout: handleLogout, voiceState: voiceState, onLeaveVoiceChannel: () => void handleLeaveVoiceChannel(), tournaments: activeTournaments, onSelectTournament: (tournamentId) => {
+                                        if (!activeServerId) {
+                                            return;
+                                        }
+                                        logRouteDebug('sidebar-click-tournament', {
+                                            tournamentId,
+                                            fromPath: location.pathname,
+                                            toPath: `/app/servers/${activeServerId}/tournaments/${tournamentId}`,
+                                            activeServerId,
+                                            activeChannelId,
+                                            voiceConnectedChannelId: voiceStateRef.current?.channelId ?? null,
+                                        });
+                                        navigate(`/app/servers/${activeServerId}/tournaments/${tournamentId}`);
+                                    }, onCreateTournament: () => setIsCreateTournamentModalOpen(true), canCreateTournament: hasManageTournamentsPermission })) }) }), _jsx(ResizeHandle, {}), _jsx(Panel, { id: "main", panelRef: mainRef, defaultSize: showMembers ? SIZE.mainWithMembers : SIZE.mainAlone, minSize: 35, maxSize: 120, className: "overflow-hidden", children: _jsx("div", { className: "flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background", children: _jsx(Outlet, { context: outletContext }, location.pathname) }) }), showMembers && !isVoiceMode && (_jsxs(_Fragment, { children: [_jsx(ResizeHandle, {}), _jsx(Panel, { id: "members", defaultSize: SIZE.members.default, minSize: SIZE.members.min, maxSize: SIZE.members.max, className: "overflow-hidden", children: _jsx("div", { className: "h-full overflow-hidden border-l border-border bg-[hsl(240,6%,10%)]", children: _jsx(MemberListPanel, { members: activeMembers }) }) })] }))] }), _jsx(CreateServerModal, { isOpen: isCreateServerModalOpen, onOpenChange: closeCreateServerModal, defaultServerName: `Server của ${currentUsername ?? 'bạn'}`, onCreate: handleCreateServer, onResolveInvitePreview: resolveInvitePreview, onJoinByInvite: handleJoinByInvite, initialInviteCode: createServerModalInviteCode }), activeServerId && (_jsxs(_Fragment, { children: [_jsx(CreateChannelModal, { isOpen: isCreateChannelModalOpen, onOpenChange: setIsCreateChannelModalOpen, onCreate: handleCreateChannel }), _jsx(InviteMemberDialog, { open: isInviteDialogOpen, onOpenChange: setIsInviteDialogOpen, serverId: activeServerId }), _jsx(TournamentCreateEditDialog, { open: isCreateTournamentModalOpen, onOpenChange: setIsCreateTournamentModalOpen, serverId: activeServerId, onSuccess: (created) => {
+                                pushToast('Đã tạo giải đấu.');
+                                void refreshTournaments(activeServerId);
+                                navigate(`/app/servers/${activeServerId}/tournaments/${created.id}`);
+                            } })] })), toastMessage && (_jsx("div", { className: "fixed bottom-4 right-4 z-[100] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-lg", children: toastMessage })), activeServer && isServerSettingsOpen && (_jsx(ServerSettingsOverlay, { open: isServerSettingsOpen, initialTab: serverSettingsTab, serverId: activeServerId, server: activeServer, onClose: () => setIsServerSettingsOpen(false), onServerUpdated: refreshActiveServer, onToast: pushToast })), _jsx(UserSettingsDialog, { open: isUserSettingsOpen, onOpenChange: setIsUserSettingsOpen, username: currentUser?.username ?? 'you', avatarURL: currentUser?.avatar_url ?? null, onUpdated: (username, avatarURL) => {
                         const previous = useAuthStore.getState().user;
                         if (!previous) {
                             return;

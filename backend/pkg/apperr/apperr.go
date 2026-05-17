@@ -97,6 +97,8 @@ var registry = map[string]errDef{
 	"TOURNAMENT_INVALID_STATUS_TRANSITION": {http.StatusBadRequest, "Invalid tournament status transition"},
 	"TOURNAMENT_BRACKET_GENERATION_FAILED": {http.StatusBadRequest, "Failed to generate bracket"},
 	"TOURNAMENT_MATCH_NOT_FOUND":           {http.StatusNotFound, "Tournament match not found"},
+	"TOURNAMENT_ROLE_NOT_FOUND":            {http.StatusNotFound, "Tournament role not found"},
+	"TOURNAMENT_WORKSPACE_NOT_FOUND":       {http.StatusNotFound, "Tournament match workspace not found"},
 	"TOURNAMENT_INVALID_MATCH_STATUS":      {http.StatusBadRequest, "Invalid tournament match status transition"},
 	"TOURNAMENT_REPORT_NOT_FOUND":          {http.StatusNotFound, "Tournament match report not found"},
 	"GAME_NOT_FOUND":                       {http.StatusNotFound, "Game not found"},

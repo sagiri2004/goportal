@@ -736,6 +736,7 @@ func (s *gameService) CreateRoom(ctx context.Context, actorID string, input serv
 	}
 	now := time.Now().Unix()
 	_ = s.repo.CloseExpiredRooms(ctx, now)
+	_ = s.repo.CloseOpenRoomsWithoutMembers(ctx, now)
 
 	maxPlayers := input.MaxPlayers
 	if maxPlayers <= 1 || maxPlayers > maxRoomPlayers {
@@ -779,6 +780,10 @@ func (s *gameService) ListOpenRooms(ctx context.Context, actorID string, filter 
 	if err := assertGamePlayableForActor(game, actorID); err != nil {
 		return nil, err
 	}
+	now := time.Now().Unix()
+	_ = s.repo.CloseExpiredRooms(ctx, now)
+	_ = s.repo.CloseOpenRoomsWithoutMembers(ctx, now)
+
 	rooms, err := s.repo.ListOpenRoomsByGameID(ctx, game.ID, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, err
@@ -805,6 +810,7 @@ func (s *gameService) ListOpenRooms(ctx context.Context, actorID string, filter 
 func (s *gameService) JoinRoom(ctx context.Context, actorID, gameID, roomID string) (*services.GameRoomResponse, error) {
 	now := time.Now().Unix()
 	_ = s.repo.CloseExpiredRooms(ctx, now)
+	_ = s.repo.CloseOpenRoomsWithoutMembers(ctx, now)
 
 	room, err := s.repo.FindRoomByID(ctx, strings.TrimSpace(roomID))
 	if err != nil {

@@ -26,6 +26,7 @@ let black = new Player("black");
 let currentPlayer = white;
 let sdk = null;
 let roomId = "";
+let roomCode = "";
 let selfUserId = "";
 let myRole = "spectator";
 let suppressPublish = false;
@@ -36,6 +37,10 @@ let currentRoomVersion = 0;
 let whiteCaptures = 0;
 let blackCaptures = 0;
 let leaderboardId = "chess_multiplayer_ranked";
+let gamePhase = "local";
+let readyMap = { white: false, black: false };
+let roomSyncTimer = null;
+let isSyncingRoomState = false;
 
 let SquareObject = function(x, y, color, selected, element, piece){
 	this.x = x;
@@ -560,6 +565,7 @@ let setup = function(){
 		getSquare(pieces[i].x, pieces[i].y).setPiece(pieces[i]);
 	}
     updateScoreInfo();
+    updateLobbyInfo();
     initMultiplayer();
 };
 
@@ -1129,12 +1135,32 @@ let setMpStatus = function(message){
 
 let setRoleInfo = function(){
     let node = document.getElementById("myRoleInfo");
-    if(node) node.innerText = "Role: " + myRole + " | Room: " + (roomId || "(none)");
+    if(node) node.innerText = "Role: " + myRole + " | Room: " + (roomCode || roomId || "(none)");
 };
 
 let setUserInfo = function(text){
     let node = document.getElementById("userInfo");
     if(node) node.innerText = text;
+};
+
+let updateLobbyInfo = function(){
+    var node = document.getElementById("lobbyInfo");
+    if(!node) return;
+    if(!roomId){
+        node.innerText = "Lobby: local mode";
+        return;
+    }
+    var whiteId = seatMap.white || "(empty)";
+    var blackId = seatMap.black || "(empty)";
+    var phaseText = gamePhase === "started" ? "started" : "waiting";
+    var whiteReady = readyMap.white ? "ready" : "not-ready";
+    var blackReady = readyMap.black ? "ready" : "not-ready";
+    node.innerText = "Lobby: " + phaseText + " | white=" + whiteId + " (" + whiteReady + ") | black=" + blackId + " (" + blackReady + ")";
+    var btn = document.getElementById("toggleReadyBtn");
+    if(btn){
+        var myReady = (myRole === "white" && readyMap.white) || (myRole === "black" && readyMap.black);
+        btn.innerText = myReady ? "Unready" : "Ready";
+    }
 };
 
 let updateScoreInfo = function(){
@@ -1152,9 +1178,10 @@ let renderOpenRooms = function(rooms){
     var html = "Open rooms: ";
     for(var i=0;i<rooms.length;i++){
         var room = rooms[i] && rooms[i].room ? rooms[i].room : null;
+        var members = rooms[i] && rooms[i].members ? rooms[i].members : [];
         if(!room || !room.id) continue;
         var name = room.room_name || room.room_code || room.id;
-        html += '<button type="button" data-room-id="' + room.id + '" class="room-join-btn" style="margin:2px;">' + name + "</button>";
+        html += '<button type="button" data-room-id="' + room.id + '" class="room-join-btn" style="margin:2px;">Join ' + name + " (" + members.length + "/2)</button>";
     }
     node.innerHTML = html;
     var buttons = node.querySelectorAll(".room-join-btn");
@@ -1171,6 +1198,7 @@ let renderOpenRooms = function(rooms){
 
 let canLocalPlay = function(){
     if(!roomId) return true;
+    if(gamePhase !== "started") return false;
     if(myRole === "white" && currentPlayer.color === "white") return true;
     if(myRole === "black" && currentPlayer.color === "black") return true;
     return false;
@@ -1184,6 +1212,8 @@ let serializeGameState = function(){
         white: { checked: white.checked, castled: white.castled, kingMoved: white.kingMoved },
         black: { checked: black.checked, castled: black.castled, kingMoved: black.kingMoved },
         score: { white: whiteCaptures, black: blackCaptures },
+        gamePhase: gamePhase,
+        readyMap: readyMap,
         seatMap: currentSeatMap(),
         pieces: pieces.map(function(piece){
             return {
@@ -1247,10 +1277,16 @@ let applyGameState = function(state){
     black.kingMoved = state.black ? !!state.black.kingMoved : black.kingMoved;
     whiteCaptures = state.score && typeof state.score.white === "number" ? state.score.white : whiteCaptures;
     blackCaptures = state.score && typeof state.score.black === "number" ? state.score.black : blackCaptures;
+    gamePhase = typeof state.gamePhase === "string" ? state.gamePhase : gamePhase;
+    if(state.readyMap){
+        readyMap.white = !!state.readyMap.white;
+        readyMap.black = !!state.readyMap.black;
+    }
     updateScoreInfo();
     currentPlayer = state.currentColor === "black" ? black : white;
     document.getElementById("turnInfo").innerHTML = "Player's turn: <b>" + (currentPlayer.color === "white" ? "White" : "Black") + "</b>";
     assignRole(state.seatMap || {});
+    updateLobbyInfo();
     suppressPublish = false;
 };
 
@@ -1286,6 +1322,46 @@ let assignRole = function(nextSeatMap){
     else if(seatMap && seatMap.black === selfUserId) myRole = "black";
     else myRole = "spectator";
     setRoleInfo();
+    updateLobbyInfo();
+};
+
+let deriveSeatMapFromMembers = function(members){
+    if(!Array.isArray(members)) return { white: null, black: null };
+    let hostId = null;
+    let players = [];
+    for(let i = 0; i < members.length; i++){
+        let member = members[i] || {};
+        let userId = typeof member.user_id === "string" ? member.user_id : "";
+        let role = typeof member.role === "string" ? member.role : "";
+        if(!userId) continue;
+        if(role === "host") hostId = userId;
+        if(role === "host" || role === "player") players.push(userId);
+    }
+    let whiteId = hostId || (players.length > 0 ? players[0] : null);
+    let blackId = null;
+    for(let j = 0; j < players.length; j++){
+        if(players[j] !== whiteId){
+            blackId = players[j];
+            break;
+        }
+    }
+    return { white: whiteId || null, black: blackId || null };
+};
+
+let extractRoomStatePayload = function(res){
+    if(!res || typeof res !== "object") return { roomState: null, roomVersion: 0, roomCode: "", roomStatus: "", seatsFromMembers: null };
+    let room = res.room && typeof res.room === "object" ? res.room : {};
+    let roomState = null;
+    if(res.state && typeof res.state === "object"){
+        roomState = res.state;
+    }else if(room.current_state && typeof room.current_state === "object"){
+        roomState = room.current_state;
+    }
+    let roomVersion = Number(room.state_version || (roomState && roomState.roomVersion) || 0);
+    let roomCode = typeof room.room_code === "string" ? room.room_code : "";
+    let roomStatus = typeof room.status === "string" ? room.status : "";
+    let seatsFromMembers = deriveSeatMapFromMembers(res.members);
+    return { roomState: roomState, roomVersion: roomVersion, roomCode: roomCode, roomStatus: roomStatus, seatsFromMembers: seatsFromMembers };
 };
 
 let publishGameState = function(){
@@ -1301,23 +1377,103 @@ let publishGameState = function(){
     });
 };
 
+let isLikelyUUID = function(value){
+    return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+};
+
+let resolveJoinTargetRoomId = function(targetRoomId){
+    let raw = typeof targetRoomId === "string" ? targetRoomId.trim() : "";
+    if(!raw) return Promise.resolve("");
+    if(isLikelyUUID(raw)) return Promise.resolve(raw);
+    if(!sdk || !sdk.commands || typeof sdk.commands.listOpenRooms !== "function"){
+        return Promise.resolve(raw);
+    }
+    return sdk.commands.listOpenRooms({ limit: 100, offset: 0 })
+        .then(function(rooms){
+            if(!Array.isArray(rooms)) return raw;
+            for(let i = 0; i < rooms.length; i++){
+                let room = rooms[i] && rooms[i].room ? rooms[i].room : null;
+                if(!room) continue;
+                if((typeof room.room_code === "string" && room.room_code === raw) || room.id === raw){
+                    return room.id;
+                }
+            }
+            return raw;
+        })
+        .catch(function(){
+            return raw;
+        });
+};
+
+let syncRoomStateOnce = function(reason){
+    if(!sdk || !roomId || !sdk.commands || typeof sdk.commands.getRoomState !== "function") return;
+    if(isSyncingRoomState) return;
+    isSyncingRoomState = true;
+    sdk.commands.getRoomState({ room_id: roomId })
+        .then(function(res){
+            var parsed = extractRoomStatePayload(res);
+            if(parsed.roomCode) roomCode = parsed.roomCode;
+            if(parsed.roomVersion > 0) currentRoomVersion = Math.max(currentRoomVersion, parsed.roomVersion);
+            if(parsed.seatsFromMembers) mergeSeatMap(parsed.seatsFromMembers);
+            var state = parsed.roomState;
+            if(state){
+                applyGameState(state);
+            }else{
+                assignRole(seatMap);
+            }
+        })
+        .catch(function(err){
+            if(reason === "manual"){
+                setMpStatus("Sync failed: " + (err && err.message ? err.message : "unknown"));
+            }
+        })
+        .finally(function(){
+            isSyncingRoomState = false;
+        });
+};
+
+let startRoomSyncLoop = function(){
+    if(roomSyncTimer){
+        clearInterval(roomSyncTimer);
+        roomSyncTimer = null;
+    }
+    if(!roomId) return;
+    roomSyncTimer = setInterval(function(){
+        syncRoomStateOnce("loop");
+    }, 1500);
+};
+
 let joinRoomById = function(targetRoomId){
     if(!sdk || !targetRoomId) return;
-    sdk.commands.joinRoom({ room_id: targetRoomId })
-        .then(function(){
-            roomId = targetRoomId;
+    resolveJoinTargetRoomId(targetRoomId)
+        .then(function(resolvedRoomId){
+            if(!resolvedRoomId) throw new Error("Room ID is empty");
+            return sdk.commands.joinRoom({ room_id: resolvedRoomId }).then(function(){
+                return resolvedRoomId;
+            });
+        })
+        .then(function(resolvedRoomId){
+            roomId = resolvedRoomId;
+            roomCode = "";
             return sdk.commands.subscribeRoom({ room_id: roomId });
         })
         .then(function(){
             return sdk.commands.getRoomState({ room_id: roomId });
         })
         .then(function(res){
-            let state = res && res.state ? res.state : null;
+            let parsed = extractRoomStatePayload(res);
+            if(parsed.roomCode) roomCode = parsed.roomCode;
+            if(parsed.roomVersion > 0) currentRoomVersion = Math.max(currentRoomVersion, parsed.roomVersion);
+            if(parsed.seatsFromMembers) mergeSeatMap(parsed.seatsFromMembers);
+            let state = parsed.roomState;
             if(state && state.seatMap){
                 mergeSeatMap(state.seatMap);
                 ensureSeatForSelf();
                 assignRole(seatMap);
                 applyGameState(state);
+                if(!state.gamePhase){
+                    gamePhase = parsed.roomStatus === "started" ? "started" : "lobby";
+                }
                 return sdk.commands.updateRoom({
                     room_id: roomId,
                     is_joinable: !isFilledSeat(seatMap.white) || !isFilledSeat(seatMap.black),
@@ -1331,16 +1487,22 @@ let joinRoomById = function(targetRoomId){
                     });
                 });
             }
-            ensureSeatForSelf();
             assignRole(seatMap);
-            setRoleInfo();
-            publishGameState();
+            gamePhase = parsed.roomStatus === "started" ? "started" : "lobby";
+            if(gamePhase !== "started"){
+                readyMap.white = false;
+                readyMap.black = false;
+                publishGameState();
+            }
             return null;
         })
         .then(function(){
             setMpStatus("Joined room: " + roomId);
             let input = document.getElementById("roomIdInput");
-            if(input) input.value = roomId;
+            if(input) input.value = roomCode || roomId;
+            refreshOpenRooms();
+            startRoomSyncLoop();
+            syncRoomStateOnce("join");
         })
         .catch(function(err){
             setMpStatus("Join failed: " + (err && err.message ? err.message : "unknown"));
@@ -1459,6 +1621,45 @@ let shareRoomInfo = function(){
     });
 };
 
+let canStartMatch = function(){
+    return !!roomId && myRole === "white" && isFilledSeat(seatMap.white) && isFilledSeat(seatMap.black) && readyMap.white && readyMap.black;
+};
+
+let startMatch = function(){
+    if(!canStartMatch()){
+        setMpStatus("Need 2 players and both must be ready. Only white host can start.");
+        return;
+    }
+    gamePhase = "started";
+    turn = 1;
+    currentPlayer = white;
+    document.getElementById("turnInfo").innerHTML = "Player's turn: <b>White</b>";
+    updateLobbyInfo();
+    publishGameState();
+    setTimeout(function(){ syncRoomStateOnce("start"); }, 250);
+    setMpStatus("Match started.");
+};
+
+let toggleReady = function(){
+    if(!roomId){
+        setMpStatus("Join a room first.");
+        return;
+    }
+    if(myRole !== "white" && myRole !== "black"){
+        setMpStatus("Only white/black players can set ready.");
+        return;
+    }
+    if(gamePhase === "started"){
+        setMpStatus("Match already started.");
+        return;
+    }
+    if(myRole === "white") readyMap.white = !readyMap.white;
+    if(myRole === "black") readyMap.black = !readyMap.black;
+    updateLobbyInfo();
+    publishGameState();
+    setTimeout(function(){ syncRoomStateOnce("ready"); }, 250);
+};
+
 let initMultiplayer = function(){
     sdk = window.GoPortalGameSDK;
     if(!sdk || typeof sdk.ready !== "function"){
@@ -1518,6 +1719,8 @@ let initMultiplayer = function(){
     let roomInput = document.getElementById("roomIdInput");
     let refreshRoomsBtn = document.getElementById("refreshRoomsBtn");
     let shareRoomBtn = document.getElementById("shareRoomBtn");
+    let startMatchBtn = document.getElementById("startMatchBtn");
+    let toggleReadyBtn = document.getElementById("toggleReadyBtn");
     if(createBtn){
         createBtn.addEventListener("click", function(){
             if(!sdk) return;
@@ -1528,11 +1731,16 @@ let initMultiplayer = function(){
             sdk.commands.createRoom({ room_name: "chess-room", max_players: 2 })
                 .then(function(res){
                     let createdRoomId = res && res.room && res.room.id ? res.room.id : "";
+                    let createdRoomCode = res && res.room && res.room.room_code ? res.room.room_code : "";
                     if(!createdRoomId) throw new Error("No room id returned");
                     roomId = createdRoomId;
+                    roomCode = createdRoomCode || "";
                     seatMap = { white: selfUserId, black: null };
+                    gamePhase = "lobby";
+                    readyMap.white = false;
+                    readyMap.black = false;
                     assignRole(seatMap);
-                    if(roomInput) roomInput.value = roomId;
+                    if(roomInput) roomInput.value = roomCode || roomId;
                     return sdk.commands.subscribeRoom({ room_id: roomId });
                 })
                 .then(function(){
@@ -1546,6 +1754,8 @@ let initMultiplayer = function(){
                     return null;
                 })
                 .then(function(){ publishGameState(); setMpStatus("Room created: " + roomId); })
+                .then(function(){ refreshOpenRooms(); })
+                .then(function(){ startRoomSyncLoop(); syncRoomStateOnce("create"); })
                 .catch(function(err){
                     setMpStatus("Create room failed: " + (err && err.message ? err.message : "unknown"));
                 });
@@ -1564,7 +1774,7 @@ let initMultiplayer = function(){
     if(copyBtn){
         copyBtn.addEventListener("click", function(){
             if(!roomId) return;
-            navigator.clipboard.writeText(roomId).then(function(){
+            navigator.clipboard.writeText(roomCode || roomId).then(function(){
                 setMpStatus("Copied room id.");
             });
         });
@@ -1575,8 +1785,14 @@ let initMultiplayer = function(){
     if(shareBtn) shareBtn.addEventListener("click", shareCurrentScore);
     if(refreshRoomsBtn) refreshRoomsBtn.addEventListener("click", refreshOpenRooms);
     if(shareRoomBtn) shareRoomBtn.addEventListener("click", shareRoomInfo);
+    if(toggleReadyBtn) toggleReadyBtn.addEventListener("click", toggleReady);
+    if(startMatchBtn) startMatchBtn.addEventListener("click", startMatch);
 
     window.addEventListener("beforeunload", function(){
+        if(roomSyncTimer){
+            clearInterval(roomSyncTimer);
+            roomSyncTimer = null;
+        }
         if(!sdk) return;
         if(roomId && sdk.commands && typeof sdk.commands.leftRoom === "function"){
             sdk.commands.leftRoom({ room_id: roomId }).catch(function(){});

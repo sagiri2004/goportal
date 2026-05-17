@@ -45,10 +45,29 @@ type VoiceState = {
   isScreenShareEnabled: boolean
 }
 
+type CategoryChannel = {
+  id: string
+  name: string
+  type: 'text' | 'voice'
+  activeMembers?: Array<{ id: string }>
+  isLive?: boolean
+}
+
+type CategoryGroup = {
+  id: string
+  name: string
+  channels: CategoryChannel[]
+}
+
 type ShellContext = {
   activeChannelId: string
+  activeCategories?: CategoryGroup[]
   voiceState: VoiceState | null
   canManageVoiceTools: boolean
+  joinVoiceChannel?: (channelId: string) => Promise<void>
+  requestTournamentObserverTokens?: (
+    channelId: string,
+  ) => Promise<Array<{ channelId: string; channelName: string; token: string; url: string }>>
   leaveVoiceChannel: () => Promise<void>
   toggleMicrophone: () => Promise<void>
   toggleCamera: () => Promise<void>
@@ -66,6 +85,12 @@ type ParticipantTileModel = {
   isMuted: boolean
   isScreenSharing: boolean
   trackRef?: any
+}
+
+type ObserverRoomState = {
+  channelId: string
+  channelName: string
+  room: Room
 }
 
 const colorFromId = (id: string): string => {
@@ -95,6 +120,32 @@ const parseAvatarURL = (metadata?: string): string | undefined => {
   } catch {
     return undefined
   }
+}
+
+const normalizeTournamentVoiceRole = (name: string): 'team-a' | 'team-b' | 'admin' | 'spectator' | 'caster' | null => {
+  const lower = name.toLowerCase()
+  if (lower.startsWith('team-a-') || lower === 'team-a-comms') return 'team-a'
+  if (lower.startsWith('team-b-') || lower === 'team-b-comms') return 'team-b'
+  if (lower.startsWith('admin-') || lower === 'admin-observer') return 'admin'
+  if (lower.startsWith('spectator-') || lower === 'spectator-live') return 'spectator'
+  if (lower.startsWith('caster-') || lower === 'caster-booth') return 'caster'
+  return null
+}
+
+const extractMatchTag = (name: string): string | null => {
+  const lower = name.toLowerCase()
+  const match = lower.match(/(r\d+-m\d+)$/)
+  if (match?.[1]) return match[1]
+  if (
+    lower === 'team-a-comms' ||
+    lower === 'team-b-comms' ||
+    lower === 'admin-observer' ||
+    lower === 'spectator-live' ||
+    lower === 'caster-booth'
+  ) {
+    return 'legacy'
+  }
+  return null
 }
 
 const ParticipantTile: React.FC<{
@@ -158,6 +209,61 @@ const ParticipantTile: React.FC<{
   </div>
 )
 
+const ObserverRoomPanel: React.FC<{ room: Room; channelName: string }> = ({ room, channelName }) => {
+  const remoteParticipants = useParticipants({ room })
+  const videoTracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
+    room,
+    onlySubscribed: false,
+  }) as any[]
+
+  const participantTiles = useMemo<ParticipantTileModel[]>(() => {
+    return remoteParticipants.map((participant) => {
+      const screenTrackRef = videoTracks.find(
+        (candidate) =>
+          candidate?.participant?.identity === participant.identity &&
+          candidate?.source === Track.Source.ScreenShare
+      )
+      const cameraTrackRef = videoTracks.find(
+        (candidate) =>
+          candidate?.participant?.identity === participant.identity &&
+          candidate?.source === Track.Source.Camera
+      )
+      const selectedTrackRef = screenTrackRef ?? cameraTrackRef
+      const fallbackName = participant.name || participant.identity || 'Unknown'
+
+      return {
+        id: `${channelName}:${participant.identity}`,
+        name: fallbackName,
+        avatarUrl: parseAvatarURL(participant.metadata),
+        avatarColor: colorFromId(participant.identity || fallbackName),
+        isSpeaking: Boolean(participant.isSpeaking),
+        isMuted: !Boolean(participant.isMicrophoneEnabled),
+        isScreenSharing: Boolean(screenTrackRef),
+        trackRef: selectedTrackRef,
+      }
+    })
+  }, [channelName, remoteParticipants, videoTracks])
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/25 p-2">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-300">{channelName}</p>
+      {participantTiles.length === 0 ? (
+        <div className="rounded border border-dashed border-white/15 bg-black/30 px-3 py-4 text-xs text-zinc-400">
+          Waiting for player stream...
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {participantTiles.map((participant) => (
+            <div key={participant.id} className="h-[160px]">
+              <ParticipantTile participant={participant} thumbnail />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const InviteActions: React.FC<{
   onInvite: () => void
   onActivity: () => void
@@ -185,8 +291,11 @@ const InviteActions: React.FC<{
 export const VoiceChannelView: React.FC = () => {
   const {
     activeChannelId,
+    activeCategories = [],
     voiceState,
     canManageVoiceTools,
+    joinVoiceChannel,
+    requestTournamentObserverTokens,
     leaveVoiceChannel,
     toggleMicrophone,
     toggleCamera,
@@ -202,6 +311,7 @@ export const VoiceChannelView: React.FC = () => {
   const [showFooter, setShowFooter] = useState(true)
   const [isFooterHovered, setIsFooterHovered] = useState(false)
   const [footerInteractionTick, setFooterInteractionTick] = useState(0)
+  const [observerRooms, setObserverRooms] = useState<ObserverRoomState[]>([])
   const rootRef = useRef<HTMLDivElement>(null)
   const fallbackRoomRef = useRef<Room | null>(null)
   if (!fallbackRoomRef.current) {
@@ -211,6 +321,34 @@ export const VoiceChannelView: React.FC = () => {
   const channelName = voiceState?.channelName ?? (activeChannelId || 'voice')
   const chatChannelId = voiceState?.channelId ?? activeChannelId
   const livekitRoom = voiceState?.room ?? fallbackRoomRef.current
+  const activeMatchTag = useMemo(() => extractMatchTag(channelName), [channelName])
+  const isTournamentVoice = useMemo(() => normalizeTournamentVoiceRole(channelName) !== null, [channelName])
+  const tournamentMonitorTargets = useMemo(() => {
+    if (!activeMatchTag) return []
+    return activeCategories
+      .flatMap((group) => group.channels)
+      .filter((channel) => channel.type === 'voice')
+      .filter((channel) => extractMatchTag(channel.name) === activeMatchTag)
+      .map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        role: normalizeTournamentVoiceRole(channel.name),
+        activeCount: channel.activeMembers?.length ?? 0,
+        isLive: Boolean(channel.isLive),
+      }))
+      .filter((channel) => channel.role !== null)
+      .sort((left, right) => {
+        const order: Record<string, number> = { 'team-a': 1, 'team-b': 2, admin: 3, caster: 4, spectator: 5 }
+        return (order[left.role ?? ''] ?? 99) - (order[right.role ?? ''] ?? 99)
+      })
+  }, [activeCategories, activeMatchTag])
+  const currentChannelRole = useMemo(() => normalizeTournamentVoiceRole(channelName), [channelName])
+  const observerTargetChannels = useMemo(() => {
+    if (currentChannelRole !== 'admin') return []
+    return tournamentMonitorTargets
+      .filter((target) => target.role === 'team-a' || target.role === 'team-b')
+      .map((target) => ({ id: target.id, name: target.name }))
+  }, [currentChannelRole, tournamentMonitorTargets])
 
   const { localParticipant } = useLocalParticipant({ room: livekitRoom })
   const remoteParticipants = useParticipants({ room: livekitRoom })
@@ -485,6 +623,74 @@ export const VoiceChannelView: React.FC = () => {
     )
   }, [handleActivityClick, handleInviteClick, handleToggleFocus, participantTiles])
 
+  useEffect(() => {
+    let cancelled = false
+    const createdRooms: Room[] = []
+
+    const connectObserverRooms = async () => {
+      if (!requestTournamentObserverTokens || observerTargetChannels.length === 0) {
+        setObserverRooms((prev) => {
+          prev.forEach((item) => {
+            void item.room.disconnect()
+          })
+          return []
+        })
+        return
+      }
+
+      const connected: ObserverRoomState[] = []
+      try {
+        const observerTokens = await requestTournamentObserverTokens(activeChannelId)
+        const tokenByChannel = new Map(
+          observerTokens.map((item) => [item.channelId, item] as const),
+        )
+        for (const target of observerTargetChannels) {
+          const resolved = tokenByChannel.get(target.id)
+          if (!resolved) {
+            continue
+          }
+          const room = new Room()
+          createdRooms.push(room)
+          if (cancelled) {
+            await room.disconnect()
+            continue
+          }
+          await room.connect(resolved.url, resolved.token)
+          connected.push({
+            channelId: target.id,
+            channelName: target.name,
+            room,
+          })
+        }
+      } catch {
+        // ignore observer flow error and keep normal voice flow running
+      }
+
+      if (cancelled) {
+        connected.forEach((item) => {
+          void item.room.disconnect()
+        })
+        return
+      }
+
+      setObserverRooms((prev) => {
+        prev.forEach((item) => {
+          void item.room.disconnect()
+        })
+        return connected
+      })
+    }
+
+    void connectObserverRooms()
+
+    return () => {
+      cancelled = true
+      createdRooms.forEach((room) => {
+        void room.disconnect()
+      })
+    }
+  }, [activeChannelId, observerTargetChannels, requestTournamentObserverTokens])
+
   const shareOwnerName = screenShareParticipant?.name ?? focusedParticipant?.name ?? ''
   const hasQualityInfo = qualityBadge !== 'N/A'
 
@@ -585,6 +791,50 @@ export const VoiceChannelView: React.FC = () => {
         </header>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3 md:p-4">
+          {isTournamentVoice && tournamentMonitorTargets.length > 1 && (
+            <div className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-500/10 p-2">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-200">
+                Tournament Monitor Bridge
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tournamentMonitorTargets.map((target) => (
+                  <button
+                    key={target.id}
+                    type="button"
+                    onClick={() => {
+                      if (!joinVoiceChannel) return
+                      void joinVoiceChannel(target.id)
+                    }}
+                    className={cn(
+                      'rounded-md border px-2.5 py-1.5 text-xs',
+                      target.id === activeChannelId
+                        ? 'border-cyan-300/60 bg-cyan-400/20 text-cyan-100'
+                        : 'border-white/15 bg-black/20 text-zinc-200 hover:border-cyan-400/40 hover:text-cyan-100',
+                    )}
+                  >
+                    <span className="font-semibold">{target.name}</span>
+                    <span className="ml-1 text-[10px] text-zinc-300">({target.activeCount})</span>
+                    {target.isLive ? <span className="ml-1 text-[10px] text-red-300">LIVE</span> : null}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-cyan-100/90">
+                Admin/referee dùng các nút này để theo dõi nhanh team-a/team-b và kiểm tra màn hình tuyển thủ.
+              </p>
+            </div>
+          )}
+          {currentChannelRole === 'admin' && observerRooms.length > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-400/25 bg-amber-500/10 p-2">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100">
+                Admin Multi-View (All Player Streams)
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {observerRooms.map((observer) => (
+                  <ObserverRoomPanel key={observer.channelId} room={observer.room} channelName={observer.channelName} />
+                ))}
+              </div>
+            </div>
+          )}
           {isFocusLayout && focusedParticipant ? (
             <div className="flex h-full min-h-0 flex-col gap-3">
               <div className="min-h-0 flex-1">

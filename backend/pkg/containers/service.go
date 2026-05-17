@@ -132,7 +132,9 @@ func TournamentService() services.TournamentService {
 		tournamentSvc = svcimpl.NewTournamentService(
 			TournamentRepository(),
 			ServerRepository(),
+			ChannelRepository(),
 			UserRepository(),
+			LiveKitService(),
 			pkgglobal.Publisher,
 		)
 	})

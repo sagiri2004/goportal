@@ -78,6 +78,18 @@ type TournamentMatchListInput struct {
 	ParticipantID string
 }
 
+type TournamentObserverToken struct {
+	ChannelID string `json:"channel_id"`
+	Token     string `json:"token"`
+	URL       string `json:"url"`
+}
+
+type TournamentObserverTokenBundle struct {
+	TeamA  TournamentObserverToken  `json:"team_a"`
+	TeamB  TournamentObserverToken  `json:"team_b"`
+	Caster *TournamentObserverToken `json:"caster,omitempty"`
+}
+
 type TournamentService interface {
 	CreateTournament(ctx context.Context, actorID string, input TournamentCreateInput) (*models.Tournament, error)
 	ListTournaments(ctx context.Context, actorID string, input TournamentListInput) (*TournamentListResult, error)
@@ -110,4 +122,12 @@ type TournamentService interface {
 	GetStandings(ctx context.Context, actorID, tournamentID string) ([]repositories.TournamentParticipantResolved, error)
 	GetParticipantMatches(ctx context.Context, actorID, tournamentID, participantID string) ([]repositories.TournamentMatchResolved, error)
 	GetUserTournamentHistory(ctx context.Context, actorID, userID string) ([]models.Tournament, error)
+	EnsureDefaultRoles(ctx context.Context, actorID, tournamentID string) ([]models.TournamentRole, error)
+	BindRole(ctx context.Context, actorID, tournamentID, roleCode, userID string) error
+	UnbindRole(ctx context.Context, actorID, tournamentID, roleCode, userID string) error
+	ListRoleBindings(ctx context.Context, actorID, tournamentID string) ([]models.TournamentRoleBinding, error)
+	ProvisionMatchWorkspace(ctx context.Context, actorID, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error)
+	ListMatchWorkspaces(ctx context.Context, actorID, tournamentID string) ([]models.TournamentMatchWorkspace, error)
+	StartMatch(ctx context.Context, actorID, tournamentID, matchID string) (*repositories.TournamentMatchResolved, *models.TournamentMatchWorkspace, error)
+	GenerateMatchObserverTokens(ctx context.Context, actorID, tournamentID, matchID string) (*TournamentObserverTokenBundle, error)
 }

@@ -479,3 +479,82 @@ func (r *tournamentRepository) resolveMatches(ctx context.Context, matches []mod
 	}
 	return out, nil
 }
+
+func (r *tournamentRepository) UpsertRole(ctx context.Context, role *models.TournamentRole) error {
+	if err := r.db.WithContext(ctx).
+		Where("tournament_id = ? AND code = ?", role.TournamentID, role.Code).
+		Assign(map[string]any{"name": role.Name}).
+		FirstOrCreate(role).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) ListRoles(ctx context.Context, tournamentID string) ([]models.TournamentRole, error) {
+	var roles []models.TournamentRole
+	if err := r.db.WithContext(ctx).Where("tournament_id = ?", tournamentID).Order("created_at ASC").Find(&roles).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return roles, nil
+}
+
+func (r *tournamentRepository) FindRoleByCode(ctx context.Context, tournamentID, code string) (*models.TournamentRole, error) {
+	var role models.TournamentRole
+	if err := r.db.WithContext(ctx).Where("tournament_id = ? AND code = ?", tournamentID, code).First(&role).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("TOURNAMENT_ROLE_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &role, nil
+}
+
+func (r *tournamentRepository) BindRole(ctx context.Context, binding *models.TournamentRoleBinding) error {
+	if err := r.db.WithContext(ctx).
+		Where("tournament_id = ? AND role_id = ? AND user_id = ?", binding.TournamentID, binding.RoleID, binding.UserID).
+		FirstOrCreate(binding).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) ListRoleBindings(ctx context.Context, tournamentID string) ([]models.TournamentRoleBinding, error) {
+	var rows []models.TournamentRoleBinding
+	if err := r.db.WithContext(ctx).Where("tournament_id = ?", tournamentID).Order("created_at ASC").Find(&rows).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return rows, nil
+}
+
+func (r *tournamentRepository) DeleteRoleBinding(ctx context.Context, tournamentID, roleID, userID string) error {
+	if err := r.db.WithContext(ctx).Where("tournament_id = ? AND role_id = ? AND user_id = ?", tournamentID, roleID, userID).Delete(&models.TournamentRoleBinding{}).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) FindMatchWorkspace(ctx context.Context, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error) {
+	var row models.TournamentMatchWorkspace
+	if err := r.db.WithContext(ctx).Where("tournament_id = ? AND match_id = ?", tournamentID, matchID).First(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.E("TOURNAMENT_WORKSPACE_NOT_FOUND", err)
+		}
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return &row, nil
+}
+
+func (r *tournamentRepository) CreateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error {
+	if err := r.db.WithContext(ctx).Create(workspace).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) ListMatchWorkspaces(ctx context.Context, tournamentID string) ([]models.TournamentMatchWorkspace, error) {
+	var rows []models.TournamentMatchWorkspace
+	if err := r.db.WithContext(ctx).Where("tournament_id = ?", tournamentID).Order("created_at DESC").Find(&rows).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return rows, nil
+}

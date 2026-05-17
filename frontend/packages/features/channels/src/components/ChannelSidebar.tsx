@@ -57,6 +57,7 @@ type ChannelSidebarProps = {
     }>
   }>
   activeChannelId?: string
+  activeVoiceChannelId?: string
   onSelectChannel?: (channelId: string, type: 'text' | 'voice') => void
   onCreateChannel?: () => void
   onInviteMember?: () => void
@@ -79,6 +80,15 @@ type ChannelSidebarProps = {
   onSelectTournament?: (tournamentId: string) => void
   onCreateTournament?: () => void
   canCreateTournament?: boolean
+  tournamentVoiceChannels?: Array<{
+    id: string
+    name: string
+    type: 'voice'
+    unread: number
+    activeMembers?: ChannelMember[]
+    liveLabel?: string
+    isLive?: boolean
+  }>
 }
 
 type ChannelMember = {
@@ -476,6 +486,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   serverBoostLevel,
   categories,
   activeChannelId,
+  activeVoiceChannelId,
   onSelectChannel = () => {},
   onCreateChannel = () => {},
   onInviteMember = () => {},
@@ -489,6 +500,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onSelectTournament = () => {},
   onCreateTournament = () => {},
   canCreateTournament = false,
+  tournamentVoiceChannels = [],
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
@@ -663,7 +675,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         <React.Fragment key={ch.id}>
                           <ChannelRow
                             channel={ch}
-                            active={ch.id === activeChannelId}
+                            active={ch.type === 'voice' ? ch.id === activeVoiceChannelId : ch.id === activeChannelId}
                             onSelect={() => onSelectChannel(ch.id, ch.type)}
                             onInviteMember={onInviteMember}
                           />
@@ -732,7 +744,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                         liveLabel: (channel as any)?.liveLabel,
                         isLive: (channel as any)?.isLive,
                       }}
-                      active={channel.id === activeChannelId}
+                      active={channel.id === activeVoiceChannelId}
                       onSelect={() => onSelectChannel(channel.id, 'voice')}
                       onInviteMember={onInviteMember}
                     />
@@ -810,6 +822,24 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                 )}
               </div>
             )}
+            {expandedTournaments && tournamentVoiceChannels.length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                <div className="px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
+                  Tournament Voice
+                </div>
+                {tournamentVoiceChannels.map((channel) => (
+                  <React.Fragment key={channel.id}>
+                    <ChannelRow
+                      channel={channel}
+                      active={channel.id === activeVoiceChannelId}
+                      onSelect={() => onSelectChannel(channel.id, 'voice')}
+                      onInviteMember={onInviteMember}
+                    />
+                    <VoiceActivityRow channel={channel} />
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
           </div>
       </div>
 
@@ -822,3 +852,4 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
     </aside>
   )
 }
+

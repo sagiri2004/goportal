@@ -209,3 +209,76 @@ func (r *TournamentMatchReport) BeforeCreate(_ *gorm.DB) error {
 	}
 	return nil
 }
+
+const (
+	TournamentRoleAdmin     = "admin"
+	TournamentRoleCaster    = "caster"
+	TournamentRoleSpectator = "spectator"
+	TournamentRoleReferee   = "referee"
+	TournamentRolePlayer    = "player"
+	TournamentRoleTeamLead  = "team_lead"
+)
+
+type TournamentRole struct {
+	ID           string `gorm:"type:char(36);primaryKey" json:"id"`
+	TournamentID string `gorm:"type:char(36);not null;index" json:"tournament_id"`
+	Code         string `gorm:"type:varchar(64);not null;index" json:"code"`
+	Name         string `gorm:"type:varchar(255);not null" json:"name"`
+	CreatedAt    int64  `gorm:"not null;autoCreateTime" json:"created_at"`
+}
+
+func (TournamentRole) TableName() string {
+	return "tournament_roles"
+}
+
+func (r *TournamentRole) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.NewString()
+	}
+	return nil
+}
+
+type TournamentRoleBinding struct {
+	ID           string `gorm:"type:char(36);primaryKey" json:"id"`
+	TournamentID string `gorm:"type:char(36);not null;index" json:"tournament_id"`
+	RoleID       string `gorm:"type:char(36);not null;index" json:"role_id"`
+	UserID       string `gorm:"type:char(36);not null;index" json:"user_id"`
+	CreatedAt    int64  `gorm:"not null;autoCreateTime" json:"created_at"`
+}
+
+func (TournamentRoleBinding) TableName() string {
+	return "tournament_role_bindings"
+}
+
+func (b *TournamentRoleBinding) BeforeCreate(_ *gorm.DB) error {
+	if b.ID == "" {
+		b.ID = uuid.NewString()
+	}
+	return nil
+}
+
+type TournamentMatchWorkspace struct {
+	ID                 string `gorm:"type:char(36);primaryKey" json:"id"`
+	TournamentID       string `gorm:"type:char(36);not null;index" json:"tournament_id"`
+	MatchID            string `gorm:"type:char(36);not null;index" json:"match_id"`
+	ServerID           string `gorm:"type:char(36);not null;index" json:"server_id"`
+	CategoryChannelID  string `gorm:"type:char(36);not null" json:"category_channel_id"`
+	TeamAChannelID     string `gorm:"type:char(36);not null" json:"team_a_channel_id"`
+	TeamBChannelID     string `gorm:"type:char(36);not null" json:"team_b_channel_id"`
+	CasterChannelID    string `gorm:"type:char(36);not null" json:"caster_channel_id"`
+	AdminChannelID     string `gorm:"type:char(36);not null" json:"admin_channel_id"`
+	SpectatorChannelID string `gorm:"type:char(36);not null" json:"spectator_channel_id"`
+	CreatedBy          string `gorm:"type:char(36);not null;index" json:"created_by"`
+	CreatedAt          int64  `gorm:"not null;autoCreateTime" json:"created_at"`
+}
+
+func (TournamentMatchWorkspace) TableName() string {
+	return "tournament_match_workspaces"
+}
+
+func (w *TournamentMatchWorkspace) BeforeCreate(_ *gorm.DB) error {
+	if w.ID == "" {
+		w.ID = uuid.NewString()
+	}
+	return nil
+}

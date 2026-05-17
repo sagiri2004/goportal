@@ -21,7 +21,10 @@ import type {
   TournamentMatchDTO,
   TournamentMatchStatusDTO,
   TournamentParticipantDTO,
+  TournamentRoleBindingDTO,
+  TournamentRoleDTO,
   TournamentStatusDTO,
+  TournamentMatchWorkspaceDTO,
 } from '@goportal/types'
 import {
   ArrowLeft,
@@ -40,14 +43,22 @@ import {
   getTournamentBracket,
   getTournamentDetail,
   getTournamentStandings,
+  ensureTournamentRoles,
+  listTournamentRoleBindings,
+  listTournamentMatchWorkspaces,
   listTournamentMatches,
+  provisionTournamentMatchWorkspace,
+  startTournamentMatch,
   overrideTournamentMatchResult,
   registerTournamentParticipant,
   reportTournamentMatchResult,
+  bindTournamentRole,
+  unbindTournamentRole,
   updateTournamentStatus,
 } from '../services'
 import { TournamentCreateEditDialog } from './TournamentCreateEditDialog'
 import { DoubleEliminationTree, SingleEliminationTree } from './components/DoubleEliminationTree'
+import type { MockMember } from '../mock/members'
 import {
   formatDateTime,
   getParticipantDisplayName,
@@ -56,12 +67,13 @@ import {
   TOURNAMENT_STATUS_META,
 } from './utils'
 
-type TabKey = 'info' | 'participants' | 'bracket' | 'history'
+type TabKey = 'info' | 'participants' | 'bracket' | 'history' | 'ops'
 
 type ShellContext = {
   canManageTournaments?: boolean
   pushToast?: (message: string) => void
   refreshActiveServerTournaments?: () => void
+  membersByServer?: Record<string, MockMember[]>
 }
 
 const cardCls =
@@ -316,7 +328,7 @@ const SwissBracketBoard: React.FC<{
                           Chưa có trận phù hợp cho nhánh này.
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                  <div className="space-y-2">
                           {lane.matches.map((match) => {
                             const boLabel = getBoLabel(stage.round, stages.length)
                             const winnerId = match.winner?.id ?? ''
@@ -389,7 +401,7 @@ const SwissBracketBoard: React.FC<{
 export const TournamentDetailPage: React.FC = () => {
   const navigate = useNavigate()
   const { serverId = '', tournamentId = '' } = useParams<{ serverId: string; tournamentId: string }>()
-  const { canManageTournaments, pushToast, refreshActiveServerTournaments } = useOutletContext<ShellContext>()
+  const { canManageTournaments, pushToast, refreshActiveServerTournaments, membersByServer } = useOutletContext<ShellContext>()
   const currentUser = useAuthStore((state: any) => state.user)
 
   const [activeTab, setActiveTab] = useState<TabKey>('info')
@@ -410,6 +422,14 @@ export const TournamentDetailPage: React.FC = () => {
   const [score2, setScore2] = useState('0')
   const [overrideReason, setOverrideReason] = useState('')
   const [matchSubmitError, setMatchSubmitError] = useState<string | null>(null)
+  const [startMatchNote, setStartMatchNote] = useState<string | null>(null)
+  const [roles, setRoles] = useState<TournamentRoleDTO[]>([])
+  const [roleBindings, setRoleBindings] = useState<TournamentRoleBindingDTO[]>([])
+  const [workspaces, setWorkspaces] = useState<TournamentMatchWorkspaceDTO[]>([])
+  const [bindRoleCode, setBindRoleCode] = useState('caster')
+  const [bindUserId, setBindUserId] = useState('')
+  const [bindUserQuery, setBindUserQuery] = useState('')
+  const [bindingRoleFilter, setBindingRoleFilter] = useState<'all' | string>('all')
 
   const tournament = detail?.tournament ?? null
   const participants = detail?.participants ?? []
@@ -420,6 +440,17 @@ export const TournamentDetailPage: React.FC = () => {
   }, [currentUser, tournament])
 
   const canManage = Boolean(canManageTournaments || isHost)
+  const serverMembers = useMemo(() => membersByServer?.[serverId] ?? [], [membersByServer, serverId])
+  const memberNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    serverMembers.forEach((m) => map.set(m.id, m.name))
+    return map
+  }, [serverMembers])
+  const roleById = useMemo(() => {
+    const map = new Map<string, TournamentRoleDTO>()
+    roles.forEach((role) => map.set(role.id, role))
+    return map
+  }, [roles])
 
   const myParticipant = useMemo(
     () => participants.find((item) => item.user?.id === currentUser?.id) ?? null,
@@ -453,6 +484,9 @@ export const TournamentDetailPage: React.FC = () => {
       setBracket(b)
       setHistory(h)
       setStandings(s)
+      setRoles([])
+      setRoleBindings([])
+      setWorkspaces([])
       setError(null)
     } catch (loadError: any) {
       setError(loadError?.message ?? 'Không thể tải dữ liệu giải đấu.')
@@ -464,6 +498,45 @@ export const TournamentDetailPage: React.FC = () => {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    if (!tournamentId || !canManage) {
+      setRoles([])
+      setRoleBindings([])
+      setWorkspaces([])
+      return
+    }
+    let cancelled = false
+    const loadOps = async () => {
+      try {
+        const [r, rb, ws] = await Promise.all([
+          ensureTournamentRoles(tournamentId),
+          listTournamentRoleBindings(tournamentId),
+          listTournamentMatchWorkspaces(tournamentId),
+        ])
+        if (cancelled) return
+        setRoles(r)
+        setRoleBindings(rb)
+        setWorkspaces(ws)
+      } catch {
+        if (cancelled) return
+        setRoles([])
+        setRoleBindings([])
+        setWorkspaces([])
+      }
+    }
+    void loadOps()
+    return () => {
+      cancelled = true
+    }
+  }, [tournamentId, canManage])
+
+  useEffect(() => {
+    if (roles.length === 0) return
+    if (!roles.some((role) => role.code === bindRoleCode)) {
+      setBindRoleCode(roles[0].code)
+    }
+  }, [roles, bindRoleCode])
 
   const runStatus = async (status: TournamentStatusDTO) => {
     if (!tournament) return
@@ -534,6 +607,7 @@ export const TournamentDetailPage: React.FC = () => {
     setScore2(String(match.score2 ?? 0))
     setOverrideReason('')
     setMatchSubmitError(null)
+    setStartMatchNote(null)
     setMatchModalOpen(true)
   }
 
@@ -561,6 +635,135 @@ export const TournamentDetailPage: React.FC = () => {
       setMatchSubmitError(submitError?.message ?? 'Không thể gửi kết quả.')
     }
   }
+
+  const handleStartMatch = async () => {
+    if (!tournament || !selectedMatch || !canManage) return
+    setIsActionLoading(true)
+    setMatchSubmitError(null)
+    try {
+      const result = await startTournamentMatch(tournament.id, selectedMatch.id)
+      setStartMatchNote(
+        `Đã tạo channels trận. Team A: ${result.workspace.team_a_channel_id} | Team B: ${result.workspace.team_b_channel_id}. Tuyển thủ bắt buộc share màn hình trong channel đội.`,
+      )
+      await reload()
+      pushToast?.('Đã bắt đầu trận và tạo workspace.')
+    } catch (err: any) {
+      setMatchSubmitError(err?.message ?? 'Không thể bắt đầu trận.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleBindRole = async () => {
+    if (!tournament || !bindRoleCode.trim() || !bindUserId.trim()) return
+    if (!roles.some((role) => role.code === bindRoleCode.trim())) {
+      setInlineError('Role không hợp lệ hoặc chưa load xong. Vui lòng chọn lại role.')
+      return
+    }
+    setIsActionLoading(true)
+    try {
+      await bindTournamentRole(tournament.id, { role_code: bindRoleCode.trim(), user_id: bindUserId.trim() })
+      setBindUserId('')
+      setBindUserQuery('')
+      await reload()
+      pushToast?.('Đã gán role giải đấu.')
+    } catch (err: any) {
+      setInlineError(err?.message ?? 'Không thể gán role.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleUnbindRole = async (roleCode: string, userId: string) => {
+    if (!tournament) return
+    setIsActionLoading(true)
+    try {
+      await unbindTournamentRole(tournament.id, roleCode, userId)
+      await reload()
+      pushToast?.('Đã gỡ role giải đấu.')
+    } catch (err: any) {
+      setInlineError(err?.message ?? 'Không thể gỡ role.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleProvisionWorkspace = async (matchId: string) => {
+    if (!tournament) return
+    setIsActionLoading(true)
+    try {
+      await provisionTournamentMatchWorkspace(tournament.id, matchId)
+      await reload()
+      pushToast?.('Đã tạo workspace trận đấu.')
+    } catch (err: any) {
+      setInlineError(err?.message ?? 'Không thể tạo workspace.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!canManage || !tournament || roles.length === 0 || serverMembers.length === 0) return
+    const run = async () => {
+      const participantUserIds = new Set(
+        participants.map((p) => p.user?.id).filter((id): id is string => Boolean(id)),
+      )
+      const allMemberIds = serverMembers.map((m) => m.id)
+      const roleByCode = new Map(roles.map((r) => [r.code, r]))
+      const playerRole = roleByCode.get('player')
+      const spectatorRole = roleByCode.get('spectator')
+      if (!playerRole || !spectatorRole) return
+
+      const bindingsByRole = new Map<string, Set<string>>()
+      roleBindings.forEach((b) => {
+        const set = bindingsByRole.get(b.role_id) ?? new Set<string>()
+        set.add(b.user_id)
+        bindingsByRole.set(b.role_id, set)
+      })
+
+      const playerBound = bindingsByRole.get(playerRole.id) ?? new Set<string>()
+      const spectatorBound = bindingsByRole.get(spectatorRole.id) ?? new Set<string>()
+
+      const missingPlayer = allMemberIds.filter((id) => participantUserIds.has(id) && !playerBound.has(id))
+      const missingSpectator = allMemberIds.filter((id) => !participantUserIds.has(id) && !spectatorBound.has(id))
+      const wrongSpectator = allMemberIds.filter((id) => participantUserIds.has(id) && spectatorBound.has(id))
+
+      if (missingPlayer.length === 0 && missingSpectator.length === 0 && wrongSpectator.length === 0) return
+
+      for (const id of missingPlayer) {
+        await bindTournamentRole(tournament.id, { role_code: 'player', user_id: id })
+      }
+      for (const id of missingSpectator) {
+        await bindTournamentRole(tournament.id, { role_code: 'spectator', user_id: id })
+      }
+      for (const id of wrongSpectator) {
+        await unbindTournamentRole(tournament.id, 'spectator', id)
+      }
+      await reload()
+    }
+    void run()
+  }, [canManage, participants, roleBindings, roles, serverMembers, tournament, reload])
+
+  const participantUserIds = useMemo(
+    () => new Set(participants.map((p) => p.user?.id).filter((id): id is string => Boolean(id))),
+    [participants],
+  )
+  const bindCandidates = useMemo(() => {
+    const keyword = bindUserQuery.trim().toLowerCase()
+    return serverMembers.filter((member) => {
+      const memberName = member.name ?? ''
+      if (keyword && !memberName.toLowerCase().includes(keyword)) return false
+      if (bindRoleCode === 'player') return participantUserIds.has(member.id)
+      if (bindRoleCode === 'spectator') return !participantUserIds.has(member.id)
+      return true
+    })
+  }, [bindRoleCode, bindUserQuery, participantUserIds, serverMembers])
+  const filteredBindings = useMemo(() => {
+    if (bindingRoleFilter === 'all') return roleBindings
+    const role = roles.find((item) => item.code === bindingRoleFilter)
+    if (!role) return roleBindings
+    return roleBindings.filter((item) => item.role_id === role.id)
+  }, [bindingRoleFilter, roleBindings, roles])
 
   if (loading) {
     return (
@@ -634,11 +837,12 @@ export const TournamentDetailPage: React.FC = () => {
 
       <div className="gp-scrollbar min-h-0 flex-1 overflow-auto p-4">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)}>
-          <TabsList className="grid w-full max-w-[640px] grid-cols-4 border border-white/10 bg-zinc-900/70">
+          <TabsList className="grid w-full max-w-[780px] grid-cols-5 border border-white/10 bg-zinc-900/70">
             <TabsTrigger value="info">Thông tin</TabsTrigger>
             <TabsTrigger value="participants">Người tham gia</TabsTrigger>
             <TabsTrigger value="bracket">Bracket</TabsTrigger>
             <TabsTrigger value="history">Lịch sử trận</TabsTrigger>
+            <TabsTrigger value="ops">Ops</TabsTrigger>
           </TabsList>
 
           <TabsContent value="info" className="mt-3">
@@ -726,6 +930,161 @@ export const TournamentDetailPage: React.FC = () => {
               <div className="mt-3 overflow-hidden rounded-lg border border-white/10"><table className="w-full border-collapse text-sm"><thead className="bg-zinc-900/80 text-left text-xs uppercase tracking-[0.14em] text-zinc-400"><tr><th className="px-3 py-2">Round</th><th className="px-3 py-2">Cặp đấu</th><th className="px-3 py-2">Score</th><th className="px-3 py-2">Thời gian</th></tr></thead><tbody>{history.map((m) => <tr key={m.id} className="border-t border-white/10 text-zinc-200"><td className="px-3 py-2">{m.round}</td><td className="px-3 py-2">{getName(m.participant1)} vs {getName(m.participant2)}</td><td className="px-3 py-2">{scoreText(m.score1)} - {scoreText(m.score2)}</td><td className="px-3 py-2 text-zinc-400">{formatDateTime(m.completed_at ?? m.created_at)}</td></tr>)}</tbody></table></div>
             </section>
           </TabsContent>
+
+          <TabsContent value="ops" className="mt-3">
+            <section className={`${cardCls} p-4`}>
+              <h3 className={sectionTitleCls}>Tournament Ops</h3>
+              {!canManage ? (
+                <div className="mt-3 rounded-lg border border-white/10 bg-zinc-900/70 p-3 text-sm text-zinc-300">
+                  Chỉ admin/host mới có quyền quản trị role/workspace.
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/70 p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Role Binding</p>
+                    <div className="grid grid-cols-[160px_1fr_auto] gap-2">
+                      <select
+                        value={bindRoleCode}
+                        onChange={(e) => setBindRoleCode(e.target.value)}
+                        className="h-10 rounded-md border border-white/10 bg-zinc-900/80 px-3 text-sm"
+                      >
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.code}>
+                            {role.code}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={bindUserQuery}
+                        onChange={(e) => {
+                          setBindUserQuery(e.target.value)
+                          setBindUserId('')
+                        }}
+                        placeholder="Tìm user trong server..."
+                      />
+                      <Button type="button" size="sm" onClick={() => void handleBindRole()} disabled={isActionLoading || !bindUserId}>
+                        Bind
+                      </Button>
+                    </div>
+                    {bindCandidates.length > 0 && (
+                      <div className="max-h-40 overflow-auto rounded border border-white/10 bg-zinc-950/70">
+                        {bindCandidates
+                          .slice(0, 12)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/5"
+                              onClick={() => {
+                                setBindUserId(m.id)
+                                setBindUserQuery(m.name)
+                              }}
+                            >
+                              <span>{m.name}</span>
+                              <span className="text-xs text-zinc-500">{m.id.slice(0, 8)}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-[160px_1fr] gap-2">
+                      <select
+                        value={bindingRoleFilter}
+                        onChange={(e) => setBindingRoleFilter(e.target.value)}
+                        className="h-9 rounded-md border border-white/10 bg-zinc-900/80 px-3 text-xs"
+                      >
+                        <option value="all">all roles</option>
+                        {roles.map((role) => (
+                          <option key={`filter-${role.id}`} value={role.code}>
+                            {role.code}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="self-center text-xs text-zinc-400">Filter binding theo role</p>
+                    </div>
+                    <div className="space-y-2">
+                      {filteredBindings.map((item) => {
+                        const role = roleById.get(item.role_id)
+                        return (
+                          <div key={item.id} className="flex items-center justify-between rounded border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm">
+                            <span className="text-zinc-200">
+                              {role?.code ?? item.role_id} → {memberNameById.get(item.user_id) ?? item.user_id}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (!role) return
+                                void handleUnbindRole(role.code, item.user_id)
+                              }}
+                            >
+                              Unbind
+                            </Button>
+                          </div>
+                        )
+                      })}
+                  </div>
+                  <div className="rounded border border-white/10 bg-zinc-950/70 p-2">
+                    <p className="mb-1 text-xs uppercase tracking-[0.12em] text-zinc-500">Players (auto)</p>
+                    <div className="space-y-1">
+                      {participants
+                        .filter((p) => Boolean(p.user?.id))
+                        .map((p) => (
+                          <div key={p.id} className="text-sm text-zinc-200">
+                            {p.user?.username ?? p.id}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="rounded border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-xs text-emerald-200">
+                    Auto role sync: tuyển thủ = `player`, thành viên còn lại trong server = `spectator`.
+                  </div>
+                </div>
+
+                  <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/70 p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Match Workspace</p>
+                    <div className="space-y-2">
+                      {bracket.map((match) => {
+                        const workspace = workspaces.find((w) => w.match_id === match.id)
+                        return (
+                          <div key={match.id} className="rounded border border-white/10 bg-zinc-950/70 p-2 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-zinc-200">
+                                R{match.round} M{match.match_number}: {getName(match.participant1)} vs {getName(match.participant2)}
+                              </span>
+                              {workspace ? (
+                                <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/20 text-emerald-100">
+                                  Ready
+                                </Badge>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void handleProvisionWorkspace(match.id)}
+                                  disabled={isActionLoading}
+                                >
+                                  Provision
+                                </Button>
+                              )}
+                            </div>
+                            {workspace && (
+                              <div className="mt-2 text-xs text-zinc-400">
+                                cat:{workspace.category_channel_id} | A:{workspace.team_a_channel_id} | B:{workspace.team_b_channel_id}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="rounded border border-cyan-500/25 bg-cyan-500/[0.06] px-3 py-2 text-xs text-cyan-100">
+                      Bridge policy: `admin/referee` được cấp quyền vào cả `team-a` + `team-b` voice để theo dõi màn hình tuyển thủ trực tiếp.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -770,11 +1129,17 @@ export const TournamentDetailPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2"><Input type="number" value={score1} onChange={(e) => setScore1(e.target.value)} /><Input type="number" value={score2} onChange={(e) => setScore2(e.target.value)} /></div>
                   {canManage && <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Lý do override" />}
                   {matchSubmitError && <p className="text-sm text-rose-300">{matchSubmitError}</p>}
+                  {startMatchNote && <p className="text-sm text-emerald-300">{startMatchNote}</p>}
                 </div>
               )}
             </div>
           )}
           <DialogFooter>
+            {canManage && selectedMatch && selectedMatch.status !== 'in_progress' && selectedMatch.status !== 'completed' && (
+              <Button type="button" variant="outline" onClick={() => void handleStartMatch()} disabled={isActionLoading}>
+                <Play className="mr-2 h-4 w-4" />Start Match
+              </Button>
+            )}
             {(canReport || canManage) && <Button type="button" onClick={() => void submitMatch(false)}><Swords className="mr-2 h-4 w-4" />Báo cáo kết quả</Button>}
             {canManage && <Button type="button" variant="outline" onClick={() => void submitMatch(true)}><Crown className="mr-2 h-4 w-4" />Override</Button>}
             <Button type="button" variant="ghost" onClick={() => setMatchModalOpen(false)}>Đóng</Button>

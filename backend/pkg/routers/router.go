@@ -3,8 +3,11 @@ package routers
 import (
 	"fmt"
 	"github.com/sagiri2004/goportal/pkg/middlewares"
+	"github.com/sagiri2004/goportal/pkg/realtime"
 	v1Router "github.com/sagiri2004/goportal/pkg/routers/v1"
 	"time"
+
+	"github.com/sagiri2004/goportal/global"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -38,6 +41,14 @@ func InitRouter() *gin.Engine {
 	r.Use(middlewares.ErrorMiddleware())
 	r.Static("/uploads", "./uploads")
 	r.Static("/game-content", "./uploads/games")
+	if global.RealtimeHub == nil {
+		global.RealtimeHub = realtime.NewHub()
+	}
+	if global.GameHub == nil {
+		global.GameHub = realtime.NewGameHub()
+	}
+	r.GET("/ws", global.RealtimeHub.HandleWS)
+	r.GET("/ws/game", global.GameHub.HandleWS)
 
 	api := r.Group("/api/v1")
 	v1Router.RegisterRoutes(api)
