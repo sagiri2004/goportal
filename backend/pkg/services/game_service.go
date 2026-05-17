@@ -105,6 +105,8 @@ type GameShareInput struct {
 	SessionID   *string
 	EventID     *string
 	ShareType   string
+	RoomID      *string
+	RoomName    *string
 	Score       *int
 	Achievement *string
 	Comment     *string
@@ -120,6 +122,12 @@ type GameRoomCreateInput struct {
 type GameRoomResponse struct {
 	Room    models.GameRoom         `json:"room"`
 	Members []models.GameRoomMember `json:"members"`
+}
+
+type GameRoomListFilter struct {
+	GameID string
+	Limit  int
+	Offset int
 }
 
 type GameService interface {
@@ -146,6 +154,7 @@ type GameService interface {
 	RecordEvent(ctx context.Context, actorID string, input GameEventInput) (*models.GameEvent, error)
 	ShareToChannel(ctx context.Context, actorID string, input GameShareInput) error
 	CreateRoom(ctx context.Context, actorID string, input GameRoomCreateInput) (*GameRoomResponse, error)
+	ListOpenRooms(ctx context.Context, actorID string, filter GameRoomListFilter) ([]GameRoomResponse, error)
 	JoinRoom(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)
 	LeaveRoom(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)
 	GetRoomState(ctx context.Context, actorID, gameID, roomID string) (*GameRoomResponse, error)

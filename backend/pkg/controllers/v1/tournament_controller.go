@@ -577,6 +577,166 @@ func (ctrl *tournamentController) UserHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, serializers.Success("OK", "User tournament history fetched", resp))
 }
 
+func (ctrl *tournamentController) EnsureRoles(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	rows, err := containers.TournamentService().EnsureDefaultRoles(c.Request.Context(), actorID, c.Param("id"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Tournament roles ensured", rows))
+}
+
+func (ctrl *tournamentController) BindRole(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	var req serializers.TournamentRoleBindingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	if err := containers.TournamentService().BindRole(c.Request.Context(), actorID, c.Param("id"), req.RoleCode, req.UserID); err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Role bound", nil))
+}
+
+func (ctrl *tournamentController) UnbindRole(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	if err := containers.TournamentService().UnbindRole(c.Request.Context(), actorID, c.Param("id"), c.Param("roleCode"), c.Param("userId")); err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Role unbound", nil))
+}
+
+func (ctrl *tournamentController) ListRoleBindings(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	rows, err := containers.TournamentService().ListRoleBindings(c.Request.Context(), actorID, c.Param("id"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	resp := make([]serializers.TournamentRoleBindingResponse, 0, len(rows))
+	for i := range rows {
+		resp = append(resp, serializers.NewTournamentRoleBindingResponse(rows[i]))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Role bindings fetched", resp))
+}
+
+func (ctrl *tournamentController) ProvisionMatchWorkspace(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	var req serializers.TournamentProvisionWorkspaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	row, err := containers.TournamentService().ProvisionMatchWorkspace(c.Request.Context(), actorID, c.Param("id"), req.MatchID)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Match workspace provisioned", row))
+}
+
+func (ctrl *tournamentController) ListMatchWorkspaces(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	rows, err := containers.TournamentService().ListMatchWorkspaces(c.Request.Context(), actorID, c.Param("id"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Match workspaces fetched", rows))
+}
+
+func (ctrl *tournamentController) StartMatch(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	match, workspace, err := containers.TournamentService().StartMatch(c.Request.Context(), actorID, c.Param("id"), c.Param("matchId"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Match started", gin.H{
+		"match":                 serializers.NewTournamentMatchResponse(*match),
+		"workspace":             workspace,
+		"screen_share_required": true,
+	}))
+}
+
+func (ctrl *tournamentController) GenerateObserverTokens(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	bundle, err := containers.TournamentService().GenerateMatchObserverTokens(
+		c.Request.Context(),
+		actorID,
+		c.Param("id"),
+		c.Param("matchId"),
+	)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	resp := serializers.TournamentObserverTokenBundleResponse{
+		TeamA: serializers.TournamentObserverTokenResponse{
+			ChannelID: bundle.TeamA.ChannelID,
+			Token:     bundle.TeamA.Token,
+			URL:       bundle.TeamA.URL,
+		},
+		TeamB: serializers.TournamentObserverTokenResponse{
+			ChannelID: bundle.TeamB.ChannelID,
+			Token:     bundle.TeamB.Token,
+			URL:       bundle.TeamB.URL,
+		},
+	}
+	if bundle.Caster != nil {
+		resp.Caster = &serializers.TournamentObserverTokenResponse{
+			ChannelID: bundle.Caster.ChannelID,
+			Token:     bundle.Caster.Token,
+			URL:       bundle.Caster.URL,
+		}
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Observer tokens generated", resp))
+}
+
 func (ctrl *tournamentController) respondError(c *gin.Context, err error) {
 	if ae, ok := apperr.From(err); ok {
 		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))

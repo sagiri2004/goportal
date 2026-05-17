@@ -519,6 +519,8 @@ func (ctrl *gameController) ShareToChannel(c *gin.Context) {
 		SessionID:   req.SessionID,
 		EventID:     req.EventID,
 		ShareType:   req.ShareType,
+		RoomID:      req.RoomID,
+		RoomName:    req.RoomName,
 		Score:       req.Score,
 		Achievement: req.Achievement,
 		Comment:     req.Comment,
@@ -551,6 +553,31 @@ func (ctrl *gameController) CreateRoom(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, serializers.Success("OK", "Game room created", serializers.NewGameRoomStateResponse(state)))
+}
+
+func (ctrl *gameController) ListOpenRooms(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	limit := parseIntDefault(c.Query("limit"), 20)
+	offset := parseIntDefault(c.Query("offset"), 0)
+	items, err := containers.GameService().ListOpenRooms(c.Request.Context(), actorID, services.GameRoomListFilter{
+		GameID: c.Param("id"),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	resp := make([]serializers.GameRoomStateResponse, 0, len(items))
+	for i := range items {
+		state := items[i]
+		resp = append(resp, serializers.NewGameRoomStateResponse(&state))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Open rooms fetched", resp))
 }
 
 func (ctrl *gameController) JoinRoom(c *gin.Context) {

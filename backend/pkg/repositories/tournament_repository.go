@@ -78,4 +78,13 @@ type TournamentRepository interface {
 
 	ListUserTournaments(ctx context.Context, userID string) ([]models.Tournament, error)
 	ListParticipantMatches(ctx context.Context, tournamentID, participantID string) ([]TournamentMatchResolved, error)
+	UpsertRole(ctx context.Context, role *models.TournamentRole) error
+	ListRoles(ctx context.Context, tournamentID string) ([]models.TournamentRole, error)
+	FindRoleByCode(ctx context.Context, tournamentID, code string) (*models.TournamentRole, error)
+	BindRole(ctx context.Context, binding *models.TournamentRoleBinding) error
+	ListRoleBindings(ctx context.Context, tournamentID string) ([]models.TournamentRoleBinding, error)
+	DeleteRoleBinding(ctx context.Context, tournamentID, roleID, userID string) error
+	FindMatchWorkspace(ctx context.Context, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error)
+	CreateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error
+	ListMatchWorkspaces(ctx context.Context, tournamentID string) ([]models.TournamentMatchWorkspace, error)
 }

@@ -79,6 +79,8 @@ type ShareGameRequest struct {
 	SessionID   *string `json:"session_id,omitempty"`
 	EventID     *string `json:"event_id,omitempty"`
 	ShareType   string  `json:"share_type,omitempty"`
+	RoomID      *string `json:"room_id,omitempty"`
+	RoomName    *string `json:"room_name,omitempty"`
 	Score       *int    `json:"score,omitempty"`
 	Achievement *string `json:"achievement,omitempty"`
 	Comment     *string `json:"comment,omitempty"`

@@ -14,7 +14,21 @@ export type GameRoomRealtimeEvent = {
 
 type Listener = (event: GameRoomRealtimeEvent) => void
 
-const DEFAULT_GAME_WS_URL = 'ws://localhost:8091/ws/game'
+const DEFAULT_GAME_WS_URL = 'ws://localhost:8080/ws/game'
+
+const decodeUserIdFromJWT = (token: string): string | null => {
+  const raw = token.trim()
+  if (!raw) return null
+  const parts = raw.split('.')
+  if (parts.length < 2) return null
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))) as { user_id?: string }
+    const userId = payload.user_id?.trim()
+    return userId || null
+  } catch {
+    return null
+  }
+}
 
 export class GameWsClient {
   private ws: WebSocket | null = null
@@ -101,6 +115,10 @@ export class GameWsClient {
     }
     const target = new URL(this.wsURL)
     target.searchParams.set('token', this.token)
+    const userId = decodeUserIdFromJWT(this.token)
+    if (userId) {
+      target.searchParams.set('user_id', userId)
+    }
     const ws = new WebSocket(target.toString())
     this.ws = ws
 

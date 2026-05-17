@@ -475,3 +475,46 @@ export type TournamentMatchReportDTO = {
   status: 'pending' | 'confirmed' | 'disputed'
   created_at: number
 }
+
+export type TournamentRoleDTO = {
+  id: string
+  tournament_id: string
+  code: string
+  name: string
+  created_at: number
+}
+
+export type TournamentRoleBindingDTO = {
+  id: string
+  tournament_id: string
+  role_id: string
+  user_id: string
+  created_at: number
+}
+
+export type TournamentMatchWorkspaceDTO = {
+  id: string
+  tournament_id: string
+  match_id: string
+  server_id: string
+  category_channel_id: string
+  team_a_channel_id: string
+  team_b_channel_id: string
+  caster_channel_id: string
+  admin_channel_id: string
+  spectator_channel_id: string
+  created_by: string
+  created_at: number
+}
+
+export type TournamentObserverTokenDTO = {
+  channel_id: string
+  token: string
+  url: string
+}
+
+export type TournamentObserverTokenBundleDTO = {
+  team_a: TournamentObserverTokenDTO
+  team_b: TournamentObserverTokenDTO
+  caster?: TournamentObserverTokenDTO | null
+}

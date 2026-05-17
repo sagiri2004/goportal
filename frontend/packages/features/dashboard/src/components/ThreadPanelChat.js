@@ -1,8 +1,8 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Separator, cn, Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
-import { Edit, FileText, Gift, Hash, Image, MoreHorizontal, Plus, Reply, Smile, Trash2, X, Loader2, } from 'lucide-react';
-import { mockMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core';
+import { getMessages, sendMessage, uploadMessageAttachment } from '@goportal/app-core';
+import { Edit, FileText, Gift, Hash, Image, Loader2, MoreHorizontal, Plus, Reply, Smile, Trash2, X, } from 'lucide-react';
 import { TextContent } from './TextContent';
 import { ReplyPreview } from './ReplyPreview';
 import { ImageAttachment } from './ImageAttachment';
@@ -11,30 +11,59 @@ import { ReactionBar } from './ReactionBar';
 import { VideoAttachment } from './VideoAttachment';
 import { EmojiPicker } from './EmojiPicker';
 export const ThreadPanelChat = ({ channelName, channelId }) => {
-    const [messagesByChannel, setMessagesByChannel] = useState(mockMessages);
+    const [messages, setMessages] = useState([]);
     const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
     const [pendingFiles, setPendingFiles] = useState([]);
     const [composerHasContent, setComposerHasContent] = useState(false);
     const [uploadProgressByFile, setUploadProgressByFile] = useState({});
     const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [composerError, setComposerError] = useState(null);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
-    const activeChannelKey = useMemo(() => (messagesByChannel[channelName] ? channelName : 'general'), [channelName, messagesByChannel]);
-    const activeMessages = useMemo(() => messagesByChannel[activeChannelKey] ?? [], [activeChannelKey, messagesByChannel]);
+    useEffect(() => {
+        if (!channelId) {
+            setMessages([]);
+            return;
+        }
+        let cancelled = false;
+        setIsLoading(true);
+        const fetchMessages = async () => {
+            try {
+                const page = await getMessages(channelId, { limit: 100, offset: 0 });
+                if (!cancelled) {
+                    setMessages(page.items ?? []);
+                }
+            }
+            catch {
+                if (!cancelled) {
+                    setComposerError('Khong the tai lich su tin nhan kenh voice.');
+                }
+            }
+            finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
+        };
+        void fetchMessages();
+        return () => {
+            cancelled = true;
+        };
+    }, [channelId]);
     const grouped = useMemo(() => {
         const toMinutes = (t) => {
             const [hh, mm] = t.split(':').map((n) => Number(n));
             return (hh || 0) * 60 + (mm || 0);
         };
-        return activeMessages.map((m, idx) => {
-            const prev = activeMessages[idx - 1];
+        return messages.map((m, idx) => {
+            const prev = messages[idx - 1];
             const sameAuthor = prev && prev.authorId === m.authorId;
             const within5 = prev && Math.abs(toMinutes(m.timestamp) - toMinutes(prev.timestamp)) <= 5;
             const startsGroup = !(sameAuthor && within5);
             return { ...m, startsGroup };
         });
-    }, [activeMessages]);
+    }, [messages]);
     const actionButtons = [
         { icon: Reply, label: 'Reply' },
         { icon: Edit, label: 'Edit' },
@@ -47,48 +76,41 @@ export const ThreadPanelChat = ({ channelName, channelId }) => {
     }, []);
     const toggleReaction = (messageId, emoji) => {
         const currentUserId = 'you';
-        setMessagesByChannel((prev) => {
-            const messages = prev[activeChannelKey] ?? [];
-            const nextMessages = messages.map((message) => {
-                if (message.id !== messageId)
-                    return message;
-                const currentReactions = message.reactions ?? [];
-                const reactionIndex = currentReactions.findIndex((reaction) => reaction.emoji === emoji);
-                if (reactionIndex === -1) {
-                    return {
-                        ...message,
-                        reactions: [
-                            ...currentReactions,
-                            { emoji, count: 1, hasReacted: true, userIds: [currentUserId] },
-                        ],
-                    };
-                }
-                const reaction = currentReactions[reactionIndex];
-                const nextHasReacted = !reaction.hasReacted;
-                const nextCount = Math.max(0, reaction.count + (nextHasReacted ? 1 : -1));
-                const nextUserIds = nextHasReacted
-                    ? Array.from(new Set([...reaction.userIds, currentUserId]))
-                    : reaction.userIds.filter((id) => id !== currentUserId);
-                const nextReactions = currentReactions
-                    .map((item, index) => index === reactionIndex
-                    ? {
-                        ...reaction,
-                        hasReacted: nextHasReacted,
-                        count: nextCount,
-                        userIds: nextUserIds,
-                    }
-                    : item)
-                    .filter((item) => item.count > 0);
+        setMessages((prev) => prev.map((message) => {
+            if (message.id !== messageId)
+                return message;
+            const currentReactions = message.reactions ?? [];
+            const reactionIndex = currentReactions.findIndex((reaction) => reaction.emoji === emoji);
+            if (reactionIndex === -1) {
                 return {
                     ...message,
-                    reactions: nextReactions,
+                    reactions: [
+                        ...currentReactions,
+                        { emoji, count: 1, hasReacted: true, userIds: [currentUserId] },
+                    ],
                 };
-            });
+            }
+            const reaction = currentReactions[reactionIndex];
+            const nextHasReacted = !reaction.hasReacted;
+            const nextCount = Math.max(0, reaction.count + (nextHasReacted ? 1 : -1));
+            const nextUserIds = nextHasReacted
+                ? Array.from(new Set([...reaction.userIds, currentUserId]))
+                : reaction.userIds.filter((id) => id !== currentUserId);
+            const nextReactions = currentReactions
+                .map((item, index) => index === reactionIndex
+                ? {
+                    ...reaction,
+                    hasReacted: nextHasReacted,
+                    count: nextCount,
+                    userIds: nextUserIds,
+                }
+                : item)
+                .filter((item) => item.count > 0);
             return {
-                ...prev,
-                [activeChannelKey]: nextMessages,
+                ...message,
+                reactions: nextReactions,
             };
-        });
+        }));
     };
     const onSend = useCallback(async () => {
         const content = inputRef.current?.innerText.trim() ?? '';
@@ -107,13 +129,7 @@ export const ThreadPanelChat = ({ channelName, channelId }) => {
                 return uploaded.attachmentId;
             }));
             const created = await sendMessage(channelId, content, attachmentIDs);
-            setMessagesByChannel((prev) => {
-                const currentMessages = prev[activeChannelKey] ?? [];
-                return {
-                    ...prev,
-                    [activeChannelKey]: [...currentMessages, created],
-                };
-            });
+            setMessages((prev) => [...prev, created]);
             if (inputRef.current) {
                 inputRef.current.innerText = '';
             }
@@ -127,7 +143,7 @@ export const ThreadPanelChat = ({ channelName, channelId }) => {
             setUploadProgressByFile({});
             setIsUploadingFiles(false);
         }
-    }, [activeChannelKey, channelId, pendingFiles]);
+    }, [channelId, pendingFiles]);
     const handleKeyDown = useCallback(async (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
@@ -144,7 +160,7 @@ export const ThreadPanelChat = ({ channelName, channelId }) => {
     }, [updateComposerState]);
     const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles;
     const pendingImagePreviewUrls = useMemo(() => pendingFiles.map((file) => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null)), [pendingFiles]);
-    return (_jsxs(_Fragment, { children: [_jsxs("section", { className: "flex-1 overflow-y-auto px-3 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "mb-4 h-14 w-14 rounded-full bg-muted p-3 text-muted-foreground" }), _jsxs("h2", { className: "text-xl font-bold text-foreground", children: ["Welcome to #", channelName] }), _jsxs("p", { className: "text-sm text-muted-foreground", children: ["This is the start of #", channelName, " channel."] })] }), _jsxs("div", { className: "my-4 flex items-center gap-3", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "whitespace-nowrap text-xs text-muted-foreground", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
+    return (_jsxs("div", { className: "flex h-full min-h-0 flex-col", children: [_jsxs("section", { className: "min-h-0 flex-1 overflow-y-auto px-3 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "mb-4 h-14 w-14 rounded-full bg-muted p-3 text-muted-foreground" }), _jsxs("h2", { className: "text-xl font-bold text-foreground", children: ["Welcome to #", channelName] }), _jsxs("p", { className: "text-sm text-muted-foreground", children: ["This is the start of #", channelName, " channel."] })] }), _jsxs("div", { className: "my-4 flex items-center gap-3", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "whitespace-nowrap text-xs text-muted-foreground", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), isLoading && (_jsxs("div", { className: "flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground", children: [_jsx(Loader2, { className: "h-4 w-4 animate-spin" }), _jsx("span", { children: "Dang tai tin nhan..." })] })), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
                             const username = msg.author ?? 'unknown';
                             const avatarLetter = msg.avatarInitials ?? username[0]?.toUpperCase() ?? '?';
                             const imageAttachments = (msg.attachments ?? []).filter((a) => a.type === 'image' || a.type === 'gif');
@@ -162,7 +178,7 @@ export const ThreadPanelChat = ({ channelName, channelId }) => {
                                     const key = `${file.name}-${file.size}-${index}`;
                                     const progress = uploadProgressByFile[key] ?? 0;
                                     return (_jsxs("p", { className: "truncate", children: [file.name, ": ", progress, "%"] }, key));
-                                })] })), composerError && _jsx("p", { className: "px-3 pb-2 text-xs text-red-400", children: composerError }), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", onClick: () => fileInputRef.current?.click(), disabled: isUploadingFiles, children: _jsx(Plus, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onInput: updateComposerState, className: "min-h-[44px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": `Nhắn #${channelName}` }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
+                                })] })), composerError && _jsx("p", { className: "px-3 pb-2 text-xs text-red-400", children: composerError }), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", onClick: () => fileInputRef.current?.click(), disabled: isUploadingFiles, children: _jsx(Plus, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onInput: updateComposerState, className: "min-h-[44px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": `Nhan #${channelName}` }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
                                             { icon: Gift, label: 'Gift' },
                                             { icon: Image, label: 'GIF' },
                                         ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", children: _jsx(Icon, { className: "h-5 w-5" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsx(EmojiPicker, { align: "end", onSelect: insertEmoji, trigger: (_jsx("button", { className: "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", type: "button", children: _jsx(Smile, { className: "h-5 w-5" }) })) })] })] })] }) })] }));

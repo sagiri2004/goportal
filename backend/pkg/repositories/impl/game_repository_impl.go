@@ -527,6 +527,26 @@ func (r *gameRepository) FindRoomByID(ctx context.Context, roomID string) (*mode
 	return &room, nil
 }
 
+func (r *gameRepository) ListOpenRoomsByGameID(ctx context.Context, gameID string, limit, offset int) ([]models.GameRoom, error) {
+	rooms := make([]models.GameRoom, 0)
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	now := time.Now().Unix()
+	if err := r.db.WithContext(ctx).
+		Where("game_id = ? AND deleted_at = 0 AND status = ? AND expires_at > ?", gameID, models.GameRoomStatusOpen, now).
+		Order("last_active_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rooms).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return rooms, nil
+}
+
 func (r *gameRepository) UpdateRoom(ctx context.Context, room *models.GameRoom) error {
 	if err := r.db.WithContext(ctx).Save(room).Error; err != nil {
 		return apperr.E("DB_ERROR", err)
@@ -538,6 +558,27 @@ func (r *gameRepository) CloseExpiredRooms(ctx context.Context, nowUnix int64) e
 	if err := r.db.WithContext(ctx).
 		Model(&models.GameRoom{}).
 		Where("deleted_at = 0 AND status = ? AND expires_at <= ?", models.GameRoomStatusOpen, nowUnix).
+		Updates(map[string]any{
+			"status":         models.GameRoomStatusClosed,
+			"last_active_at": nowUnix,
+		}).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) CloseOpenRoomsWithoutMembers(ctx context.Context, nowUnix int64) error {
+	if err := r.db.WithContext(ctx).
+		Model(&models.GameRoom{}).
+		Where("deleted_at = 0 AND status = ?", models.GameRoomStatusOpen).
+		Where("NOT EXISTS (?)",
+			r.db.WithContext(ctx).
+				Model(&models.GameRoomMember{}).
+				Select("1").
+				Where("game_room_members.room_id = game_rooms.id").
+				Where("game_room_members.deleted_at = 0").
+				Where("game_room_members.status = ?", models.GameRoomMemberStatusJoined),
+		).
 		Updates(map[string]any{
 			"status":         models.GameRoomStatusClosed,
 			"last_active_at": nowUnix,

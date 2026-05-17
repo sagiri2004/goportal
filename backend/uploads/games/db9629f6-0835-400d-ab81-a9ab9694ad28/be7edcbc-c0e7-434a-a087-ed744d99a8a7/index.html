@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GoPortal Demo — Tap Score</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, sans-serif;
+        background: linear-gradient(160deg, #1e1b4b 0%, #312e81 40%, #0f172a 100%);
+        color: #e2e8f0;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        max-width: 22rem;
+      }
+      .panel {
+        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        text-align: center;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+      .score {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #a5b4fc;
+        margin: 0.5rem 0 1rem;
+      }
+      .timer {
+        font-size: 0.95rem;
+        color: #cbd5e1;
+        margin-bottom: 1rem;
+      }
+      button#tap {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 0.85rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(180deg, #6366f1, #4f46e5);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+        transition: transform 0.08s ease, box-shadow 0.15s ease;
+      }
+      button#tap:active {
+        transform: scale(0.97);
+      }
+      button#tap:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      button#again {
+        margin-top: 1rem;
+        background: transparent;
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        border-radius: 8px;
+        padding: 0.4rem 0.9rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      button#again:hover {
+        color: #e2e8f0;
+        border-color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>GoPortal demo game</h1>
+    <p class="hint">
+      Tap the button as many times as you can in 10 seconds. Upload this folder as a zip (see
+      <code>README.md</code>).
+    </p>
+    <div class="panel">
+      <div class="timer" id="timer">Time: 10.0s</div>
+      <div class="score" id="score">0</div>
+      <button type="button" id="tap">Tap!</button>
+      <div>
+        <button type="button" id="again" hidden>Play again</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var DURATION_MS = 10000
+        var scoreEl = document.getElementById('score')
+        var timerEl = document.getElementById('timer')
+        var tapBtn = document.getElementById('tap')
+        var againBtn = document.getElementById('again')
+
+        var score = 0
+        var endTime = 0
+        var rafId = null
+
+        function formatTime(msLeft) {
+          var s = Math.max(0, msLeft / 1000)
+          return s.toFixed(1)
+        }
+
+        function tick() {
+          var now = Date.now()
+          var left = endTime - now
+          if (left <= 0) {
+            timerEl.textContent = 'Time: 0.0s'
+            tapBtn.disabled = true
+            againBtn.hidden = false
+            if (rafId) cancelAnimationFrame(rafId)
+            return
+          }
+          timerEl.textContent = 'Time: ' + formatTime(left) + 's'
+          rafId = requestAnimationFrame(tick)
+        }
+
+        function start() {
+          score = 0
+          scoreEl.textContent = '0'
+          tapBtn.disabled = false
+          againBtn.hidden = true
+          endTime = Date.now() + DURATION_MS
+          if (rafId) cancelAnimationFrame(rafId)
+          rafId = requestAnimationFrame(tick)
+        }
+
+        tapBtn.addEventListener('click', function () {
+          if (Date.now() >= endTime && endTime > 0) return
+          if (endTime === 0) {
+            start()
+            return
+          }
+          score += 1
+          scoreEl.textContent = String(score)
+        })
+
+        againBtn.addEventListener('click', function () {
+          endTime = 0
+          timerEl.textContent = 'Time: 10.0s'
+          scoreEl.textContent = '0'
+          tapBtn.disabled = false
+          againBtn.hidden = true
+        })
+      })()
+    </script>
+  </body>
+</html>

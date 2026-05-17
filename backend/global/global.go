@@ -4,6 +4,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"github.com/sagiri2004/goportal/pkg/realtime"
 	setting "github.com/sagiri2004/goportal/pkg/settings"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -17,6 +18,8 @@ var (
 	Publisher   message.Publisher
 	Subscriber  message.Subscriber
 	WMRouter    *message.Router
+	RealtimeHub *realtime.Hub
+	GameHub     *realtime.GameHub
 	ConfigPath  string
 	Config      setting.Config
 )

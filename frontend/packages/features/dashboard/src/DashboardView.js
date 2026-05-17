@@ -1,13 +1,12 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Separator, cn } from '@goportal/ui';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Separator, cn } from '@goportal/ui';
 import { ChannelHeader } from '@goportal/feature-channels';
-import { Edit, FileText, Gift, Hash, Image, Loader2, MoreHorizontal, Plus, Reply, Smile, SmilePlus, Trash2, X, } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
+import { Edit, FileText, Gift, Gamepad2, Hash, Image, Loader2, MoreHorizontal, Plus, Reply, Smile, SmilePlus, Trash2, X, } from 'lucide-react';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@goportal/ui';
-import { addReaction, deleteMessage, getMessages, markChannelRead, removeReaction, sendMessage, updateMessage, uploadMessageAttachment, } from '@goportal/app-core';
+import { addReaction, deleteMessage, getMessages, markChannelRead, removeReaction, sendMessage, updateMessage, uploadMessageAttachment, listTrendingGames, } from '@goportal/app-core';
 import { useAuthStore } from '@goportal/store';
-import { WS_URL } from '@goportal/config';
 import { useDropzone } from 'react-dropzone';
 import { TextContent } from './components/TextContent';
 import { ReplyPreview } from './components/ReplyPreview';
@@ -17,40 +16,44 @@ import { ReactionBar } from './components/ReactionBar';
 import { LinkEmbed } from './components/LinkEmbed';
 import { VideoAttachment } from './components/VideoAttachment';
 import { EmojiPicker } from './components/EmojiPicker';
-const MESSAGE_CREATED_EVENT_TYPES = new Set([
+const canonicalizeEventType = (eventType) => eventType.replace(/[.\-:]/g, '_').replace(/__+/g, '_').toUpperCase();
+const createCanonicalEventSet = (types) => new Set(types.map(canonicalizeEventType));
+const MESSAGE_CREATED_EVENT_TYPES = createCanonicalEventSet([
     'CHAT_MESSAGE_CREATED',
     'MESSAGE_CREATED',
     'MESSAGE_CREATE',
     'MESSAGE:CREATE',
     'MESSAGE.CREATED',
 ]);
-const MESSAGE_UPDATED_EVENT_TYPES = new Set([
+const MESSAGE_UPDATED_EVENT_TYPES = createCanonicalEventSet([
     'CHAT_MESSAGE_UPDATED',
     'MESSAGE_UPDATED',
     'MESSAGE_UPDATE',
     'MESSAGE:UPDATE',
     'MESSAGE.UPDATED',
 ]);
-const MESSAGE_DELETED_EVENT_TYPES = new Set([
+const MESSAGE_DELETED_EVENT_TYPES = createCanonicalEventSet([
     'CHAT_MESSAGE_DELETED',
     'MESSAGE_DELETED',
     'MESSAGE_DELETE',
     'MESSAGE:DELETE',
     'MESSAGE.DELETED',
 ]);
-const REACTION_ADDED_EVENT_TYPES = new Set([
+const REACTION_ADDED_EVENT_TYPES = createCanonicalEventSet([
     'MESSAGE_REACTION_ADDED',
+    'MESSAGE_REACTION_ADD',
     'REACTION_ADDED',
     'MESSAGE:REACTION:ADD',
     'REACTION.ADDED',
 ]);
-const REACTION_REMOVED_EVENT_TYPES = new Set([
+const REACTION_REMOVED_EVENT_TYPES = createCanonicalEventSet([
     'MESSAGE_REACTION_REMOVED',
+    'MESSAGE_REACTION_REMOVE',
     'REACTION_REMOVED',
     'MESSAGE:REACTION:REMOVE',
     'REACTION.REMOVED',
 ]);
-const VOICE_ACTIVITY_EVENT_TYPES = new Set([
+const VOICE_ACTIVITY_EVENT_TYPES = createCanonicalEventSet([
     'VOICE_CHANNEL_ACTIVITY_UPDATED',
     'VOICE_ACTIVITY_UPDATED',
 ]);
@@ -94,57 +97,35 @@ const formatSocketTimestamp = (timestamp) => {
 };
 const normalizeEventType = (raw) => typeof raw === 'string' ? raw.trim().toUpperCase() : '';
 const resolveEnvelopeEventType = (event) => {
+    const payload = normalizeSocketPayload(event.payload);
     const topLevelType = normalizeEventType(event.type);
-    const payloadType = normalizeEventType(event.payload?.event_type ?? event.payload?.type);
+    const payloadType = normalizeEventType(payload.event_type ?? payload.type);
     if (topLevelType === 'POPUP') {
         if (payloadType) {
             return payloadType;
         }
-        if (event.payload?.message_id && event.payload?.channel_id) {
+        if (payload.message_id && payload.channel_id) {
             return 'CHAT_MESSAGE_CREATED';
         }
     }
     return payloadType || topLevelType;
 };
-const buildNotificationSocketTargets = (rawUrl, userId, token) => {
-    let parsed;
-    try {
-        parsed = new URL(rawUrl);
+const normalizeSocketPayload = (payload) => {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return payload;
     }
-    catch {
-        return [];
-    }
-    if (parsed.protocol === 'http:') {
-        parsed.protocol = 'ws:';
-    }
-    else if (parsed.protocol === 'https:') {
-        parsed.protocol = 'wss:';
-    }
-    if (!parsed.pathname || parsed.pathname === '/') {
-        parsed.pathname = '/ws';
-    }
-    const setCommonParams = (url) => {
-        url.searchParams.set('user_id', userId);
-        if (token) {
-            url.searchParams.set('token', token);
+    if (typeof payload === 'string') {
+        try {
+            const parsed = JSON.parse(payload);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed;
+            }
         }
-    };
-    const targets = [];
-    const addTarget = (url) => {
-        setCommonParams(url);
-        targets.push(url);
-    };
-    if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
-        parsed.port === '8080') {
-        const preferred = new URL(parsed.toString());
-        preferred.port = '8090';
-        addTarget(preferred);
-        const fallback = new URL(parsed.toString());
-        fallback.port = '8085';
-        addTarget(fallback);
+        catch {
+            return {};
+        }
     }
-    addTarget(parsed);
-    return Array.from(new Set(targets.map((target) => target.toString())));
+    return {};
 };
 const mapSocketAttachments = (attachments) => {
     if (!Array.isArray(attachments)) {
@@ -202,6 +183,13 @@ const mapSocketPayloadToMessage = (payload, envelopeTimestamp, currentUserId) =>
     }
     const author = payload?.author?.username ?? `user-${String(authorId).slice(0, 6)}`;
     const { timestamp, date } = formatSocketTimestamp(payload?.created_at ?? envelopeTimestamp);
+    const contentType = payload?.content?.type ?? 'text/plain';
+    const rawContentPayload = payload?.content?.payload ?? payload?.content ?? '';
+    const normalizedContent = typeof rawContentPayload === 'string'
+        ? rawContentPayload
+        : rawContentPayload !== undefined && rawContentPayload !== null
+            ? JSON.stringify(rawContentPayload)
+            : '';
     return {
         id: messageId,
         authorId,
@@ -209,7 +197,12 @@ const mapSocketPayloadToMessage = (payload, envelopeTimestamp, currentUserId) =>
         avatarUrl: payload?.author?.avatar_url,
         avatarColor: payload?.author?.avatar_color ?? messageColorFromId(authorId),
         avatarInitials: messageInitialsFromName(author),
-        content: payload?.content?.payload ?? payload?.content ?? '',
+        contentType,
+        content: normalizedContent,
+        contentData: rawContentPayload,
+        gameShare: contentType === 'game/share' && rawContentPayload && typeof rawContentPayload === 'object'
+            ? rawContentPayload
+            : undefined,
         timestamp,
         date,
         editedAt: payload?.updated_at
@@ -227,9 +220,9 @@ const mapSocketPayloadToMessage = (payload, envelopeTimestamp, currentUserId) =>
     };
 };
 export const DashboardView = () => {
-    const { showMembers, setShowMembers, activeChannelId, activeCategories, incrementChannelUnread, resetChannelUnread, setChannelUnread, applyVoiceChannelActivityUpdate, } = useOutletContext();
+    const navigate = useNavigate();
+    const { showMembers, setShowMembers, activeChannelId, activeCategories, incrementChannelUnread, resetChannelUnread, setChannelUnread, applyVoiceChannelActivityUpdate, subscribeNotificationEvents, sendNotificationSocketMessage, } = useOutletContext();
     const currentUser = useAuthStore((state) => state.user);
-    const token = useAuthStore((state) => state.token);
     const [messagesByChannel, setMessagesByChannel] = useState({});
     const [pagingByChannel, setPagingByChannel] = useState({});
     const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
@@ -238,14 +231,17 @@ export const DashboardView = () => {
     const [pendingFiles, setPendingFiles] = useState([]);
     const [composerHasContent, setComposerHasContent] = useState(false);
     const [uploadProgressByFile, setUploadProgressByFile] = useState({});
-    const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+    const [inFlightUploadCount, setInFlightUploadCount] = useState(0);
     const [composerError, setComposerError] = useState(null);
     const embedCacheRef = useRef({});
     const embedInFlightRef = useRef({});
     const [autoEmbedsByUrl, setAutoEmbedsByUrl] = useState({});
     const activeChannelIdRef = useRef(activeChannelId);
     const currentUserIdRef = useRef(currentUser?.id ?? null);
-    const socketRef = useRef(null);
+    const incrementChannelUnreadRef = useRef(incrementChannelUnread);
+    const resetChannelUnreadRef = useRef(resetChannelUnread);
+    const setChannelUnreadRef = useRef(setChannelUnread);
+    const applyVoiceChannelActivityUpdateRef = useRef(applyVoiceChannelActivityUpdate);
     const [isNearBottom, setIsNearBottom] = useState(true);
     const isNearBottomRef = useRef(true);
     const [newMessageCount, setNewMessageCount] = useState(0);
@@ -255,6 +251,12 @@ export const DashboardView = () => {
     const [replyToMessage, setReplyToMessage] = useState(null);
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editingDraft, setEditingDraft] = useState('');
+    const [pendingMessageIds, setPendingMessageIds] = useState({});
+    const [failedMessageIds, setFailedMessageIds] = useState({});
+    const [isGamesLauncherOpen, setIsGamesLauncherOpen] = useState(false);
+    const [quickGames, setQuickGames] = useState([]);
+    const isPrependingHistoryRef = useRef(false);
+    const lastRenderedMessageIdRef = useRef(null);
     useEffect(() => {
         activeChannelIdRef.current = activeChannelId;
     }, [activeChannelId]);
@@ -265,11 +267,70 @@ export const DashboardView = () => {
         currentUserIdRef.current = currentUser?.id ?? null;
     }, [currentUser?.id]);
     useEffect(() => {
+        incrementChannelUnreadRef.current = incrementChannelUnread;
+    }, [incrementChannelUnread]);
+    useEffect(() => {
+        resetChannelUnreadRef.current = resetChannelUnread;
+    }, [resetChannelUnread]);
+    useEffect(() => {
+        setChannelUnreadRef.current = setChannelUnread;
+    }, [setChannelUnread]);
+    useEffect(() => {
+        applyVoiceChannelActivityUpdateRef.current = applyVoiceChannelActivityUpdate;
+    }, [applyVoiceChannelActivityUpdate]);
+    const scrollToBottom = useCallback(() => {
+        const list = messageListRef.current;
+        if (!list) {
+            return;
+        }
+        list.scrollTop = list.scrollHeight;
+        setNewMessageCount(0);
+        setIsNearBottom(true);
+    }, []);
+    const markActiveChannelAsRead = useCallback(() => {
+        const channelId = activeChannelIdRef.current;
+        if (!channelId) {
+            return;
+        }
+        resetChannelUnreadRef.current?.(channelId);
+        void markChannelRead(channelId).catch(() => { });
+        sendNotificationSocketMessage?.({
+            type: 'channel.focus',
+            data: { channel_id: channelId },
+        });
+    }, [sendNotificationSocketMessage]);
+    useEffect(() => {
         return () => {
             Object.values(typingTimersRef.current).forEach((timer) => window.clearTimeout(timer));
             typingTimersRef.current = {};
         };
     }, []);
+    useEffect(() => {
+        if (!isGamesLauncherOpen) {
+            return;
+        }
+        let cancelled = false;
+        void listTrendingGames({ limit: 8 })
+            .then((items) => {
+            if (cancelled) {
+                return;
+            }
+            setQuickGames(items.map((item) => ({
+                id: item.game.id,
+                title: item.game.title,
+                source: item.game.source_type,
+                rating: item.game.avg_rating,
+            })));
+        })
+            .catch(() => {
+            if (!cancelled) {
+                setQuickGames([]);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isGamesLauncherOpen]);
     const activeChannel = useMemo(() => {
         const channels = activeCategories.flatMap((category) => category.channels);
         const match = channels.find((channel) => channel.id === activeChannelId);
@@ -325,10 +386,47 @@ export const DashboardView = () => {
                     isLoadingMore: false,
                 },
             }));
+            requestAnimationFrame(() => {
+                scrollToBottom();
+                markActiveChannelAsRead();
+            });
         };
-        void loadInitialMessages();
+        void loadInitialMessages().catch(() => { });
         return () => {
             isCancelled = true;
+        };
+    }, [activeChannelId, markActiveChannelAsRead, scrollToBottom]);
+    useEffect(() => {
+        if (!activeChannelId) {
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setInterval(() => {
+            if (cancelled) {
+                return;
+            }
+            void getMessages(activeChannelId, { limit: 50, offset: 0 })
+                .then((page) => {
+                if (cancelled) {
+                    return;
+                }
+                setMessagesByChannel((prev) => {
+                    const current = prev[activeChannelId] ?? [];
+                    if (current.length === page.items.length && current[current.length - 1]?.id === page.items[page.items.length - 1]?.id) {
+                        return prev;
+                    }
+                    const merged = [...current, ...page.items].filter((message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index);
+                    return {
+                        ...prev,
+                        [activeChannelId]: merged,
+                    };
+                });
+            })
+                .catch(() => { });
+        }, 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
         };
     }, [activeChannelId]);
     useEffect(() => {
@@ -336,29 +434,30 @@ export const DashboardView = () => {
             return;
         }
         requestAnimationFrame(() => {
-            const list = messageListRef.current;
-            if (!list) {
-                return;
-            }
-            list.scrollTop = list.scrollHeight;
-            setNewMessageCount(0);
-            setIsNearBottom(true);
+            scrollToBottom();
         });
-    }, [activeChannelId]);
+    }, [activeChannelId, scrollToBottom]);
+    useEffect(() => {
+        const lastMessageId = activeMessages[activeMessages.length - 1]?.id ?? null;
+        if (!lastMessageId) {
+            lastRenderedMessageIdRef.current = null;
+            return;
+        }
+        const changed = lastRenderedMessageIdRef.current !== lastMessageId;
+        lastRenderedMessageIdRef.current = lastMessageId;
+        if (!changed || isPrependingHistoryRef.current) {
+            return;
+        }
+        requestAnimationFrame(() => {
+            scrollToBottom();
+        });
+    }, [activeMessages, scrollToBottom]);
     useEffect(() => {
         if (!activeChannelId) {
             return;
         }
-        resetChannelUnread?.(activeChannelId);
-        void markChannelRead(activeChannelId).catch(() => { });
-        const socket = socketRef.current;
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({
-                type: 'channel.focus',
-                data: { channel_id: activeChannelId },
-            }));
-        }
-    }, [activeChannelId, resetChannelUnread]);
+        markActiveChannelAsRead();
+    }, [activeChannelId, markActiveChannelAsRead]);
     useEffect(() => {
         if (typeof window === 'undefined' || typeof Notification === 'undefined') {
             return;
@@ -366,14 +465,9 @@ export const DashboardView = () => {
         void Notification.requestPermission();
     }, []);
     useEffect(() => {
-        if (!currentUser?.id) {
+        if (!subscribeNotificationEvents) {
             return;
         }
-        let socket = null;
-        let reconnectTimer = null;
-        let initialConnectTimer = null;
-        let reconnectAttempt = 0;
-        let closedByClient = false;
         const updateMessageInChannel = (channelId, updater) => {
             setMessagesByChannel((prev) => {
                 if (channelId) {
@@ -434,25 +528,19 @@ export const DashboardView = () => {
                 reactions: nextReactions,
             };
         };
-        const onSocketMessage = (raw) => {
-            let event;
-            try {
-                event = JSON.parse(raw);
-            }
-            catch {
-                return;
-            }
+        const onSocketMessage = (event) => {
             const eventType = resolveEnvelopeEventType(event);
-            if (!eventType || eventType === 'CONNECTED') {
+            const canonicalEventType = canonicalizeEventType(eventType);
+            if (!canonicalEventType || canonicalEventType === 'CONNECTED') {
                 return;
             }
-            if (VOICE_ACTIVITY_EVENT_TYPES.has(eventType)) {
-                const payload = event.payload ?? {};
+            if (VOICE_ACTIVITY_EVENT_TYPES.has(canonicalEventType)) {
+                const payload = normalizeSocketPayload(event.payload);
                 const serverId = typeof payload.server_id === 'string' ? payload.server_id : '';
                 const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : '';
                 const participants = Array.isArray(payload.participants) ? payload.participants : [];
-                if (serverId && channelId && applyVoiceChannelActivityUpdate) {
-                    applyVoiceChannelActivityUpdate({
+                if (serverId && channelId && applyVoiceChannelActivityUpdateRef.current) {
+                    applyVoiceChannelActivityUpdateRef.current({
                         serverId,
                         channelId,
                         participants,
@@ -460,23 +548,23 @@ export const DashboardView = () => {
                 }
                 return;
             }
-            if (eventType === 'CHANNEL.UNREAD') {
-                const payload = event.payload ?? {};
+            if (canonicalEventType === 'CHANNEL_UNREAD') {
+                const payload = normalizeSocketPayload(event.payload);
                 const channelId = payload.channel_id;
                 const unreadCount = Number(payload.unread_count ?? 0);
                 if (!channelId) {
                     return;
                 }
                 if (channelId !== activeChannelIdRef.current) {
-                    setChannelUnread?.(channelId, unreadCount);
+                    setChannelUnreadRef.current?.(channelId, unreadCount);
                 }
                 else if (unreadCount > 0) {
-                    resetChannelUnread?.(channelId);
+                    resetChannelUnreadRef.current?.(channelId);
                 }
                 return;
             }
-            if (eventType === 'MENTION') {
-                const payload = event.payload ?? {};
+            if (canonicalEventType === 'MENTION') {
+                const payload = normalizeSocketPayload(event.payload);
                 if (typeof window !== 'undefined' &&
                     typeof Notification !== 'undefined' &&
                     Notification.permission === 'granted') {
@@ -488,8 +576,8 @@ export const DashboardView = () => {
                 }
                 return;
             }
-            if (eventType === 'TYPING' || eventType === 'TYPING.START') {
-                const payload = event.payload ?? {};
+            if (canonicalEventType === 'TYPING' || canonicalEventType === 'TYPING_START') {
+                const payload = normalizeSocketPayload(event.payload);
                 const channelId = payload.channel_id;
                 const userId = payload.user_id;
                 const username = payload.username;
@@ -517,8 +605,8 @@ export const DashboardView = () => {
                 }, 3000);
                 return;
             }
-            if (eventType === 'TYPING.STOP') {
-                const payload = event.payload ?? {};
+            if (canonicalEventType === 'TYPING_STOP') {
+                const payload = normalizeSocketPayload(event.payload);
                 const channelId = payload.channel_id;
                 const userId = payload.user_id;
                 if (!channelId || !userId) {
@@ -536,14 +624,17 @@ export const DashboardView = () => {
                 });
                 return;
             }
-            if (MESSAGE_CREATED_EVENT_TYPES.has(eventType)) {
-                const payload = event.payload ?? {};
+            if (MESSAGE_CREATED_EVENT_TYPES.has(canonicalEventType)) {
+                const payload = normalizeSocketPayload(event.payload);
+                const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : '';
+                if (!channelId) {
+                    return;
+                }
                 const message = mapSocketPayloadToMessage(payload, event.timestamp, currentUserIdRef.current);
                 if (!message) {
                     return;
                 }
                 setMessagesByChannel((prev) => {
-                    const channelId = payload.channel_id;
                     const current = prev[channelId] ?? [];
                     if (current.some((item) => item.id === message.id)) {
                         return prev;
@@ -553,22 +644,14 @@ export const DashboardView = () => {
                         [channelId]: [...current, message],
                     };
                     if (activeChannelIdRef.current !== channelId) {
-                        incrementChannelUnread?.(channelId);
+                        incrementChannelUnreadRef.current?.(channelId);
                     }
                     else {
+                        resetChannelUnreadRef.current?.(channelId);
                         void markChannelRead(channelId).catch(() => { });
-                        if (isNearBottomRef.current) {
-                            requestAnimationFrame(() => {
-                                const list = messageListRef.current;
-                                if (!list) {
-                                    return;
-                                }
-                                list.scrollTop = list.scrollHeight;
-                            });
-                        }
-                        else {
-                            setNewMessageCount((count) => count + 1);
-                        }
+                        requestAnimationFrame(() => {
+                            scrollToBottom();
+                        });
                     }
                     return next;
                 });
@@ -581,8 +664,8 @@ export const DashboardView = () => {
                 }
                 return;
             }
-            if (MESSAGE_UPDATED_EVENT_TYPES.has(eventType)) {
-                const payload = event.payload ?? {};
+            if (MESSAGE_UPDATED_EVENT_TYPES.has(canonicalEventType)) {
+                const payload = normalizeSocketPayload(event.payload);
                 const messageId = payload.message_id ?? payload.id;
                 if (!messageId) {
                     return;
@@ -594,7 +677,18 @@ export const DashboardView = () => {
                     }
                     return {
                         ...message,
-                        content: payload.content?.payload ?? payload.content ?? message.content,
+                        contentType: payload.content?.type ?? message.contentType ?? 'text/plain',
+                        content: typeof (payload.content?.payload ?? payload.content) === 'string'
+                            ? (payload.content?.payload ?? payload.content)
+                            : payload.content?.payload ?? payload.content
+                                ? JSON.stringify(payload.content?.payload ?? payload.content)
+                                : message.content,
+                        contentData: payload.content?.payload ?? payload.content ?? message.contentData,
+                        gameShare: (payload.content?.type ?? message.contentType) === 'game/share' &&
+                            payload.content?.payload &&
+                            typeof payload.content.payload === 'object'
+                            ? payload.content.payload
+                            : message.gameShare,
                         attachments: payload.attachments !== undefined
                             ? mapSocketAttachments(payload.attachments)
                             : message.attachments,
@@ -606,8 +700,8 @@ export const DashboardView = () => {
                 }));
                 return;
             }
-            if (MESSAGE_DELETED_EVENT_TYPES.has(eventType)) {
-                const payload = event.payload ?? {};
+            if (MESSAGE_DELETED_EVENT_TYPES.has(canonicalEventType)) {
+                const payload = normalizeSocketPayload(event.payload);
                 const messageId = payload.message_id ?? payload.id;
                 if (!messageId) {
                     return;
@@ -616,8 +710,8 @@ export const DashboardView = () => {
                 updateMessageInChannel(channelId, (messages) => messages.filter((message) => message.id !== messageId));
                 return;
             }
-            if (REACTION_ADDED_EVENT_TYPES.has(eventType) || REACTION_REMOVED_EVENT_TYPES.has(eventType)) {
-                const payload = event.payload ?? {};
+            if (REACTION_ADDED_EVENT_TYPES.has(canonicalEventType) || REACTION_REMOVED_EVENT_TYPES.has(canonicalEventType)) {
+                const payload = normalizeSocketPayload(event.payload);
                 const messageId = payload.message_id ?? payload.id;
                 if (!messageId) {
                     return;
@@ -625,7 +719,7 @@ export const DashboardView = () => {
                 const emoji = payload.emoji;
                 const userId = payload.user_id ?? event.user_id ?? currentUserIdRef.current;
                 const channelId = payload.channel_id ?? null;
-                const mode = REACTION_ADDED_EVENT_TYPES.has(eventType) ? 'add' : 'remove';
+                const mode = REACTION_ADDED_EVENT_TYPES.has(canonicalEventType) ? 'add' : 'remove';
                 updateMessageInChannel(channelId, (messages) => messages.map((message) => {
                     if (message.id !== messageId) {
                         return message;
@@ -643,78 +737,11 @@ export const DashboardView = () => {
                 }));
             }
         };
-        const connect = () => {
-            if (closedByClient) {
-                return;
-            }
-            const targets = buildNotificationSocketTargets(WS_URL, currentUser.id, token);
-            if (targets.length === 0) {
-                return;
-            }
-            const target = targets[reconnectAttempt % targets.length];
-            const ws = new WebSocket(target);
-            socket = ws;
-            socketRef.current = ws;
-            ws.onopen = () => {
-                if (socket !== ws) {
-                    return;
-                }
-                reconnectAttempt = 0;
-                if (activeChannelIdRef.current) {
-                    ws.send(JSON.stringify({
-                        type: 'channel.focus',
-                        data: { channel_id: activeChannelIdRef.current },
-                    }));
-                }
-            };
-            ws.onmessage = (event) => {
-                if (socket !== ws) {
-                    return;
-                }
-                onSocketMessage(String(event.data));
-            };
-            ws.onclose = () => {
-                if (socket === ws) {
-                    socket = null;
-                    socketRef.current = null;
-                }
-                if (closedByClient) {
-                    return;
-                }
-                if (reconnectTimer) {
-                    window.clearTimeout(reconnectTimer);
-                    reconnectTimer = null;
-                }
-                const delay = Math.min(30000, 1000 * 2 ** reconnectAttempt);
-                reconnectAttempt += 1;
-                reconnectTimer = window.setTimeout(() => {
-                    reconnectTimer = null;
-                    connect();
-                }, delay);
-            };
-            ws.onerror = () => {
-                if (socket !== ws) {
-                    return;
-                }
-                ws.close();
-            };
-        };
-        // Delay initial connect slightly to avoid React StrictMode dev double-mount
-        // from opening/closing a socket while still CONNECTING.
-        initialConnectTimer = window.setTimeout(connect, 120);
+        const unsubscribe = subscribeNotificationEvents(onSocketMessage);
         return () => {
-            closedByClient = true;
-            if (initialConnectTimer) {
-                window.clearTimeout(initialConnectTimer);
-            }
-            if (reconnectTimer) {
-                window.clearTimeout(reconnectTimer);
-            }
-            socket?.close();
-            socket = null;
-            socketRef.current = null;
+            unsubscribe();
         };
-    }, [applyVoiceChannelActivityUpdate, currentUser?.id, incrementChannelUnread, resetChannelUnread, setChannelUnread, token]);
+    }, [scrollToBottom, subscribeNotificationEvents]);
     const handleScrollToLoadMore = useCallback(async (event) => {
         const container = event.currentTarget;
         const distanceToBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
@@ -738,35 +765,80 @@ export const DashboardView = () => {
             },
         }));
         const previousHeight = container.scrollHeight;
-        const page = await getMessages(activeChannelId, {
-            limit: 50,
-            offset: pageState.offset,
-        });
-        setMessagesByChannel((prev) => {
-            const current = prev[activeChannelId] ?? [];
-            const next = [...page.items, ...current];
-            const deduped = next.filter((message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index);
-            return {
+        isPrependingHistoryRef.current = true;
+        try {
+            const page = await getMessages(activeChannelId, {
+                limit: 50,
+                offset: pageState.offset,
+            });
+            setMessagesByChannel((prev) => {
+                const current = prev[activeChannelId] ?? [];
+                const next = [...page.items, ...current];
+                const deduped = next.filter((message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index);
+                return {
+                    ...prev,
+                    [activeChannelId]: deduped,
+                };
+            });
+            setPagingByChannel((prev) => ({
                 ...prev,
-                [activeChannelId]: deduped,
-            };
-        });
-        setPagingByChannel((prev) => ({
-            ...prev,
-            [activeChannelId]: {
-                offset: pageState.offset + page.items.length,
-                hasMore: page.items.length === 50,
-                isLoadingMore: false,
-            },
-        }));
-        requestAnimationFrame(() => {
-            const updatedHeight = container.scrollHeight;
-            container.scrollTop = updatedHeight - previousHeight + container.scrollTop;
-        });
+                [activeChannelId]: {
+                    offset: pageState.offset + page.items.length,
+                    hasMore: page.items.length === 50,
+                    isLoadingMore: false,
+                },
+            }));
+            requestAnimationFrame(() => {
+                const updatedHeight = container.scrollHeight;
+                container.scrollTop = updatedHeight - previousHeight + container.scrollTop;
+            });
+        }
+        catch {
+            setPagingByChannel((prev) => ({
+                ...prev,
+                [activeChannelId]: {
+                    ...pageState,
+                    isLoadingMore: false,
+                },
+            }));
+        }
+        finally {
+            requestAnimationFrame(() => {
+                isPrependingHistoryRef.current = false;
+            });
+        }
     }, [activeChannelId, newMessageCount, pagingByChannel]);
     const extractFirstUrl = useCallback((text) => {
         const match = text.match(/https?:\/\/[^\s<]+/i);
-        return match ? match[0] : null;
+        if (!match)
+            return null;
+        const cleaned = match[0].replace(/[)"',}\]]+$/g, '');
+        try {
+            const parsed = new URL(cleaned);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                return null;
+            }
+            return parsed.toString();
+        }
+        catch {
+            return null;
+        }
+    }, []);
+    const isUnsafeEmbedUrl = useCallback((url) => {
+        const lower = url.toLowerCase();
+        if (lower.includes('%22') || lower.includes('%2c') || lower.includes('%7b') || lower.includes('%7d')) {
+            return true;
+        }
+        return lower.includes('","') || lower.includes('"}');
+    }, []);
+    const isDirectImageUrl = useCallback((url) => {
+        try {
+            const parsed = new URL(url);
+            return /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(parsed.pathname);
+        }
+        catch {
+            return false;
+        }
     }, []);
     useEffect(() => {
         let isCancelled = false;
@@ -774,6 +846,10 @@ export const DashboardView = () => {
         messagesNeedingEmbed.forEach((message) => {
             const url = extractFirstUrl(message.content);
             if (!url) {
+                return;
+            }
+            if (isUnsafeEmbedUrl(url)) {
+                embedCacheRef.current[url] = null;
                 return;
             }
             if (embedCacheRef.current[url] !== undefined) {
@@ -786,10 +862,36 @@ export const DashboardView = () => {
             if (embedInFlightRef.current[url]) {
                 return;
             }
+            if (isDirectImageUrl(url)) {
+                let siteName;
+                try {
+                    siteName = new URL(url).hostname;
+                }
+                catch {
+                    siteName = undefined;
+                }
+                const imageEmbed = {
+                    url,
+                    title: undefined,
+                    description: undefined,
+                    image: url,
+                    siteName,
+                };
+                embedCacheRef.current[url] = imageEmbed;
+                setAutoEmbedsByUrl((prev) => (prev[url] ? prev : { ...prev, [url]: imageEmbed }));
+                return;
+            }
             embedInFlightRef.current[url] = true;
             const apiUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-            fetch(apiUrl)
-                .then((response) => response.json())
+            const controller = new AbortController();
+            const timeoutId = window.setTimeout(() => controller.abort(), 5000);
+            fetch(apiUrl, { signal: controller.signal })
+                .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Embed proxy failed: ${response.status}`);
+                }
+                return response.json();
+            })
                 .then((payload) => {
                 const html = payload.contents ?? '';
                 if (!html) {
@@ -830,13 +932,14 @@ export const DashboardView = () => {
                 embedCacheRef.current[url] = null;
             })
                 .finally(() => {
+                window.clearTimeout(timeoutId);
                 delete embedInFlightRef.current[url];
             });
         });
         return () => {
             isCancelled = true;
         };
-    }, [activeMessages, extractFirstUrl]);
+    }, [activeMessages, extractFirstUrl, isDirectImageUrl, isUnsafeEmbedUrl]);
     const actionButtons = [
         { icon: Reply, label: 'Reply', key: 'reply' },
         { icon: Edit, label: 'Edit', key: 'edit' },
@@ -904,6 +1007,7 @@ export const DashboardView = () => {
         });
     };
     const pendingImagePreviewUrls = useMemo(() => pendingFiles.map((file) => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null)), [pendingFiles]);
+    const inFlightUploadEntries = useMemo(() => Object.entries(uploadProgressByFile), [uploadProgressByFile]);
     useEffect(() => {
         return () => {
             pendingImagePreviewUrls.forEach((url) => {
@@ -925,30 +1029,81 @@ export const DashboardView = () => {
         if (now - lastSentAt < 2000) {
             return;
         }
-        const socket = socketRef.current;
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
+        if (!sendNotificationSocketMessage) {
             return;
         }
-        socket.send(JSON.stringify({
+        const sent = sendNotificationSocketMessage({
             type: 'typing.start',
             data: {
                 channel_id: activeChannelId,
                 username: currentUser?.username ?? '',
             },
-        }));
+        });
+        if (!sent) {
+            return;
+        }
         lastTypingSentAtRef.current[key] = now;
-    }, [activeChannelId, currentUser?.username]);
-    const onSend = useCallback(async ({ content, files }) => {
+    }, [activeChannelId, currentUser?.username, sendNotificationSocketMessage]);
+    const onSend = useCallback(async ({ content, files, replyTo, }) => {
         if (!activeChannelId) {
             return false;
         }
+        const now = new Date();
+        const optimisticId = `local-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
+        const optimisticTimestamp = now.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+        const optimisticMessage = {
+            id: optimisticId,
+            authorId: currentUser?.id ?? 'you',
+            author: currentUser?.username ?? 'you',
+            avatarUrl: currentUser?.avatar_url,
+            avatarColor: 'bg-indigo-500',
+            avatarInitials: (currentUser?.username?.[0] ?? 'Y').toUpperCase(),
+            content,
+            timestamp: optimisticTimestamp,
+            date: now.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        };
+        const optimisticWithReply = replyTo
+            ? {
+                ...optimisticMessage,
+                replyTo: {
+                    messageId: replyTo.id,
+                    authorName: replyTo.author,
+                    authorColor: replyTo.authorColor,
+                    content: replyTo.content,
+                    hasAttachment: (replyTo.attachments ?? []).length > 0,
+                },
+            }
+            : optimisticMessage;
+        setMessagesByChannel((prev) => {
+            const currentMessages = prev[activeChannelKey] ?? [];
+            return {
+                ...prev,
+                [activeChannelKey]: [...currentMessages, optimisticWithReply],
+            };
+        });
+        setPendingMessageIds((prev) => ({ ...prev, [optimisticId]: true }));
+        setFailedMessageIds((prev) => {
+            if (!prev[optimisticId]) {
+                return prev;
+            }
+            const next = { ...prev };
+            delete next[optimisticId];
+            return next;
+        });
+        requestAnimationFrame(() => {
+            scrollToBottom();
+        });
         try {
             setComposerError(null);
             const attachmentIds = [];
             if (files.length > 0) {
-                setIsUploadingFiles(true);
+                setInFlightUploadCount((count) => count + 1);
                 const uploaded = await Promise.all(files.map(async (file, index) => {
-                    const uploadKey = `${file.name}-${file.size}-${index}`;
+                    const uploadKey = `${optimisticId}:${index}:${file.name}`;
                     const result = await uploadMessageAttachment(file, (progress) => {
                         setUploadProgressByFile((prev) => ({ ...prev, [uploadKey]: progress }));
                     });
@@ -956,55 +1111,84 @@ export const DashboardView = () => {
                 }));
                 attachmentIds.push(...uploaded);
             }
-            const message = await sendMessage(activeChannelId, content, attachmentIds, replyToMessage?.id);
-            const nextMessage = replyToMessage
+            const message = await sendMessage(activeChannelId, content, attachmentIds, replyTo?.id);
+            const nextMessage = replyTo
                 ? {
                     ...message,
                     replyTo: {
-                        messageId: replyToMessage.id,
-                        authorName: replyToMessage.author,
-                        authorColor: replyToMessage.authorColor,
-                        content: replyToMessage.content,
-                        hasAttachment: (replyToMessage.attachments ?? []).length > 0,
+                        messageId: replyTo.id,
+                        authorName: replyTo.author,
+                        authorColor: replyTo.authorColor,
+                        content: replyTo.content,
+                        hasAttachment: (replyTo.attachments ?? []).length > 0,
                     },
                 }
                 : message;
             setMessagesByChannel((prev) => {
                 const currentMessages = prev[activeChannelKey] ?? [];
+                const withoutOptimistic = currentMessages.filter((item) => item.id !== optimisticId);
                 return {
                     ...prev,
-                    [activeChannelKey]: [...currentMessages, nextMessage],
+                    [activeChannelKey]: [...withoutOptimistic, nextMessage],
                 };
             });
-            setReplyToMessage(null);
+            setPendingMessageIds((prev) => {
+                if (!prev[optimisticId]) {
+                    return prev;
+                }
+                const next = { ...prev };
+                delete next[optimisticId];
+                return next;
+            });
             return true;
         }
         catch (error) {
             setComposerError(error instanceof Error ? error.message : 'Failed to send message.');
+            setPendingMessageIds((prev) => {
+                if (!prev[optimisticId]) {
+                    return prev;
+                }
+                const next = { ...prev };
+                delete next[optimisticId];
+                return next;
+            });
+            setFailedMessageIds((prev) => ({ ...prev, [optimisticId]: true }));
             return false;
         }
         finally {
-            setIsUploadingFiles(false);
-            setUploadProgressByFile({});
+            setInFlightUploadCount((count) => Math.max(0, count - (files.length > 0 ? 1 : 0)));
+            setUploadProgressByFile((prev) => {
+                const next = { ...prev };
+                Object.keys(next).forEach((key) => {
+                    if (key.startsWith(`${optimisticId}:`)) {
+                        delete next[key];
+                    }
+                });
+                return next;
+            });
         }
-    }, [activeChannelId, activeChannelKey, replyToMessage?.id]);
-    const handleKeyDown = useCallback(async (event) => {
+    }, [activeChannelId, activeChannelKey, currentUser?.avatar_url, currentUser?.id, currentUser?.username, scrollToBottom]);
+    const submitComposer = useCallback(() => {
+        const content = inputRef.current?.innerText.trim() ?? '';
+        const filesToSend = pendingFiles;
+        if (!content && filesToSend.length === 0) {
+            return;
+        }
+        const replySnapshot = replyToMessage;
+        if (inputRef.current) {
+            inputRef.current.innerText = '';
+        }
+        setPendingFiles([]);
+        setComposerHasContent(false);
+        setReplyToMessage(null);
+        void onSend({ content, files: filesToSend, replyTo: replySnapshot });
+    }, [onSend, pendingFiles, replyToMessage]);
+    const handleKeyDown = useCallback((event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            const content = inputRef.current?.innerText.trim() ?? '';
-            if (!content && pendingFiles.length === 0) {
-                return;
-            }
-            const sent = await onSend({ content, files: pendingFiles });
-            if (sent) {
-                if (inputRef.current) {
-                    inputRef.current.innerText = '';
-                }
-                setPendingFiles([]);
-                setComposerHasContent(false);
-            }
+            submitComposer();
         }
-    }, [onSend, pendingFiles]);
+    }, [submitComposer]);
     const handlePaste = useCallback((event) => {
         const items = Array.from(event.clipboardData.items);
         const imageItems = items.filter((item) => item.type.startsWith('image/'));
@@ -1032,7 +1216,7 @@ export const DashboardView = () => {
         noClick: true,
         noKeyboard: true,
     });
-    const canSend = (composerHasContent || pendingFiles.length > 0) && !isUploadingFiles;
+    const canSend = composerHasContent || pendingFiles.length > 0;
     const composerPlaceholder = `Message #${activeChannel?.name ?? 'general'}`;
     const typingUsers = Object.values(typingUsersByChannel[activeChannelId] ?? {});
     const removePendingFile = (index) => {
@@ -1092,7 +1276,16 @@ export const DashboardView = () => {
             // no-op
         }
     };
-    return (_jsxs("div", { className: "relative h-full flex flex-col overflow-hidden", children: [_jsx("div", { className: "flex-none", children: _jsx(ChannelHeader, { channel: activeChannel, topic: "Welcome to the channel", showMembers: showMembers, onToggleMembers: () => setShowMembers((v) => !v) }) }), _jsxs("section", { ref: messageListRef, onScroll: handleScrollToLoadMore, className: "flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "w-16 h-16 p-3 rounded-full bg-muted text-muted-foreground mb-4" }), _jsxs("h2", { className: "text-2xl font-bold text-foreground", children: ["Welcome to #", activeChannel?.name ?? 'general'] }), _jsxs("p", { className: "text-muted-foreground text-sm", children: ["This is the start of #", activeChannel?.name ?? 'general', " channel."] })] }), _jsxs("div", { className: "flex items-center gap-3 my-4", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "text-xs text-muted-foreground whitespace-nowrap", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
+    const renderMessageContent = (msg) => {
+        if (msg.contentType !== 'game/share' || !msg.gameShare) {
+            return _jsx(TextContent, { content: msg.content, className: "text-foreground" });
+        }
+        const share = msg.gameShare;
+        const detailsHref = share.details_url ?? `/games/${share.game_id}`;
+        const playHref = share.play_url ?? `/games/${share.game_id}/play`;
+        return (_jsxs("div", { className: "mt-1 overflow-hidden rounded-lg border border-indigo-500/40 bg-indigo-500/5", children: [_jsxs("div", { className: "flex items-center gap-3 p-3", children: [_jsx("div", { className: "h-14 w-14 overflow-hidden rounded-md bg-zinc-900", children: share.thumbnail_url || share.hero_image_url ? (_jsx("img", { src: share.thumbnail_url ?? share.hero_image_url, alt: share.title ?? 'Game', className: "h-full w-full object-cover" })) : (_jsx("div", { className: "flex h-full w-full items-center justify-center", children: _jsx(Gamepad2, { className: "h-5 w-5 text-indigo-300" }) })) }), _jsxs("div", { className: "min-w-0 flex-1", children: [_jsx("div", { className: "line-clamp-1 text-sm font-semibold text-zinc-100", children: share.title ?? 'Shared game' }), _jsxs("div", { className: "mt-1 text-xs text-zinc-300", children: [share.share_type === 'score' && share.score !== undefined ? `Score: ${share.score}` : null, share.share_type === 'achievement' && share.achievement ? `Achievement: ${share.achievement}` : null, (share.comment ?? '').trim() ? ` • ${share.comment}` : '', share.share_type === 'game' ? 'Shared a game card' : ''] })] })] }), _jsxs("div", { className: "flex gap-2 border-t border-indigo-500/20 px-3 py-2", children: [_jsx(Link, { to: playHref, className: "rounded-md bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-400", children: "Play" }), _jsx(Link, { to: detailsHref, className: "rounded-md border border-zinc-600 px-2.5 py-1 text-xs font-medium text-zinc-100 hover:bg-zinc-800", children: "Details" })] })] }));
+    };
+    return (_jsxs("div", { className: "relative h-full flex flex-col overflow-hidden", children: [_jsx("div", { className: "flex-none", children: _jsx(ChannelHeader, { channel: activeChannel, topic: "Welcome to the channel", showMembers: showMembers, onToggleMembers: () => setShowMembers((v) => !v) }) }), _jsxs("section", { ref: messageListRef, onScroll: handleScrollToLoadMore, onClick: markActiveChannelAsRead, onFocus: markActiveChannelAsRead, onMouseEnter: markActiveChannelAsRead, className: "flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent", children: [_jsxs("div", { className: "py-4", children: [_jsx(Hash, { className: "w-16 h-16 p-3 rounded-full bg-muted text-muted-foreground mb-4" }), _jsxs("h2", { className: "text-2xl font-bold text-foreground", children: ["Welcome to #", activeChannel?.name ?? 'general'] }), _jsxs("p", { className: "text-muted-foreground text-sm", children: ["This is the start of #", activeChannel?.name ?? 'general', " channel."] })] }), _jsxs("div", { className: "flex items-center gap-3 my-4", children: [_jsx(Separator, { className: "flex-1" }), _jsx("span", { className: "text-xs text-muted-foreground whitespace-nowrap", children: "Today" }), _jsx(Separator, { className: "flex-1" })] }), _jsx("div", { className: "space-y-1", children: grouped.map((msg) => {
                             const username = msg.author ?? 'unknown';
                             const avatarLetter = msg.avatarInitials ?? username[0]?.toUpperCase() ?? '?';
                             const imageAttachments = (msg.attachments ?? []).filter((attachment) => attachment.type === 'image' || attachment.type === 'gif');
@@ -1101,8 +1294,10 @@ export const DashboardView = () => {
                             const reactions = msg.reactions ?? [];
                             const hasPersonalMention = Boolean((currentUser?.username && msg.content.includes(`@${currentUser.username}`)) ||
                                 msg.content.includes('@everyone'));
+                            const isPending = !!pendingMessageIds[msg.id];
+                            const isFailed = !!failedMessageIds[msg.id];
                             if (msg.startsGroup) {
-                                return (_jsxs("div", { className: cn('relative group overflow-visible', hasPersonalMention ? 'border-l-2 border-indigo-500 pl-1' : ''), children: [msg.replyTo && _jsx(ReplyPreview, { replyTo: msg.replyTo }), _jsxs("div", { className: "flex gap-3 px-2 py-1 rounded-md hover:bg-white/5", children: [msg.avatarUrl ? (_jsx("img", { src: msg.avatarUrl, alt: username, className: "mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover" })) : (_jsx("div", { className: `mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${msg.avatarColor ?? 'bg-muted'}`, children: avatarLetter })), _jsxs("div", { className: "min-w-0", children: [_jsxs("div", { className: "flex items-baseline", children: [_jsx("span", { className: `text-sm font-semibold ${msg.authorColor ?? 'text-foreground'}`, children: username }), _jsx("span", { className: "text-xs text-muted-foreground ml-2", children: msg.timestamp }), msg.editedAt && (_jsx("span", { className: "text-xs text-muted-foreground ml-2", children: "(\u0111\u00E3 ch\u1EC9nh s\u1EEDa)" }))] }), editingMessageId === msg.id ? (_jsx("textarea", { value: editingDraft, onChange: (event) => setEditingDraft(event.target.value), onKeyDown: (event) => {
+                                return (_jsxs("div", { className: cn('relative group overflow-visible', hasPersonalMention ? 'border-l-2 border-indigo-500 pl-1' : ''), children: [msg.replyTo && _jsx(ReplyPreview, { replyTo: msg.replyTo }), _jsxs("div", { className: "flex gap-3 px-2 py-1 rounded-md hover:bg-white/5", children: [msg.avatarUrl ? (_jsx("img", { src: msg.avatarUrl, alt: username, className: "mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover" })) : (_jsx("div", { className: `mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${msg.avatarColor ?? 'bg-muted'}`, children: avatarLetter })), _jsxs("div", { className: "min-w-0", children: [_jsxs("div", { className: "flex items-baseline", children: [_jsx("span", { className: `text-sm font-semibold ${msg.authorColor ?? 'text-foreground'}`, children: username }), _jsx("span", { className: "text-xs text-muted-foreground ml-2", children: msg.timestamp }), isPending && (_jsx("span", { className: "ml-2 text-xs text-amber-400", children: "\u0111ang g\u1EEDi..." })), isFailed && (_jsx("span", { className: "ml-2 text-xs text-red-400", children: "g\u1EEDi th\u1EA5t b\u1EA1i" })), msg.editedAt && (_jsx("span", { className: "text-xs text-muted-foreground ml-2", children: "(\u0111\u00E3 ch\u1EC9nh s\u1EEDa)" }))] }), editingMessageId === msg.id ? (_jsx("textarea", { value: editingDraft, onChange: (event) => setEditingDraft(event.target.value), onKeyDown: (event) => {
                                                                 if (event.key === 'Enter' && !event.shiftKey) {
                                                                     event.preventDefault();
                                                                     void saveEditedMessage();
@@ -1112,7 +1307,7 @@ export const DashboardView = () => {
                                                                     setEditingMessageId(null);
                                                                     setEditingDraft('');
                                                                 }
-                                                            }, className: "mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none" })) : (_jsx(TextContent, { content: msg.content, className: "text-foreground" })), imageAttachments.length > 0 && _jsx(ImageAttachment, { attachments: imageAttachments }), videoAttachments.map((attachment) => (_jsx(VideoAttachment, { url: attachment.url }, attachment.id))), fileAttachments.map((attachment) => (_jsx(FileAttachment, { attachment: attachment }, attachment.id))), (msg.embeds && msg.embeds.length > 0
+                                                            }, className: "mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none" })) : renderMessageContent(msg), imageAttachments.length > 0 && _jsx(ImageAttachment, { attachments: imageAttachments }), videoAttachments.map((attachment) => (_jsx(VideoAttachment, { url: attachment.url }, attachment.id))), fileAttachments.map((attachment) => (_jsx(FileAttachment, { attachment: attachment }, attachment.id))), (msg.embeds && msg.embeds.length > 0
                                                             ? msg.embeds
                                                             : (() => {
                                                                 const contentUrl = extractFirstUrl(msg.content);
@@ -1129,7 +1324,7 @@ export const DashboardView = () => {
                                                 setEditingMessageId(null);
                                                 setEditingDraft('');
                                             }
-                                        }, className: "mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none" })) : (_jsx(TextContent, { content: msg.content, className: "text-foreground" })), imageAttachments.length > 0 && _jsx(ImageAttachment, { attachments: imageAttachments }), videoAttachments.map((attachment) => (_jsx(VideoAttachment, { url: attachment.url }, attachment.id))), fileAttachments.map((attachment) => (_jsx(FileAttachment, { attachment: attachment }, attachment.id))), (msg.embeds && msg.embeds.length > 0
+                                        }, className: "mt-1 min-h-[60px] w-full rounded-md border border-border bg-background/60 p-2 text-sm text-foreground outline-none" })) : renderMessageContent(msg), (isPending || isFailed) && (_jsxs("div", { className: "mt-0.5 text-xs", children: [isPending && _jsx("span", { className: "text-amber-400", children: "\u0111ang g\u1EEDi..." }), !isPending && isFailed && _jsx("span", { className: "text-red-400", children: "g\u1EEDi th\u1EA5t b\u1EA1i" })] })), imageAttachments.length > 0 && _jsx(ImageAttachment, { attachments: imageAttachments }), videoAttachments.map((attachment) => (_jsx(VideoAttachment, { url: attachment.url }, attachment.id))), fileAttachments.map((attachment) => (_jsx(FileAttachment, { attachment: attachment }, attachment.id))), (msg.embeds && msg.embeds.length > 0
                                         ? msg.embeds
                                         : (() => {
                                             const contentUrl = extractFirstUrl(msg.content);
@@ -1143,19 +1338,26 @@ export const DashboardView = () => {
                         list.scrollTop = list.scrollHeight;
                         setNewMessageCount(0);
                         setIsNearBottom(true);
-                    }, children: ["\u2193 ", newMessageCount, " tin nh\u1EAFn m\u1EDBi"] }) })), _jsx("footer", { className: "flex-none mx-4 mb-4", children: _jsxs("div", { ...getRootProps(), className: `relative rounded-lg bg-[hsl(240,3.7%,18%)] ${canSend ? 'ring-1 ring-indigo-500/30' : ''}`, children: [isDragActive && (_jsx("div", { className: "absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-indigo-500/50 bg-indigo-500/10", children: _jsx("p", { className: "font-semibold text-indigo-400", children: "Drop files to upload" }) })), _jsx("input", { ...getInputProps() }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-16 w-16 rounded-md border border-border object-cover" })) : (_jsxs("div", { className: "flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: [_jsx(FileText, { className: "h-5 w-5 text-muted-foreground" }), _jsx("span", { className: "w-12 truncate text-center text-[9px] text-muted-foreground", children: file.name })] })), _jsx("button", { type: "button", onClick: () => removePendingFile(index), disabled: isUploadingFiles, className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), isUploadingFiles && (_jsxs("div", { className: "px-3 pb-2 text-xs text-muted-foreground", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Loader2, { className: "h-3.5 w-3.5 animate-spin" }), _jsx("span", { children: "Uploading attachments..." })] }), pendingFiles.map((file, index) => {
-                                    const key = `${file.name}-${file.size}-${index}`;
-                                    const progress = uploadProgressByFile[key] ?? 0;
-                                    return (_jsxs("p", { className: "truncate", children: [file.name, ": ", progress, "%"] }, key));
+                    }, children: ["\u2193 ", newMessageCount, " tin nh\u1EAFn m\u1EDBi"] }) })), _jsx("footer", { className: "flex-none mx-4 mb-4", children: _jsxs("div", { ...getRootProps(), className: `relative rounded-lg bg-[hsl(240,3.7%,18%)] ${canSend ? 'ring-1 ring-indigo-500/30' : ''}`, children: [isDragActive && (_jsx("div", { className: "absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-indigo-500/50 bg-indigo-500/10", children: _jsx("p", { className: "font-semibold text-indigo-400", children: "Drop files to upload" }) })), _jsx("input", { ...getInputProps() }), pendingFiles.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 px-3 pt-2", children: pendingFiles.map((file, index) => (_jsxs("div", { className: "group relative", children: [file.type.startsWith('image/') ? (_jsx("img", { src: pendingImagePreviewUrls[index] ?? undefined, alt: file.name, className: "h-16 w-16 rounded-md border border-border object-cover" })) : (_jsxs("div", { className: "flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-md border border-border bg-[hsl(240,4%,18%)]", children: [_jsx(FileText, { className: "h-5 w-5 text-muted-foreground" }), _jsx("span", { className: "w-12 truncate text-center text-[9px] text-muted-foreground", children: file.name })] })), _jsx("button", { type: "button", onClick: () => removePendingFile(index), className: "absolute -right-1.5 -top-1.5 hidden h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex", children: _jsx(X, { className: "h-2.5 w-2.5" }) })] }, `${file.name}-${index}`))) })), inFlightUploadCount > 0 && (_jsxs("div", { className: "px-3 pb-2 text-xs text-muted-foreground", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Loader2, { className: "h-3.5 w-3.5 animate-spin" }), _jsx("span", { children: "Uploading attachments..." })] }), inFlightUploadEntries.map(([key, progress]) => {
+                                    const fileLabel = key.split(':').slice(2).join(':') || 'file';
+                                    return (_jsxs("p", { className: "truncate", children: [fileLabel, ": ", progress, "%"] }, key));
                                 })] })), composerError && (_jsx("p", { className: "px-3 pb-2 text-xs text-red-400", children: composerError })), replyToMessage && (_jsxs("div", { className: "mx-3 mt-2 rounded-md border border-border bg-background/50 px-2 py-1", children: [_jsx(ReplyPreview, { replyTo: {
                                         messageId: replyToMessage.id,
                                         authorName: replyToMessage.author,
                                         authorColor: replyToMessage.authorColor,
                                         content: replyToMessage.content,
                                         hasAttachment: (replyToMessage.attachments ?? []).length > 0,
-                                    } }), _jsx("button", { type: "button", className: "mt-1 text-xs text-muted-foreground hover:text-foreground", onClick: () => setReplyToMessage(null), children: "Hu\u1EF7 tr\u1EA3 l\u1EDDi" })] })), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground", type: "button", onClick: open, disabled: isUploadingFiles, children: _jsx(Plus, { className: "h-5 w-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onKeyDown: handleKeyDown, onPaste: handlePaste, onInput: updateComposerState, className: "min-h-[44px] max-h-[300px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": composerPlaceholder }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
+                                    } }), _jsx("button", { type: "button", className: "mt-1 text-xs text-muted-foreground hover:text-foreground", onClick: () => setReplyToMessage(null), children: "Hu\u1EF7 tr\u1EA3 l\u1EDDi" })] })), _jsxs("div", { className: "flex items-end gap-2 px-3", children: [_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground", type: "button", onClick: open, children: _jsx(Plus, { className: "h-5 w-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: "Add Attachment" })] }), _jsx("div", { ref: inputRef, contentEditable: true, suppressContentEditableWarning: true, onFocus: markActiveChannelAsRead, onClick: markActiveChannelAsRead, onKeyDown: handleKeyDown, onPaste: handlePaste, onInput: updateComposerState, className: "min-h-[44px] max-h-[300px] min-w-0 flex-1 overflow-y-auto break-words bg-transparent py-[11px] text-[15px] text-foreground outline-none", "data-placeholder": composerPlaceholder }), _jsxs("div", { className: "flex items-center gap-1 pb-2", children: [[
                                             { icon: Gift, label: 'Gift' },
                                             { icon: Image, label: 'GIF' },
-                                        ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Icon, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsx(EmojiPicker, { align: "end", onSelect: insertEmoji, trigger: (_jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Smile, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) })) })] })] }), typingUsers.length > 0 && (_jsxs("p", { className: "px-3 pb-2 text-xs italic text-muted-foreground", children: [typingUsers.join(', '), " \u0111ang nh\u1EAFn tin..."] }))] }) })] }));
+                                            { icon: Gamepad2, label: 'Games' },
+                                        ].map(({ icon: Icon, label }) => (_jsxs(Tooltip, { children: [_jsx(TooltipTrigger, { asChild: true, children: _jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", onClick: () => {
+                                                            if (label === 'Games') {
+                                                                setIsGamesLauncherOpen(true);
+                                                            }
+                                                        }, children: _jsx(Icon, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) }) }), _jsx(TooltipContent, { children: label })] }, label))), _jsx(EmojiPicker, { align: "end", onSelect: insertEmoji, trigger: (_jsx("button", { className: "cursor-pointer p-1.5 rounded-md hover:bg-accent hover:text-foreground transition-colors duration-150 text-muted-foreground", type: "button", children: _jsx(Smile, { className: "w-5 h-5 text-muted-foreground hover:text-foreground" }) })) })] })] }), typingUsers.length > 0 && (_jsxs("p", { className: "px-3 pb-2 text-xs italic text-muted-foreground", children: [typingUsers.join(', '), " \u0111ang nh\u1EAFn tin..."] }))] }) }), _jsx(Dialog, { open: isGamesLauncherOpen, onOpenChange: setIsGamesLauncherOpen, children: _jsxs(DialogContent, { className: "max-w-xl", children: [_jsxs(DialogHeader, { children: [_jsxs(DialogTitle, { className: "flex items-center gap-2", children: [_jsx(Gamepad2, { className: "h-4 w-4" }), "Quick launcher"] }), _jsx(DialogDescription, { children: "Chon game de mo nhanh trang play." })] }), _jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", children: quickGames.map((game) => (_jsxs("button", { type: "button", onClick: () => {
+                                    setIsGamesLauncherOpen(false);
+                                    void navigate(`/games/${game.id}/play`);
+                                }, className: "rounded-md border border-border bg-background p-3 text-left hover:bg-accent", children: [_jsx("div", { className: "text-sm font-medium", children: game.title }), _jsxs("div", { className: "text-xs text-muted-foreground", children: [game.source, " \u2022 ", game.rating.toFixed(1), " stars"] })] }, game.id))) })] }) })] }));
 };
 //# sourceMappingURL=DashboardView.js.map

@@ -76,6 +76,13 @@ const mapMessage = (item) => {
     const fallbackAuthor = `user-${item.author_id.slice(0, 6)}`;
     const author = item.author?.username ?? fallbackAuthor;
     const { timestamp, date } = formatTimestamp(item.created_at);
+    const contentType = item.content?.type ?? 'text/plain';
+    const payload = item.content?.payload;
+    const normalizedContent = typeof payload === 'string'
+        ? payload
+        : payload !== undefined && payload !== null
+            ? JSON.stringify(payload)
+            : '';
     return {
         id: item.id,
         authorId: item.author_id,
@@ -83,7 +90,12 @@ const mapMessage = (item) => {
         avatarUrl: item.author?.avatar_url,
         avatarColor: item.author?.avatar_color ?? colorFromId(item.author_id),
         avatarInitials: initialsFromName(author),
-        content: item.content?.payload ?? '',
+        contentType,
+        content: normalizedContent,
+        contentData: payload,
+        gameShare: contentType === 'game/share' && payload && typeof payload === 'object'
+            ? payload
+            : undefined,
         timestamp,
         date,
         editedAt: item.updated_at && item.updated_at !== item.created_at

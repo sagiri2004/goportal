@@ -8,6 +8,7 @@ import (
 
 	"github.com/sagiri2004/goportal/global"
 	"github.com/sagiri2004/goportal/pkg/notification"
+	"github.com/sagiri2004/goportal/pkg/realtime"
 	"github.com/sagiri2004/goportal/pkg/scripts"
 	"go.uber.org/zap"
 )
@@ -20,6 +21,7 @@ func InitAndRegisterWatermill() error {
 		if err := notification.RegisterHandlers(global.WMRouter, global.Subscriber); err != nil {
 			return err
 		}
+		realtime.RegisterWatermillHandlers(global.WMRouter, global.Subscriber, global.GameHub)
 	}
 	return nil
 }

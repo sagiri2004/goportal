@@ -182,17 +182,35 @@ const normalizeEventType = (raw: unknown): string =>
   typeof raw === 'string' ? raw.trim().toUpperCase() : ''
 
 const resolveEnvelopeEventType = (event: NotificationSocketEnvelope): string => {
+  const payload = normalizeSocketPayload(event.payload)
   const topLevelType = normalizeEventType(event.type)
-  const payloadType = normalizeEventType(event.payload?.event_type ?? event.payload?.type)
+  const payloadType = normalizeEventType(payload.event_type ?? payload.type)
   if (topLevelType === 'POPUP') {
     if (payloadType) {
       return payloadType
     }
-    if (event.payload?.message_id && event.payload?.channel_id) {
+    if (payload.message_id && payload.channel_id) {
       return 'CHAT_MESSAGE_CREATED'
     }
   }
   return payloadType || topLevelType
+}
+
+const normalizeSocketPayload = (payload: unknown): Record<string, any> => {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return payload as Record<string, any>
+  }
+  if (typeof payload === 'string') {
+    try {
+      const parsed = JSON.parse(payload)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>
+      }
+    } catch {
+      return {}
+    }
+  }
+  return {}
 }
 
 const mapSocketAttachments = (attachments: any): ChatMessage['attachments'] => {
@@ -393,6 +411,19 @@ export const DashboardView: React.FC = () => {
     setIsNearBottom(true)
   }, [])
 
+  const markActiveChannelAsRead = useCallback(() => {
+    const channelId = activeChannelIdRef.current
+    if (!channelId) {
+      return
+    }
+    resetChannelUnreadRef.current?.(channelId)
+    void markChannelRead(channelId).catch(() => {})
+    sendNotificationSocketMessage?.({
+      type: 'channel.focus',
+      data: { channel_id: channelId },
+    })
+  }, [sendNotificationSocketMessage])
+
   useEffect(() => {
     return () => {
       Object.values(typingTimersRef.current).forEach((timer) => window.clearTimeout(timer))
@@ -501,12 +532,52 @@ export const DashboardView: React.FC = () => {
           isLoadingMore: false,
         },
       }))
+      requestAnimationFrame(() => {
+        scrollToBottom()
+        markActiveChannelAsRead()
+      })
     }
 
-    void loadInitialMessages()
+    void loadInitialMessages().catch(() => {})
 
     return () => {
       isCancelled = true
+    }
+  }, [activeChannelId, markActiveChannelAsRead, scrollToBottom])
+
+  useEffect(() => {
+    if (!activeChannelId) {
+      return
+    }
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      if (cancelled) {
+        return
+      }
+      void getMessages(activeChannelId, { limit: 50, offset: 0 })
+        .then((page) => {
+          if (cancelled) {
+            return
+          }
+          setMessagesByChannel((prev) => {
+            const current = prev[activeChannelId] ?? []
+            if (current.length === page.items.length && current[current.length - 1]?.id === page.items[page.items.length - 1]?.id) {
+              return prev
+            }
+            const merged = [...current, ...page.items].filter(
+              (message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index
+            )
+            return {
+              ...prev,
+              [activeChannelId]: merged,
+            }
+          })
+        })
+        .catch(() => {})
+    }, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
     }
   }, [activeChannelId])
 
@@ -539,13 +610,8 @@ export const DashboardView: React.FC = () => {
     if (!activeChannelId) {
       return
     }
-    resetChannelUnread?.(activeChannelId)
-    void markChannelRead(activeChannelId).catch(() => {})
-    sendNotificationSocketMessage?.({
-      type: 'channel.focus',
-      data: { channel_id: activeChannelId },
-    })
-  }, [activeChannelId, resetChannelUnread, sendNotificationSocketMessage])
+    markActiveChannelAsRead()
+  }, [activeChannelId, markActiveChannelAsRead])
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') {
@@ -644,7 +710,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (VOICE_ACTIVITY_EVENT_TYPES.has(canonicalEventType)) {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const serverId = typeof payload.server_id === 'string' ? payload.server_id : ''
         const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : ''
         const participants = Array.isArray(payload.participants) ? payload.participants : []
@@ -660,7 +726,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (canonicalEventType === 'CHANNEL_UNREAD') {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const channelId = payload.channel_id as string | undefined
         const unreadCount = Number(payload.unread_count ?? 0)
         if (!channelId) {
@@ -675,7 +741,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (canonicalEventType === 'MENTION') {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         if (
           typeof window !== 'undefined' &&
           typeof Notification !== 'undefined' &&
@@ -691,7 +757,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (canonicalEventType === 'TYPING' || canonicalEventType === 'TYPING_START') {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const channelId = payload.channel_id as string | undefined
         const userId = payload.user_id as string | undefined
         const username = payload.username as string | undefined
@@ -721,7 +787,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (canonicalEventType === 'TYPING_STOP') {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const channelId = payload.channel_id as string | undefined
         const userId = payload.user_id as string | undefined
         if (!channelId || !userId) {
@@ -741,14 +807,17 @@ export const DashboardView: React.FC = () => {
       }
 
       if (MESSAGE_CREATED_EVENT_TYPES.has(canonicalEventType)) {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
+        const channelId = typeof payload.channel_id === 'string' ? payload.channel_id : ''
+        if (!channelId) {
+          return
+        }
         const message = mapSocketPayloadToMessage(payload, event.timestamp, currentUserIdRef.current)
         if (!message) {
           return
         }
 
         setMessagesByChannel((prev) => {
-          const channelId = payload.channel_id as string
           const current = prev[channelId] ?? []
           if (current.some((item) => item.id === message.id)) {
             return prev
@@ -762,6 +831,7 @@ export const DashboardView: React.FC = () => {
           if (activeChannelIdRef.current !== channelId) {
             incrementChannelUnreadRef.current?.(channelId)
           } else {
+            resetChannelUnreadRef.current?.(channelId)
             void markChannelRead(channelId).catch(() => {})
             requestAnimationFrame(() => {
               scrollToBottom()
@@ -784,7 +854,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (MESSAGE_UPDATED_EVENT_TYPES.has(canonicalEventType)) {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
           return
@@ -829,7 +899,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (MESSAGE_DELETED_EVENT_TYPES.has(canonicalEventType)) {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
           return
@@ -840,7 +910,7 @@ export const DashboardView: React.FC = () => {
       }
 
       if (REACTION_ADDED_EVENT_TYPES.has(canonicalEventType) || REACTION_REMOVED_EVENT_TYPES.has(canonicalEventType)) {
-        const payload = event.payload ?? {}
+        const payload = normalizeSocketPayload(event.payload)
         const messageId = payload.message_id ?? payload.id
         if (!messageId) {
           return
@@ -1547,6 +1617,9 @@ export const DashboardView: React.FC = () => {
       <section
         ref={messageListRef}
         onScroll={handleScrollToLoadMore}
+        onClick={markActiveChannelAsRead}
+        onFocus={markActiveChannelAsRead}
+        onMouseEnter={markActiveChannelAsRead}
         className="flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
       >
         <div className="py-4">
@@ -1927,6 +2000,8 @@ export const DashboardView: React.FC = () => {
               ref={inputRef}
               contentEditable
               suppressContentEditableWarning
+              onFocus={markActiveChannelAsRead}
+              onClick={markActiveChannelAsRead}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onInput={updateComposerState}

@@ -1,4 +1,4 @@
-export type UploadMediaType = 'avatar' | 'server_icon' | 'server_banner' | 'message_attachment' | 'role_icon';
+export type UploadMediaType = 'avatar' | 'server_icon' | 'server_banner' | 'message_attachment' | 'role_icon' | 'game_asset';
 export type UploadResult = {
     attachment_id?: string;
     media_type: UploadMediaType;
