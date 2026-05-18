@@ -480,18 +480,30 @@ const UserPanel: React.FC<{
             </TooltipTrigger>
             <TooltipContent>Headphones</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onOpenUserSettings}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[hsl(0,0%,70%)] transition-colors hover:bg-white/[0.06] hover:text-[hsl(0,0%,96%)]"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onOpenUserSettings}>
+                <Settings className="mr-2 h-4 w-4" /> User Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onLogout}>
+                <LogOut className="mr-2 h-4 w-4" /> Đăng xuất
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

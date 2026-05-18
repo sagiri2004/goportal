@@ -190,7 +190,29 @@ func (s *voiceService) GenerateLivestreamToken(ctx context.Context, actorID, cha
 
 	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
 	if err != nil {
-		return nil, err
+		// Tournament livestream viewer fallback:
+		// allow server members to watch public match livestreams even if strict
+		// channel permission check fails.
+		if mode != livestreamModeViewer {
+			return nil, err
+		}
+		fallbackChannel, findErr := s.channelRepo.FindByID(ctx, strings.TrimSpace(channelID))
+		if findErr != nil {
+			return nil, err
+		}
+		if fallbackChannel.Type != models.ChannelTypeLivestream {
+			return nil, err
+		}
+		if _, memberErr := s.serverRepo.FindMember(ctx, fallbackChannel.ServerID, strings.TrimSpace(actorID)); memberErr != nil {
+			return nil, err
+		}
+		if s.tournamentRepo == nil {
+			return nil, err
+		}
+		if _, wsErr := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, fallbackChannel.ID); wsErr != nil {
+			return nil, err
+		}
+		channel = fallbackChannel
 	}
 	if channel.Type != models.ChannelTypeLivestream {
 		return nil, apperr.E("LIVESTREAM_CHANNEL_REQUIRED", nil)

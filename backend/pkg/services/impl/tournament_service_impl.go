@@ -1267,15 +1267,7 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 	if err != nil {
 		return nil, err
 	}
-	caster, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeVoice, fmt.Sprintf("caster-%s", channelSuffix), true)
-	if err != nil {
-		return nil, err
-	}
 	referee, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeVoice, fmt.Sprintf("referee-%s", channelSuffix), true)
-	if err != nil {
-		return nil, err
-	}
-	spectator, err := s.createChannel(ctx, t.ServerID, &parentID, models.ChannelTypeVoice, fmt.Sprintf("spectator-%s", channelSuffix), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1291,10 +1283,11 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 		CategoryChannelID:   category.ID,
 		TeamAChannelID:      teamA.ID,
 		TeamBChannelID:      teamB.ID,
-		CasterChannelID:     caster.ID,
+		// Legacy DB columns kept for compatibility; caster/spectator channels are removed.
+		CasterChannelID:     referee.ID,
 		AdminChannelID:      referee.ID,
 		RefereeChannelID:    referee.ID,
-		SpectatorChannelID:  spectator.ID,
+		SpectatorChannelID:  referee.ID,
 		LivestreamChannelID: &livestreamID,
 		CreatedBy:           actorID,
 	}
@@ -1359,9 +1352,6 @@ func (s *tournamentService) seedWorkspaceMembers(ctx context.Context, tournament
 	}
 	addUsers(workspace.TeamAChannelID, match.Participant1)
 	addUsers(workspace.TeamBChannelID, match.Participant2)
-	// Players also join spectator channel so admins/referees can monitor both screen shares in one room.
-	addUsers(workspace.SpectatorChannelID, match.Participant1)
-	addUsers(workspace.SpectatorChannelID, match.Participant2)
 	return nil
 }
 
@@ -1388,9 +1378,7 @@ func (s *tournamentService) seedRoleMembers(
 		code := roleByID[bindings[i].RoleID]
 		switch code {
 		case models.TournamentRoleCaster:
-			_ = s.channelRepo.AddMember(ctx, workspace.CasterChannelID, bindings[i].UserID)
-			// Casters also join public spectator room to stream/commentate to audience.
-			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, bindings[i].UserID)
+			// caster voice channel removed.
 		case models.TournamentRoleAdmin, models.TournamentRoleReferee:
 			refereeChannelID := workspace.RefereeChannelID
 			if strings.TrimSpace(refereeChannelID) == "" {
@@ -1401,11 +1389,8 @@ func (s *tournamentService) seedRoleMembers(
 			// player screen-share streams directly at source.
 			_ = s.channelRepo.AddMember(ctx, workspace.TeamAChannelID, bindings[i].UserID)
 			_ = s.channelRepo.AddMember(ctx, workspace.TeamBChannelID, bindings[i].UserID)
-			_ = s.channelRepo.AddMember(ctx, workspace.CasterChannelID, bindings[i].UserID)
-			// Referee/admin can also observe public room without publishing their own screen.
-			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, bindings[i].UserID)
 		case models.TournamentRoleSpectator:
-			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, bindings[i].UserID)
+			// spectator voice channel removed.
 		}
 	}
 
@@ -1419,16 +1404,8 @@ func (s *tournamentService) seedRoleMembers(
 		}
 	}
 
-	// Default policy: everyone in server who is not a current player is spectator.
-	serverMembers, err := s.serverRepo.ListMembers(ctx, serverID)
-	if err == nil {
-		for i := range serverMembers {
-			if _, isPlayer := playerIDs[serverMembers[i].ID]; isPlayer {
-				continue
-			}
-			_ = s.channelRepo.AddMember(ctx, workspace.SpectatorChannelID, serverMembers[i].ID)
-		}
-	}
+	_ = serverID
+	_ = playerIDs
 	return nil
 }
 
@@ -1539,20 +1516,9 @@ func (s *tournamentService) GenerateMatchObserverTokens(ctx context.Context, act
 	if err != nil {
 		return nil, err
 	}
-	caster, err := buildToken(workspace.CasterChannelID)
-	if err != nil {
-		return nil, err
-	}
-	spectator, err := buildToken(workspace.SpectatorChannelID)
-	if err != nil {
-		return nil, err
-	}
-
 	return &services.TournamentObserverTokenBundle{
-		TeamA:     teamA,
-		TeamB:     teamB,
-		Caster:    &caster,
-		Spectator: &spectator,
+		TeamA: teamA,
+		TeamB: teamB,
 	}, nil
 }
 

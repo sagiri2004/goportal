@@ -1617,9 +1617,7 @@ export const AppShell = () => {
                 const roleNodes = [
                     buildNode(workspace?.team_a_channel_id, 'team-a', `team-a-r${match.round}-m${match.match_number}`, 'voice'),
                     buildNode(workspace?.team_b_channel_id, 'team-b', `team-b-r${match.round}-m${match.match_number}`, 'voice'),
-                    buildNode(workspace?.caster_channel_id, 'caster', `caster-r${match.round}-m${match.match_number}`, 'voice'),
                     buildNode(workspace?.referee_channel_id ?? workspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
-                    buildNode(workspace?.spectator_channel_id, 'spectator', `spectator-r${match.round}-m${match.match_number}`, 'voice'),
                     buildNode(workspace?.livestream_channel_id ?? undefined, 'livestream', `live-r${match.round}-m${match.match_number}`, 'livestream'),
                 ];
                 for (const node of roleNodes) {
