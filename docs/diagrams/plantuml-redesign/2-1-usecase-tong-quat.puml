@@ -1,0 +1,44 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Khách" as Guest
+actor "Người dùng" as User
+actor "Chủ máy chủ" as Owner
+actor "Nhà phát triển" as Dev
+actor "Quản trị viên" as Admin
+Owner --|> User
+Dev --|> User
+rectangle "Nền tảng cộng đồng game" {
+  usecase "Quản lý thông tin\ncá nhân" as UC_Profile
+  usecase "Quản lý bạn bè" as UC_Friend
+  usecase "Tham gia máy chủ" as UC_JoinServer
+  usecase "Quản lý tin nhắn" as UC_Message
+  usecase "Chơi game và\nđồng bộ" as UC_Play
+  usecase "Tham gia giải đấu" as UC_JoinTournament
+  usecase "Quản lý máy chủ\nvà thành viên" as UC_Server
+  usecase "Quản lý kênh\nvà phân quyền" as UC_Channel
+  usecase "Quản lý giải đấu" as UC_Tournament
+  usecase "Phát triển và\nđăng tải game" as UC_PublishGame
+  usecase "Quản trị người dùng\nvà chợ game" as UC_Admin
+}
+Guest --> UC_Play
+User --> UC_Profile
+User --> UC_Friend
+User --> UC_JoinServer
+User --> UC_Message
+User --> UC_Play
+User --> UC_JoinTournament
+Owner --> UC_Server
+Owner --> UC_Channel
+Owner --> UC_Tournament
+Dev --> UC_PublishGame
+Admin --> UC_Admin
+@enduml

@@ -1,0 +1,54 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Người tổ chức" as Organizer
+actor "Quản trị\ngiải đấu" as Admin
+actor "Người tham gia" as Player
+actor "Đội trưởng" as Captain
+actor "Trọng tài" as Referee
+actor "Bình luận viên" as Caster
+actor "Khán giả" as Spectator
+rectangle "Vận hành trận đấu trong giải đấu" {
+  usecase "Bắt đầu trận" as UC_StartMatch
+  usecase "Tạo workspace\ntrận" as UC_Workspace
+  usecase "Cập nhật\ntrạng thái trận" as UC_Status
+  usecase "Xem bracket" as UC_Bracket
+  usecase "Xem lịch trận" as UC_Schedule
+  usecase "Báo cáo\nkết quả" as UC_Report
+  usecase "Khiếu nại\nkết quả" as UC_Dispute
+  usecase "Xác minh\nkết quả" as UC_Verify
+  usecase "Ghi đè\nkết quả" as UC_Override
+  usecase "Truy cập\nkênh caster" as UC_Caster
+  usecase "Theo dõi\nlivestream" as UC_Stream
+  usecase "Xem bảng\nxếp hạng" as UC_Standing
+}
+Organizer --> UC_StartMatch
+Organizer --> UC_Status
+Organizer --> UC_Override
+Admin --> UC_Workspace
+Admin --> UC_Override
+Player --> UC_Bracket
+Player --> UC_Schedule
+Player --> UC_Report
+Player --> UC_Dispute
+Captain --> UC_Report
+Captain --> UC_Dispute
+Referee --> UC_Verify
+Referee --> UC_Dispute
+Caster --> UC_Caster
+Caster --> UC_Stream
+Spectator --> UC_Bracket
+Spectator --> UC_Stream
+Spectator --> UC_Standing
+UC_StartMatch ..> UC_Workspace : <<include>>
+UC_Verify ..> UC_Report : <<extend>>
+UC_Override ..> UC_Verify : <<extend>>
+@enduml

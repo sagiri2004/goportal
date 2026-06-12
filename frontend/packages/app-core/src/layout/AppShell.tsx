@@ -2477,6 +2477,8 @@ export const AppShell: React.FC = () => {
                     setIsServerSettingsOpen(true)
                   }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  currentUsername={currentUser?.username}
+                  currentAvatarUrl={currentUser?.avatar_url ?? null}
                   onLogout={handleLogout}
                   voiceState={voiceState}
                   onLeaveVoiceChannel={() => void handleLeaveVoiceChannel()}

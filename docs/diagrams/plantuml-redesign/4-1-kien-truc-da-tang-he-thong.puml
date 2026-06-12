@@ -1,0 +1,38 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+top to bottom direction
+rectangle "Tầng trình diễn" as Presentation {
+  [Ứng dụng Web]
+  [Ứng dụng Desktop]
+}
+rectangle "Tầng giao tiếp API" as API {
+  [REST API]
+  [WebSocket Gateway]
+}
+rectangle "Tầng nghiệp vụ" as Service {
+  [Dịch vụ cộng đồng]
+  [Dịch vụ game]
+  [Dịch vụ giải đấu]
+  [Dịch vụ realtime]
+}
+rectangle "Tầng dữ liệu và hạ tầng" as Data {
+  database "MySQL" as MySQL
+  database "Redis" as Redis
+  [Cloudinary]
+  [LiveKit]
+}
+Presentation --> API
+API --> Service
+Service --> MySQL
+Service --> Redis
+Service --> Cloudinary
+Service --> LiveKit
+@enduml

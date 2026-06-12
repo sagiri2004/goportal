@@ -1,0 +1,47 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+title Quy trình nghiệp vụ Quản lý và Tham gia máy chủ
+|Chủ máy chủ|
+start
+:Tạo máy chủ;
+|Hệ thống|
+:Khởi tạo vai trò và kênh mặc định;
+|Chủ máy chủ|
+:Cấu hình thông tin, kênh và quyền;
+|Người dùng|
+:Xem danh sách máy chủ;
+if (Máy chủ công khai?) then (Có)
+  :Chọn tham gia máy chủ;
+  |Hệ thống|
+  :Thêm thành viên;
+  :Gán vai trò mặc định;
+else (Không)
+  :Gửi yêu cầu tham gia;
+  |Hệ thống|
+  :Lưu yêu cầu chờ duyệt;
+  |Người có quyền duyệt|
+  :Xem yêu cầu tham gia;
+  if (Chấp nhận?) then (Có)
+    |Hệ thống|
+    :Thêm thành viên;
+    :Gán vai trò mặc định;
+  else (Không)
+    |Hệ thống|
+    :Cập nhật trạng thái từ chối;
+    stop
+  endif
+endif
+|Người dùng|
+:Truy cập các kênh được phép;
+|Hệ thống|
+:Áp dụng RBAC khi truy cập kênh;
+stop
+@enduml

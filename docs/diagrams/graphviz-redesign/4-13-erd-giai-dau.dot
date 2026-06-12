@@ -1,0 +1,33 @@
+digraph G {
+  graph [rankdir=LR, charset="UTF-8", labelloc=t, label="ERD cụm quản lý giải đấu", fontsize=22, fontname="Arial", nodesep=0.45, ranksep=0.7, splines=ortho];
+  node [shape=record, fontname="Arial", fontsize=13, color="#333333", style="filled", fillcolor="#F7F7F7"];
+  edge [fontname="Arial", fontsize=11, color="#333333", arrowsize=0.65];
+
+  users [label="{users|PK idlusernamel}"];
+  servers [label="{servers|PK idlnamel}"];
+  games [label="{user_games|PK idltitlel}"];
+  tournaments [label="{tournaments|PK idlserver_idlgame_idlorganizer_idlformatlstatusl}"];
+  roles [label="{tournament_roles|PK idltournament_idluser_idlrolel}"];
+  participants [label="{tournament_participants|PK idltournament_idluser_idlseedlchecked_inl}"];
+  teams [label="{tournament_teams|PK idltournament_idlcaptain_idlnamel}"];
+  team_members [label="{team_members|PK team_idlPK user_idl}"];
+  matches [label="{tournament_matches|PK idltournament_idlroundlstatuslwinner_idl}"];
+  reports [label="{match_reports|PK idlmatch_idlreporter_idlwinner_idlstatusl}"];
+  workspaces [label="{match_workspaces|PK idlmatch_idlcategory_channel_idl}"];
+
+  servers -> tournaments [label="1-n"];
+  games -> tournaments [label="1-n"];
+  users -> tournaments [label="organizer"];
+  tournaments -> roles [label="1-n"];
+  tournaments -> participants [label="1-n"];
+  tournaments -> teams [label="1-n"];
+  tournaments -> matches [label="1-n"];
+  users -> roles [label="1-n"];
+  users -> participants [label="1-n"];
+  users -> teams [label="captain"];
+  teams -> team_members [label="1-n"];
+  users -> team_members [label="1-n"];
+  matches -> reports [label="1-n"];
+  users -> reports [label="reporter"];
+  matches -> workspaces [label="1-1"];
+}

@@ -1,0 +1,56 @@
+@startuml
+title Mô hình triển khai thử nghiệm tự host với ngrok và LiveKit
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam ArrowColor #334155
+skinparam node {
+  BackgroundColor #EEF6FF
+  BorderColor #1F4E79
+}
+skinparam component {
+  BackgroundColor #FFF7ED
+  BorderColor #C65D00
+}
+skinparam database {
+  BackgroundColor #ECFDF5
+  BorderColor #047857
+}
+skinparam cloud {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
+}
+
+actor "Người dùng thử nghiệm\n(10 users)" as Users
+cloud "Ngrok Tunnel\nPublic URL tạm thời" as Ngrok
+
+node "Máy host cá nhân" as Host {
+  node "Máy ảo Ubuntu Server\n2 vCPU, 4GB RAM, 40GB SSD" as VM {
+    frame "Docker Compose Network" as Compose {
+      component "frontend-nginx\nReact/Vite static" as Frontend
+      component "backend\nREST API + WebSocket" as Backend
+      database "mysql\nDữ liệu chính" as MySQL
+      database "redis\nCache + trạng thái tạm" as Redis
+      component "livekit\nVoice/Livestream\nLuôn bật" as LiveKit
+      component "livekit-egress\nRecording/Transcoding\nTùy chọn, không bật mặc định" as Egress
+    }
+  }
+}
+
+Users --> Ngrok : HTTPS
+Ngrok --> Frontend : Public frontend
+Frontend --> Backend : /api, /ws
+Backend --> MySQL : SQL
+Backend --> Redis : cache/state
+Backend --> LiveKit : cấp token phòng voice
+Frontend --> LiveKit : WebRTC media
+LiveKit --> Redis : room state
+Egress ..> LiveKit : ghi hình khi bật
+
+note right of Egress
+Không bật trong cấu hình thử nghiệm mặc định
+vì tiêu tốn CPU/RAM hơn voice cơ bản.
+end note
+@enduml

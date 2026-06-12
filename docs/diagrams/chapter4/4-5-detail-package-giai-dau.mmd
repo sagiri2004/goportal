@@ -1,0 +1,74 @@
+classDiagram
+direction LR
+
+namespace Presentation {
+  class TournamentListPage
+  class TournamentDetailPage
+  class TournamentCreateDialog
+  class MatchResultDialog
+}
+
+namespace API {
+  class TournamentController
+}
+
+namespace Service {
+  class ITournamentService
+  class TournamentService
+  class IChannelService
+  class ChannelService
+  class VoiceService
+  class RealtimeEventService
+}
+
+namespace Repository {
+  class ITournamentRepository
+  class TournamentRepository
+  class IServerRepository
+  class ServerRepository
+  class IChannelRepository
+  class ChannelRepository
+}
+
+namespace Domain {
+  class Tournament
+  class TournamentParticipant
+  class TournamentTeam
+  class TournamentMatch
+  class TournamentMatchReport
+  class TournamentMatchWorkspace
+}
+
+namespace Infrastructure {
+  class DatabaseContext
+  class LiveMediaProvider
+  class EventBus
+}
+
+TournamentListPage ..> TournamentController : call API
+TournamentDetailPage ..> TournamentController : call API
+TournamentCreateDialog ..> TournamentController : create/update
+MatchResultDialog ..> TournamentController : report result
+TournamentController ..> ITournamentService : use
+ITournamentService <|.. TournamentService : implements
+ITournamentRepository <|.. TournamentRepository : implements
+IServerRepository <|.. ServerRepository : implements
+IChannelRepository <|.. ChannelRepository : implements
+IChannelService <|.. ChannelService : implements
+TournamentService ..> ITournamentRepository : use
+TournamentService ..> IServerRepository : check permission
+TournamentService ..> IChannelService : create channels
+TournamentService ..> VoiceService : media workspace
+TournamentService ..> RealtimeEventService : publish event
+TournamentRepository ..> DatabaseContext : use
+ServerRepository ..> DatabaseContext : use
+ChannelRepository ..> DatabaseContext : use
+VoiceService ..> LiveMediaProvider : use
+RealtimeEventService ..> EventBus : use
+Tournament *-- TournamentParticipant : participants
+Tournament *-- TournamentMatch : matches
+TournamentTeam o-- TournamentParticipant : members
+TournamentMatch *-- TournamentMatchReport : reports
+TournamentMatch o-- TournamentMatchWorkspace : workspace
+TournamentRepository --> Tournament : persist
+TournamentRepository --> TournamentMatch : persist

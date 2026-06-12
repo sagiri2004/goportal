@@ -1,0 +1,311 @@
+Project "Hinh 4.11 - ERD cong dong may chu" {
+  database_type: "MySQL"
+}
+
+Table users {
+  id char(36) [pk]
+  username varchar(255) [not null]
+  avatar_url varchar(512)
+  status varchar(32)
+  is_admin boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table relationship_status {
+  code varchar(32) [pk]
+  description varchar(255) [not null]
+}
+
+Table user_relationships {
+  id char(36) [pk]
+  requester_id char(36) [not null]
+  addressee_id char(36) [not null]
+  status varchar(32) [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (requester_id, addressee_id) [unique, name: "uq_user_relationships_pair"]
+  }
+}
+
+Table permissions {
+  id char(36) [pk]
+  name varchar(64) [not null, unique]
+  value bigint [not null, unique]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table servers {
+  id char(36) [pk]
+  owner_id char(36) [not null]
+  default_role_id char(36)
+  name varchar(120) [not null]
+  icon_url varchar(512)
+  banner_url varchar(512)
+  is_public boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table server_members {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  user_id char(36) [not null]
+  status varchar(32)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (server_id, user_id) [unique, name: "uq_server_members_server_user"]
+  }
+}
+
+Table roles {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  name varchar(80) [not null]
+  icon_url varchar(512)
+  color varchar(16)
+  position int
+  permissions bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (server_id, name) [unique, name: "uq_roles_server_name"]
+  }
+}
+
+Table role_permissions {
+  id char(36) [pk]
+  role_id char(36) [not null]
+  permission_id char(36) [not null]
+
+  Indexes {
+    (role_id, permission_id) [unique, name: "uq_role_permissions"]
+  }
+}
+
+Table server_member_role {
+  id char(36) [pk]
+  server_member_id char(36) [not null]
+  role_id char(36) [not null]
+
+  Indexes {
+    (server_member_id, role_id) [unique, name: "uq_server_member_role"]
+  }
+}
+
+Table server_invites {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  inviter_id char(36) [not null]
+  code varchar(64) [not null, unique]
+  max_uses int
+  uses int
+  expires_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table server_join_requests {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  user_id char(36) [not null]
+  reviewed_by char(36)
+  status varchar(32)
+  reviewed_at bigint
+  decision_note text
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table channel_types {
+  code varchar(32) [pk]
+  description varchar(255) [not null]
+}
+
+Table channels {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  parent_id char(36)
+  type varchar(32) [not null]
+  name varchar(120) [not null]
+  position int
+  is_private boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table channel_members {
+  id char(36) [pk]
+  channel_id char(36) [not null]
+  user_id char(36) [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (channel_id, user_id) [unique, name: "uq_channel_members_channel_user"]
+  }
+}
+
+Table channel_permission_overwrites {
+  id char(36) [pk]
+  channel_id char(36) [not null]
+  subject_type varchar(20) [not null]
+  subject_id char(36) [not null]
+  allow_bits bigint
+  deny_bits bigint
+
+  Indexes {
+    (channel_id, subject_type, subject_id) [unique, name: "uq_channel_permission_overwrite"]
+  }
+}
+
+Table channel_notification_settings {
+  user_id char(36) [not null]
+  channel_id char(36) [not null]
+  level varchar(32)
+  muted_until bigint
+
+  Indexes {
+    (user_id, channel_id) [pk]
+  }
+}
+
+Table user_channel_reads {
+  user_id char(36) [not null]
+  channel_id char(36) [not null]
+  last_read_at bigint
+  unread_count int
+
+  Indexes {
+    (user_id, channel_id) [pk]
+  }
+}
+
+Table messages {
+  id char(36) [pk]
+  author_id char(36) [not null]
+  recipient_id char(36)
+  channel_id char(36)
+  reply_to_id char(36)
+  content json
+  is_edited boolean
+  is_pinned boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table message_attachments {
+  id char(36) [pk]
+  message_id char(36) [not null]
+  file_url varchar(1024) [not null]
+  file_type varchar(64)
+  file_size bigint
+  file_name varchar(255)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table message_reactions {
+  id char(36) [pk]
+  message_id char(36) [not null]
+  user_id char(36) [not null]
+  emoji varchar(64) [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (message_id, user_id, emoji) [unique, name: "uq_message_reactions"]
+  }
+}
+
+Table message_mentions {
+  id char(36) [pk]
+  message_id char(36) [not null]
+  mentioned_user_id char(36)
+  channel_id char(36)
+  mention_type varchar(32)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table recordings {
+  id char(36) [pk]
+  channel_id char(36)
+  server_id char(36)
+  started_by char(36)
+  egress_id varchar(255) [unique]
+  type varchar(32)
+  status varchar(32)
+  file_url varchar(1024)
+  duration_seconds int
+  started_at bigint
+  ended_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Ref: user_relationships.requester_id > users.id
+Ref: user_relationships.addressee_id > users.id
+Ref: user_relationships.status > relationship_status.code
+
+Ref: servers.owner_id > users.id
+Ref: servers.default_role_id > roles.id
+Ref: server_members.server_id > servers.id
+Ref: server_members.user_id > users.id
+Ref: roles.server_id > servers.id
+Ref: role_permissions.role_id > roles.id
+Ref: role_permissions.permission_id > permissions.id
+Ref: server_member_role.server_member_id > server_members.id
+Ref: server_member_role.role_id > roles.id
+Ref: server_invites.server_id > servers.id
+Ref: server_invites.inviter_id > users.id
+Ref: server_join_requests.server_id > servers.id
+Ref: server_join_requests.user_id > users.id
+Ref: server_join_requests.reviewed_by > users.id
+
+Ref: channels.server_id > servers.id
+Ref: channels.parent_id > channels.id
+Ref: channels.type > channel_types.code
+Ref: channel_members.channel_id > channels.id
+Ref: channel_members.user_id > users.id
+Ref: channel_permission_overwrites.channel_id > channels.id
+Ref: channel_notification_settings.user_id > users.id
+Ref: channel_notification_settings.channel_id > channels.id
+Ref: user_channel_reads.user_id > users.id
+Ref: user_channel_reads.channel_id > channels.id
+
+Ref: messages.author_id > users.id
+Ref: messages.recipient_id > users.id
+Ref: messages.channel_id > channels.id
+Ref: messages.reply_to_id > messages.id
+Ref: message_attachments.message_id > messages.id
+Ref: message_reactions.message_id > messages.id
+Ref: message_reactions.user_id > users.id
+Ref: message_mentions.message_id > messages.id
+Ref: message_mentions.mentioned_user_id > users.id
+Ref: message_mentions.channel_id > channels.id
+
+Ref: recordings.channel_id > channels.id
+Ref: recordings.server_id > servers.id
+Ref: recordings.started_by > users.id

@@ -1,0 +1,417 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Qua ba chương trước, đồ án đã trình bày bài toán thực tế, xác định các chức năng chính và phân tích các công nghệ được sử dụng. Chương này trình bày quá trình thiết kế và triển khai hệ thống, bao gồm thiết kế kiến trúc, thiết kế chi tiết, cài đặt, kiểm thử và đánh giá kết quả đạt được.
+
+\section{Thiết kế kiến trúc}
+\label{section:4.1}
+
+\subsection{Lựa chọn kiến trúc phần mềm}
+\label{subsection:4.1.1}
+
+Hệ thống được xây dựng dựa trên kiến trúc đa tầng (N-Tier Architecture) kết hợp mô hình client-server. Kiến trúc đa tầng chia ứng dụng thành nhiều tầng có trách nhiệm riêng biệt, giúp giảm phụ thuộc giữa các thành phần, thuận lợi cho bảo trì và mở rộng. Về cơ bản, kiến trúc này gồm ba tầng chính: tầng trình diễn, tầng logic nghiệp vụ và tầng dữ liệu. Tầng trình diễn chịu trách nhiệm hiển thị giao diện và tiếp nhận thao tác người dùng; tầng logic nghiệp vụ xử lý các quy tắc nghiệp vụ; tầng dữ liệu đảm nhiệm việc lưu trữ, truy vấn và cập nhật dữ liệu.
+
+Trong đồ án, tầng trình diễn được triển khai thành ứng dụng web và ứng dụng desktop. Hai ứng dụng này cung cấp giao diện cho các chức năng như quản lý tài khoản, tham gia máy chủ, nhắn tin, chơi game, đăng tải game, tham gia giải đấu và voice/livestream. Tầng trình diễn giao tiếp với backend thông qua RESTful API, đồng thời sử dụng kết nối thời gian thực cho các chức năng như tin nhắn, thông báo và trạng thái phòng game.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Kien-truc-da-tang-he-thong.png}
+    \caption{Kiến trúc đa tầng được áp dụng vào hệ thống}
+    \label{fig:4-1-kien-truc-da-tang-he-thong}
+\end{figure}
+
+Tầng logic nghiệp vụ được triển khai ở backend, là nơi xử lý các nghiệp vụ đã phân tích ở Chương 2. Tầng này tiếp nhận yêu cầu từ client, kiểm tra dữ liệu đầu vào, xác thực người dùng, kiểm tra phân quyền và thực hiện các xử lý như quản lý máy chủ, quản lý kênh, gửi tin nhắn, upload game, vận hành giải đấu và xử lý kết quả trận đấu. Để tránh trộn lẫn việc tiếp nhận request với xử lý nghiệp vụ, tầng logic được chia thành phần điều phối yêu cầu và phần xử lý nghiệp vụ.
+
+Tầng dữ liệu bao gồm cơ sở dữ liệu quan hệ, bộ nhớ đệm và dịch vụ lưu trữ tài nguyên. Cơ sở dữ liệu lưu các thông tin bền vững như tài khoản, máy chủ, kênh, tin nhắn, game và giải đấu. Bộ nhớ đệm hỗ trợ các dữ liệu tạm thời hoặc thao tác cần truy cập nhanh. Dịch vụ lưu trữ tài nguyên phục vụ các tệp media như ảnh đại diện, ảnh máy chủ, ảnh game và một số tệp tải lên. Ngoài ba tầng chính, hệ thống còn tích hợp các thành phần hạ tầng cho WebSocket, voice/livestream và môi trường triển khai cục bộ.
+
+So với kiến trúc MVC truyền thống, kiến trúc được chọn phù hợp hơn vì giao diện của hệ thống không được render trực tiếp từ backend mà là các client độc lập. So với microservice, kiến trúc đa tầng có độ phức tạp thấp hơn, phù hợp hơn với phạm vi đồ án nhưng vẫn cho phép mở rộng bằng cách tách riêng các thành phần realtime, media hoặc game service khi cần thiết. Vì vậy, kiến trúc đa tầng kết hợp client-server là lựa chọn phù hợp cho hệ thống.
+
+\subsection{Thiết kế tổng quan}
+\label{subsection:4.1.2}
+
+Trong mục này, đồ án trình bày biểu đồ phụ thuộc gói cho hai phần chính của hệ thống là frontend và backend. Các gói được phân theo tầng rõ ràng, trong đó tầng trên được phép phụ thuộc vào tầng dưới thông qua các giao diện hoặc dịch vụ được cung cấp, nhưng tầng dưới không phụ thuộc ngược lại tầng trên. Nguyên tắc này giúp hạn chế phụ thuộc chéo và hỗ trợ mở rộng hệ thống trong tương lai.
+
+Trước tiên là biểu đồ phụ thuộc gói cho ứng dụng frontend, tương ứng với tầng trình diễn trong kiến trúc tổng thể.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Bieu-do-goi-frontend.png}
+    \caption{Biểu đồ phụ thuộc gói ứng dụng Frontend}
+    \label{fig:4-2-bieu-do-goi-frontend}
+\end{figure}
+
+Hình \ref{fig:4-2-bieu-do-goi-frontend} thể hiện các gói chính của frontend ở mức tổng quan. Gói \textit{Routing} chịu trách nhiệm ánh xạ đường dẫn URL tới các trang tương ứng. Gói \textit{Layouts} định nghĩa bố cục chung của giao diện như khung ứng dụng, thanh điều hướng và vùng nội dung. Gói \textit{Pages} chứa các màn hình nghiệp vụ chính, là nơi kết hợp dữ liệu và các thành phần giao diện để tạo thành trải nghiệm hoàn chỉnh cho người dùng.
+
+Các gói còn lại đóng vai trò hỗ trợ và tái sử dụng. Gói \textit{Components} chứa các thành phần giao diện dùng chung, gói \textit{State Management} quản lý trạng thái phía client, gói \textit{API \& Realtime Services} đảm nhiệm việc giao tiếp với backend qua REST API, WebSocket và các dịch vụ thời gian thực, còn gói \textit{Assets \& Utilities} chứa tài nguyên tĩnh và các hàm tiện ích. Quan hệ phụ thuộc đi từ \textit{Routing} tới \textit{Pages}, từ \textit{Pages} tới các gói hỗ trợ, trong khi các gói dùng chung không phụ thuộc ngược lại vào màn hình cụ thể. Cách tổ chức này giúp frontend dễ mở rộng khi bổ sung thêm màn hình hoặc chức năng mới.
+
+Tiếp theo là biểu đồ phụ thuộc gói cho backend, tương ứng với tầng logic nghiệp vụ, tầng dữ liệu và các thành phần hạ tầng.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Bieu-do-goi-backend.png}
+    \caption{Biểu đồ phụ thuộc gói ứng dụng Backend}
+    \label{fig:4-3-bieu-do-goi-backend}
+\end{figure}
+
+Hình \ref{fig:4-3-bieu-do-goi-backend} thể hiện backend ở mức package tổng quát, gồm năm gói chính. Gói \textit{API Layer} là điểm vào của hệ thống, bao gồm \textit{Routers}, \textit{Controllers} và \textit{Middlewares}. Trong đó, \textit{Routers} định tuyến các endpoint, \textit{Controllers} tiếp nhận và điều phối request, còn \textit{Middlewares} xử lý các bước trung gian như xác thực, phân quyền, giới hạn truy cập và xử lý lỗi. Gói \textit{Business Services} chứa các xử lý nghiệp vụ chính, được chia thành \textit{Service Interfaces}, \textit{Service Impl}, \textit{Realtime Hubs} và \textit{Notifications \& Jobs}.
+
+Gói \textit{Data Access} đảm nhiệm truy cập dữ liệu, gồm \textit{Repository Interfaces} và \textit{Repository Impl}. Gói \textit{Domain} chứa các thành phần mô tả miền nghiệp vụ như \textit{Models}, \textit{Serializers} và \textit{Application Errors}. Đây là nhóm gói có mức phụ thuộc thấp, được sử dụng bởi các tầng khác để thống nhất cấu trúc dữ liệu và lỗi nghiệp vụ. Cuối cùng, gói \textit{Infrastructure} cung cấp các dịch vụ hạ tầng như \textit{Initialize \& Config}, \textit{Database \& Cache}, \textit{Storage}, \textit{LiveKit} và \textit{Message Bus \& Logger}. Nhóm này giúp backend khởi tạo cấu hình, giao tiếp với cơ sở dữ liệu, Redis, lưu trữ tệp, hệ thống realtime/media và cơ chế ghi log.
+
+Quan hệ phụ thuộc của backend đi từ \textit{API Layer} xuống \textit{Business Services}, từ \textit{Business Services} xuống \textit{Data Access}, \textit{Domain} và \textit{Infrastructure}. \textit{Data Access} tiếp tục phụ thuộc vào \textit{Domain} để sử dụng mô hình dữ liệu và phụ thuộc vào \textit{Infrastructure} để thao tác với cơ sở dữ liệu hoặc cache. Cách phân tách này giúp phần nghiệp vụ không bị trộn lẫn với chi tiết hạ tầng, đồng thời hỗ trợ mở rộng các chức năng như realtime, voice/livestream hoặc lưu trữ media mà không làm thay đổi cấu trúc tổng thể của backend.
+
+\subsection{Thiết kế chi tiết gói}
+\label{subsection:4.1.3}
+
+Trong mục này, đồ án trình bày thiết kế chi tiết gói cho hai nhóm chức năng tiêu biểu của hệ thống là Tạo mới máy chủ và Tổ chức, vận hành giải đấu. Đây là hai chức năng có sự tham gia của nhiều tầng trong kiến trúc, từ giao diện người dùng, API backend, xử lý nghiệp vụ, truy cập dữ liệu cho đến các dịch vụ hạ tầng.
+
+Đầu tiên là thiết kế chi tiết gói cho chức năng Tạo mới máy chủ, được minh họa ở Hình \ref{fig:4-4-thiet-ke-goi-tao-moi-may-chu}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Thiet-ke-goi-tao-moi-may-chu.png}
+    \caption{Biểu đồ chi tiết gói chức năng Tạo mới máy chủ}
+    \label{fig:4-4-thiet-ke-goi-tao-moi-may-chu}
+\end{figure}
+
+Hình \ref{fig:4-4-thiet-ke-goi-tao-moi-may-chu} thể hiện các lớp, interface và gói tham gia vào quy trình người dùng tạo mới một máy chủ cộng đồng. Ở tầng trình diễn, \textit{CreateServerModal} là thành phần giao diện tiếp nhận tên máy chủ, chế độ công khai và một số thông tin khởi tạo từ người dùng. Thành phần này gửi yêu cầu tạo máy chủ tới \textit{ServerController} ở \textit{API Layer}. Controller thực hiện kiểm tra xác thực, đọc dữ liệu đầu vào và chuyển yêu cầu xuống interface \textit{ServerService}; phần cài đặt cụ thể là \textit{serverService}.
+
+Tại tầng \textit{Business Services}, \textit{serverService} kiểm tra thông tin bắt buộc, xác minh người tạo máy chủ qua \textit{UserRepository}, sau đó tạo thực thể \textit{Server} và quan hệ \textit{ServerMember} đại diện cho chủ máy chủ. Các thao tác ghi dữ liệu được chuyển xuống \textit{ServerRepository} và lớp cài đặt \textit{serverRepository}. Repository phụ thuộc vào các model trong gói \textit{Domain} và giao tiếp với \textit{GormDatabase} trong gói \textit{Infrastructure} để lưu dữ liệu. Với các thao tác có liên quan tới ảnh hoặc tài nguyên media của máy chủ, service có thể sử dụng thêm \textit{StorageService}/\textit{LocalStorage}. Cách thiết kế này giúp giao diện, điều phối API, nghiệp vụ tạo máy chủ và truy cập dữ liệu được tách biệt rõ ràng.
+
+Tiếp theo là thiết kế chi tiết gói cho chức năng Tổ chức và vận hành giải đấu, được minh họa ở Hình \ref{fig:4-5-thiet-ke-goi-giai-dau}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Thiet-ke-goi-giai-dau.png}
+    \caption{Biểu đồ chi tiết gói chức năng Tổ chức và vận hành giải đấu}
+    \label{fig:4-5-thiet-ke-goi-giai-dau}
+\end{figure}
+
+Hình \ref{fig:4-5-thiet-ke-goi-giai-dau} trình bày các gói và lớp chính tham gia vào nhóm chức năng Tổ chức và vận hành giải đấu. Ở tầng trình diễn, \textit{TournamentCreateEditDialog} phục vụ tạo hoặc cập nhật thông tin giải đấu, \textit{TournamentDetailPage} hiển thị thông tin tổng quan, danh sách người tham gia, đội, bracket và kết quả, còn \textit{MatchWorkspaceView} phục vụ không gian theo dõi trận đấu. Các thành phần giao diện này gửi yêu cầu tới \textit{TournamentController} ở tầng API.
+
+Tầng \textit{Business Services} được biểu diễn bởi interface \textit{TournamentService} và lớp cài đặt \textit{tournamentService}. Đây là nơi tập trung các quy tắc nghiệp vụ như kiểm tra quyền tổ chức trong máy chủ, tạo giải đấu, đăng ký tham gia, tạo đội, tạo bracket, cập nhật trạng thái trận, xử lý báo cáo kết quả và tạo workspace cho trận đấu. Service không thao tác trực tiếp với cơ sở dữ liệu mà phụ thuộc vào các repository như \textit{TournamentRepository}, \textit{ServerRepository}, \textit{ChannelRepository} và \textit{UserRepository}.
+
+Gói \textit{Domain} chứa các thực thể cốt lõi của nghiệp vụ giải đấu như \textit{Tournament}, \textit{Participant}, \textit{Team}, \textit{Match}, \textit{Workspace} và \textit{Role}. Gói \textit{Infrastructure} cung cấp kết nối lưu trữ qua \textit{GormDatabase}, phát sự kiện thời gian thực qua \textit{Watermill}, đồng thời hỗ trợ LiveKit cho các chức năng quan sát, voice hoặc livestream trong trận đấu. Cách tổ chức này giúp tách biệt rõ phần giao diện, điều phối API, xử lý nghiệp vụ, truy cập dữ liệu và các dịch vụ hạ tầng.
+
+\section{Thiết kế chi tiết}
+\label{section:4.2}
+
+\subsection{Thiết kế giao diện}
+\label{subsection:4.2.1}
+
+Hệ thống hướng tới nhóm người dùng chính là người chơi, nhà phát triển game và người tổ chức giải đấu sử dụng trên máy tính cá nhân. Vì vậy, giao diện được thiết kế ưu tiên cho màn hình laptop và desktop, đặc biệt là các độ phân giải phổ biến như 1366 x 768, 1440 x 900 và 1920 x 1080 pixels. Với các màn hình có chiều rộng nhỏ hơn, giao diện vẫn cần đảm bảo khả năng co giãn ở các khu vực danh sách, vùng nội dung chính và panel phụ, tuy nhiên trải nghiệm tối ưu nhất vẫn là màn hình từ 13 inch trở lên. Hệ thống sử dụng màu hiển thị theo chuẩn 24-bit RGB thông dụng trên trình duyệt hiện đại, đồng thời hỗ trợ hiển thị tốt các ảnh đại diện, ảnh bìa máy chủ, thumbnail game và nội dung livestream.
+
+Về định hướng thiết kế, giao diện của hệ thống đi theo phong cách ứng dụng cộng đồng thời gian thực, tương tự các nền tảng như Discord nhưng được điều chỉnh cho bài toán chơi game, đăng tải game và tổ chức giải đấu. Bố cục chính gồm thanh máy chủ cố định ở bên trái, thanh kênh hoặc danh sách hội thoại ở bên cạnh, vùng nội dung trung tâm và panel thành viên ở bên phải khi cần. Thanh máy chủ có kích thước cố định khoảng 72 pixels để người dùng chuyển nhanh giữa các cộng đồng. Khu vực còn lại được chia thành các panel ngang có thể thay đổi kích thước, giúp người dùng tập trung vào nội dung chính như trò chuyện, xem kênh voice, theo dõi bracket hoặc quản lý game.
+
+Hệ thống sử dụng giao diện tối làm mặc định nhằm phù hợp với ngữ cảnh chơi game và sử dụng lâu trên màn hình. Nền chính có tông tối, các khối nội dung sử dụng màu card tối hơn hoặc sáng hơn nhẹ để tạo phân cấp thị giác. Màu chữ chính là màu sáng để đảm bảo khả năng đọc, màu chữ phụ dùng sắc xám để thể hiện thông tin ít quan trọng hơn. Màu nhấn được dùng cho trạng thái đang chọn, hiệu ứng hover, focus và các thao tác quan trọng. Các trạng thái đặc biệt được quy ước thống nhất: màu đỏ cho lỗi hoặc thao tác nguy hiểm, màu xanh cho trạng thái thành công, màu vàng/cam cho cảnh báo và màu xám cho trạng thái vô hiệu hóa.
+
+Phông chữ chính của giao diện là Inter kết hợp nhóm phông sans-serif mặc định của hệ thống. Cỡ chữ cơ bản là 14 pixels, phù hợp với mật độ thông tin cao của các màn hình cộng đồng và quản lý giải đấu. Các tiêu đề màn hình, tên máy chủ, tên game hoặc tên giải đấu có cỡ chữ lớn hơn và dùng độ đậm cao hơn để tạo điểm nhấn. Các mô tả phụ, thời gian gửi tin nhắn, trạng thái kênh và chú thích biểu mẫu dùng cỡ chữ nhỏ hơn, thường nằm trong khoảng 11 đến 13 pixels. Cách phân cấp chữ này giúp giao diện hiển thị nhiều dữ liệu nhưng vẫn giữ được khả năng đọc.
+
+Các thành phần giao diện dùng chung được chuẩn hóa để đảm bảo tính nhất quán. Nút bấm có chiều cao mặc định khoảng 36 pixels, nút nhỏ khoảng 32 pixels, nút lớn khoảng 40 pixels và nút biểu tượng có kích thước vuông. Các loại nút chính gồm nút mặc định cho hành động quan trọng, nút phụ cho hành động ít nổi bật, nút viền cho thao tác trung gian, nút ghost cho thao tác phụ trong thanh công cụ và nút nguy hiểm cho hành động xóa hoặc hủy. Tất cả nút đều có trạng thái hover, focus và disabled để phản hồi rõ ràng cho người dùng.
+
+Khung nhập liệu cũng có chiều cao khoảng 36 pixels, bo góc vừa phải, viền cùng màu hệ thống và hiệu ứng focus bằng vòng nhấn. Các biểu mẫu như tạo máy chủ, tạo kênh, cập nhật hồ sơ, đăng tải game hoặc tạo giải đấu đều sử dụng cùng một nguyên tắc: nhãn trường dữ liệu nằm gần trường nhập, mô tả phụ được đặt ngay bên dưới khi cần, lỗi nhập liệu hiển thị gần vị trí phát sinh lỗi để người dùng dễ sửa. Những thao tác cần xác nhận hoặc có nhiều thông tin được đặt trong hộp thoại trung tâm. Hộp thoại sử dụng lớp phủ mờ nền, bo góc lớn hơn, có tiêu đề, mô tả, nội dung chính và nhóm nút hành động ở cuối.
+
+Thông điệp phản hồi của hệ thống được chia thành hai nhóm. Nhóm thứ nhất là thông báo nhanh dạng toast, thường xuất hiện ở góc dưới bên phải màn hình để phản hồi các thao tác ngắn như tạo máy chủ thành công, sao chép lời mời hoặc cập nhật hồ sơ. Nhóm thứ hai là thông báo trong ngữ cảnh, hiển thị trực tiếp gần khu vực thao tác, ví dụ lỗi tải ảnh, lỗi tạo lời mời, lỗi nhập tên không hợp lệ hoặc trạng thái đang lưu. Với các hành động có rủi ro như xóa dữ liệu, hệ thống ưu tiên sử dụng hộp thoại xác nhận thay vì chỉ hiển thị toast.
+
+Hình \ref{fig:4-6-giao-dien-may-chu-va-kenh} minh họa bản phác thảo giao diện máy chủ và kênh. Đây là màn hình trung tâm của hệ thống, nơi người dùng chuyển đổi giữa các máy chủ, chọn kênh văn bản, kênh voice, kênh livestream và theo dõi thành viên đang hoạt động. Bố cục gồm thanh máy chủ bên trái, danh sách kênh theo máy chủ, vùng nội dung chính dùng cho tin nhắn hoặc nội dung kênh và panel thành viên bên phải. Cách bố trí này giúp người dùng luôn nhận biết mình đang ở máy chủ nào, kênh nào và đang tương tác với những thành viên nào.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Giao-dien-may-chu-va-kenh.png}
+    \caption{Phác thảo giao diện màn hình máy chủ và kênh}
+    \label{fig:4-6-giao-dien-may-chu-va-kenh}
+\end{figure}
+
+Hình \ref{fig:4-7-giao-dien-game-store-va-upload-game} minh họa nhóm giao diện liên quan đến game. Màn hình danh sách game cần hiển thị các thẻ game theo dạng lưới, mỗi thẻ có thumbnail, tên game, nhãn trạng thái và các thông tin phụ như lượt chơi hoặc chế độ chơi. Màn hình quản lý game của nhà phát triển tập trung vào biểu mẫu tạo thông tin game, tải lên ảnh đại diện, tải bản build và gửi kiểm duyệt. Thiết kế này tách rõ trải nghiệm của người chơi khi khám phá game với trải nghiệm của nhà phát triển khi đăng tải và quản lý sản phẩm.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Giao-dien-game-store-va-upload-game.png}
+    \caption{Phác thảo giao diện danh sách game và đăng tải game}
+    \label{fig:4-7-giao-dien-game-store-va-upload-game}
+\end{figure}
+
+Hình \ref{fig:4-8-giao-dien-giai-dau} minh họa bản phác thảo giao diện giải đấu. Màn hình này cần thể hiện thông tin tổng quan của giải, trạng thái đăng ký, danh sách người tham gia hoặc đội, bracket, lịch trận và khu vực thao tác theo vai trò. Người tổ chức có thể thấy các hành động quản lý như cập nhật giải đấu, chuyển trạng thái, tạo bracket hoặc xử lý kết quả. Người tham gia tập trung vào đăng ký, check-in, xem bracket và báo cáo kết quả. Các vai trò như trọng tài, bình luận viên hoặc khán giả chỉ nhìn thấy những thao tác phù hợp với quyền của mình. Nhờ đó, cùng một giao diện giải đấu có thể phục vụ nhiều vai trò mà không gây quá tải thông tin.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Giao-dien-giai-dau.png}
+    \caption{Phác thảo giao diện màn hình giải đấu}
+    \label{fig:4-8-giao-dien-giai-dau}
+\end{figure}
+
+Nhìn chung, thiết kế giao diện của hệ thống tập trung vào ba mục tiêu: dễ điều hướng trong môi trường nhiều máy chủ và kênh, phản hồi nhanh cho các thao tác thời gian thực, và phân tách rõ trải nghiệm của người chơi, nhà phát triển game và người tổ chức giải đấu. Các bản phác thảo trong mục này đóng vai trò định hướng thiết kế, không phải ảnh chụp giao diện sản phẩm cuối cùng.
+
+\subsection{Thiết kế lớp}
+\label{subsection:4.2.2}
+
+Trong mục này, đồ án trình bày thiết kế lớp cho chức năng Tạo giải đấu. Đây là chức năng tiêu biểu của hệ thống vì bắt đầu từ một thao tác đơn giản trên giao diện nhưng cần phối hợp nhiều lớp ở cả frontend và backend: hộp thoại tạo giải đấu, lớp điều khiển API, interface nghiệp vụ, lớp cài đặt nghiệp vụ, các repository kiểm tra quyền và truy cập dữ liệu, cùng thành phần phát sự kiện thời gian thực. Luồng chính bắt đầu khi người dùng có quyền quản lý trong máy chủ nhấn nút tạo giải đấu, nhập thông tin cần thiết và gửi biểu mẫu lên hệ thống.
+
+Hình \ref{fig:4-9-thiet-ke-lop-tao-giai-dau} minh họa các lớp chính tham gia vào use case Tạo giải đấu theo các tầng đã trình bày ở mục thiết kế gói. Lớp \textit{TournamentCreateEditDialog} đại diện cho giao diện nhập liệu ở tầng \textit{Presentation}. Lớp \textit{TournamentController} thuộc \textit{API Layer}, tiếp nhận request tạo giải đấu và chuyển dữ liệu xuống interface \textit{TournamentService}. Lớp cài đặt \textit{tournamentService} giữ vai trò trung tâm, chịu trách nhiệm chuẩn hóa dữ liệu, kiểm tra quyền qua \textit{ServerRepository}, tạo đối tượng \textit{Tournament}, tạo kênh thảo luận chung qua \textit{ChannelRepository}, lưu dữ liệu qua \textit{TournamentRepository} và phát sự kiện qua \textit{Watermill}. Nhờ cách tách interface và lớp cài đặt, tầng nghiệp vụ không phụ thuộc trực tiếp vào chi tiết truy cập cơ sở dữ liệu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Thiet-ke-lop-tao-giai-dau.png}
+    \caption{Thiết kế lớp chức năng Tạo giải đấu}
+    \label{fig:4-9-thiet-ke-lop-tao-giai-dau}
+\end{figure}
+
+Bảng \ref{tab:4-1-thiet-ke-lop-tournament} trình bày các thuộc tính và phương thức quan trọng của lớp \textit{Tournament}. Đây là thực thể trung tâm của chức năng giải đấu, lưu thông tin định danh, máy chủ sở hữu, game được tổ chức thi đấu, thể thức, trạng thái, số lượng người tham gia và các thiết lập liên quan đến đăng ký/check-in.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-1-thiet-ke-lop-tournament.png}
+    \caption{Thiết kế chi tiết lớp Tournament}
+    \label{tab:4-1-thiet-ke-lop-tournament}
+\end{table}
+
+Bảng \ref{tab:4-2-thiet-ke-lop-tournament-dialog} mô tả lớp \textit{TournamentCreateEditDialog}. Lớp này không phải thực thể dữ liệu trong backend mà là lớp giao diện quan trọng của use case. Nó quản lý biểu mẫu tạo giải đấu theo nhiều bước, kiểm tra sơ bộ dữ liệu nhập và gọi API tạo giải đấu khi người dùng xác nhận.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-2-thiet-ke-lop-tournament-dialog.png}
+    \caption{Thiết kế chi tiết lớp TournamentCreateEditDialog}
+    \label{tab:4-2-thiet-ke-lop-tournament-dialog}
+\end{table}
+
+Bảng \ref{tab:4-3-thiet-ke-lop-tournament-service} trình bày lớp cài đặt \textit{tournamentService} cho interface \textit{TournamentService}. Đây là lớp xử lý nghiệp vụ chính, nơi tập trung các quy tắc như người tạo phải là thành viên máy chủ, phải có quyền quản lý phù hợp, thể thức thi đấu phải hợp lệ, số lượng người tham gia phải lớn hơn một và đội phải có kích thước hợp lệ nếu giải đấu theo đội.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-3-thiet-ke-lop-tournament-service.png}
+    \caption{Thiết kế chi tiết lớp TournamentService}
+    \label{tab:4-3-thiet-ke-lop-tournament-service}
+\end{table}
+
+Bảng \ref{tab:4-4-thiet-ke-lop-tournament-repository} mô tả interface \textit{TournamentRepository}. Interface này tách tầng nghiệp vụ khỏi tầng truy cập dữ liệu, đồng thời gom các thao tác liên quan đến giải đấu vào một nhóm rõ ràng. Trong use case Tạo giải đấu, các phương thức quan trọng nhất là tạo giải đấu mới, tìm giải đấu theo định danh và cập nhật lại giải đấu sau khi hệ thống gắn kênh thảo luận chung.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-4-thiet-ke-lop-tournament-repository.png}
+    \caption{Thiết kế chi tiết interface TournamentRepository}
+    \label{tab:4-4-thiet-ke-lop-tournament-repository}
+\end{table}
+
+Để minh họa luồng truyền thông điệp giữa các đối tượng, Hình \ref{fig:4-10-bieu-do-trinh-tu-tao-giai-dau} trình bày biểu đồ trình tự của use case Tạo giải đấu. Luồng bắt đầu khi người dùng nhấn nút tạo giải đấu trong máy chủ. Hộp thoại tạo giải đấu hiển thị biểu mẫu nhiều bước để người dùng nhập tên giải, game, thể thức, kiểu tham gia, số lượng tối đa, thời hạn đăng ký, luật và giải thưởng. Trước khi gửi request, giao diện kiểm tra các điều kiện cơ bản như tên giải và game không được rỗng, số lượng người tham gia hợp lệ, kích thước đội hợp lệ nếu chọn giải đấu theo đội.
+
+Khi người dùng xác nhận tạo, frontend gửi request tới API tạo giải đấu của máy chủ. Controller lấy thông tin người dùng hiện tại, đọc dữ liệu JSON và gọi interface \textit{TournamentService}; lời gọi này được lớp \textit{tournamentService} xử lý. Tại tầng nghiệp vụ, hệ thống chuẩn hóa các trường đầu vào, kiểm tra người dùng có thuộc máy chủ hay không và có quyền quản lý phù hợp hay không. Sau đó, service kiểm tra thể thức giải đấu, kiểu tham gia, số lượng tối đa và kích thước đội. Nếu một trong các điều kiện không hợp lệ, lỗi nghiệp vụ được trả về để giao diện hiển thị cho người dùng.
+
+Nếu dữ liệu hợp lệ, service tạo đối tượng \textit{Tournament} ở trạng thái \textit{draft} và yêu cầu repository lưu vào cơ sở dữ liệu. Sau khi tạo thành công, service bảo đảm giải đấu có kênh thảo luận chung bằng cách tìm danh sách kênh trong máy chủ, sinh tên kênh theo tên giải đấu và tạo kênh văn bản mới nếu chưa tồn tại. Mã kênh được cập nhật ngược lại vào giải đấu, sau đó service phát sự kiện \textit{TOURNAMENT\_CREATED}. Kết quả cuối cùng được trả về frontend, hộp thoại được đóng và danh sách giải đấu trong máy chủ được làm mới.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/Bieu-do-trinh-tu-tao-giai-dau.png}
+    \caption{Biểu đồ trình tự use case Tạo giải đấu}
+    \label{fig:4-10-bieu-do-trinh-tu-tao-giai-dau}
+\end{figure}
+
+\subsection{Thiết kế cơ sở dữ liệu}
+\label{subsection:4.2.3}
+
+Hệ thống sử dụng cơ sở dữ liệu quan hệ để lưu trữ các dữ liệu bền vững như tài khoản, máy chủ, kênh, tin nhắn, game và giải đấu. Các bảng được thiết kế theo hướng chuẩn hóa quan hệ, trong đó mỗi bảng đại diện cho một thực thể hoặc một quan hệ nhiều-nhiều quan trọng. Khóa chính của phần lớn các bảng sử dụng kiểu \textit{CHAR(36)} để lưu UUID, giúp định danh dữ liệu ổn định khi hệ thống mở rộng hoặc đồng bộ giữa nhiều thành phần. Các mốc thời gian được lưu bằng kiểu số nguyên lớn, phù hợp với cách xử lý timestamp thống nhất trong backend. Một số trường có cấu trúc linh hoạt như nội dung tin nhắn, thẻ game hoặc trạng thái phòng chơi sử dụng kiểu JSON.
+
+Để biểu đồ thực thể liên kết dễ theo dõi, đồ án chia cơ sở dữ liệu thành ba cụm chính tương ứng với ba nhóm chức năng quan trọng của hệ thống: cụm cộng đồng và máy chủ, cụm game, và cụm giải đấu. Các bảng dùng chung như \textit{users}, \textit{servers} hoặc \textit{channels} có thể xuất hiện trong nhiều cụm vì đây là các thực thể nền tảng được nhiều nghiệp vụ sử dụng. Cách chia này giúp việc trình bày rõ ràng hơn so với việc đưa toàn bộ bảng vào một sơ đồ duy nhất.
+
+Bảng \ref{tab:4-5-tong-hop-cum-du-lieu} tóm tắt phạm vi của ba cụm dữ liệu được sử dụng trong thiết kế cơ sở dữ liệu.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-5-tong-hop-cum-du-lieu.png}
+    \caption{Tổng hợp các cụm dữ liệu chính của hệ thống}
+    \label{tab:4-5-tong-hop-cum-du-lieu}
+\end{table}
+
+Hình \ref{fig:4-11-erd-cong-dong-may-chu} trình bày sơ đồ thực thể liên kết của cụm cộng đồng và máy chủ. Đây là cụm dữ liệu nền tảng nhất của hệ thống. Bảng \textit{users} lưu thông tin tài khoản người dùng, đồng thời liên kết tới các bảng quan hệ bạn bè, thành viên máy chủ, tin nhắn và phản ứng tin nhắn. Bảng \textit{servers} đại diện cho một cộng đồng hoặc nhóm chơi game, có chủ sở hữu là một người dùng và chứa nhiều thành viên, vai trò, lời mời, yêu cầu tham gia và kênh.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/ERD-cong-dong-may-chu.png}
+    \caption{Sơ đồ E-R cụm dữ liệu cộng đồng và máy chủ}
+    \label{fig:4-11-erd-cong-dong-may-chu}
+\end{figure}
+
+Trong cụm này, quan hệ giữa \textit{users} và \textit{servers} được tách qua bảng \textit{server\_members} để thể hiện quan hệ nhiều-nhiều: một người dùng có thể tham gia nhiều máy chủ, và một máy chủ có nhiều thành viên. Phân quyền trong máy chủ được thiết kế qua các bảng \textit{roles} và \textit{server\_member\_role}; mỗi vai trò thuộc một máy chủ, còn thành viên có thể được gán nhiều vai trò khác nhau. Đối với kênh riêng tư, hệ thống sử dụng \textit{channel\_members} để xác định người được truy cập trực tiếp và \textit{channel\_permission\_overwrites} để ghi đè quyền theo người dùng hoặc vai trò. Nhóm bảng \textit{messages}, \textit{message\_attachments}, \textit{message\_reactions}, \textit{message\_mentions} và \textit{user\_channel\_reads} phục vụ nghiệp vụ nhắn tin, đính kèm, thả phản ứng, nhắc tên và đánh dấu đã đọc.
+
+Hình \ref{fig:4-12-erd-game} thể hiện cụm dữ liệu game. Bảng trung tâm của cụm này là \textit{user\_games}, lưu thông tin game do hệ thống hoặc cộng đồng đăng tải. Mỗi game thuộc một người dùng sở hữu, có trạng thái hiển thị, trạng thái công bố, thông tin phân loại, điểm đánh giá và các thông tin media như icon, ảnh capsule, ảnh hero hoặc trailer. Bảng \textit{user\_game\_builds} lưu các bản build của game; một game có thể có nhiều bản build khác nhau, trong đó backend ưu tiên bản build mới nhất có trạng thái sẵn sàng khi người dùng bắt đầu chơi.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/ERD-game.png}
+    \caption{Sơ đồ E-R cụm dữ liệu game}
+    \label{fig:4-12-erd-game}
+\end{figure}
+
+Các bảng \textit{game\_ratings}, \textit{game\_reviews}, \textit{game\_review\_votes} và \textit{game\_reports} phục vụ phần marketplace của game, cho phép người dùng đánh giá, viết nhận xét, biểu quyết nhận xét hữu ích và báo cáo nội dung vi phạm. Đối với quá trình chơi game, bảng \textit{game\_sessions} lưu phiên chơi của người dùng, \textit{game\_events} ghi nhận sự kiện gameplay như điểm số hoặc thành tích, còn \textit{game\_rooms} và \textit{game\_room\_members} lưu phòng chơi nhiều người. Một số bảng có liên kết tới \textit{channels} để game có thể được chơi hoặc chia sẻ trong ngữ cảnh một kênh cụ thể của máy chủ.
+
+Hình \ref{fig:4-13-erd-giai-dau} trình bày cụm dữ liệu giải đấu. Bảng \textit{tournaments} là thực thể trung tâm, lưu thông tin giải đấu như máy chủ tổ chức, tên giải, game thi đấu, thể thức, trạng thái, số lượng người tham gia tối đa, kiểu tham gia solo/team, thời hạn đăng ký, luật và giải thưởng. Trường \textit{tournament\_general\_channel\_id} liên kết giải đấu với một kênh thảo luận chung trong máy chủ.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong4/ERD-giai-dau.png}
+    \caption{Sơ đồ E-R cụm dữ liệu giải đấu}
+    \label{fig:4-13-erd-giai-dau}
+\end{figure}
+
+Trong cụm giải đấu, nếu giải theo đội, bảng \textit{tournament\_teams} lưu thông tin đội và đội trưởng, còn \textit{tournament\_team\_members} lưu thành viên của từng đội. Bảng \textit{tournament\_participants} đóng vai trò chuẩn hóa người tham gia, cho phép hệ thống xử lý thống nhất cả giải solo lẫn giải theo đội. Khi giải đấu bắt đầu, các trận đấu được sinh ra trong bảng \textit{tournament\_matches}; bảng này lưu vòng đấu, số trận, hai người/đội tham gia, người thắng, điểm số và liên kết tới trận tiếp theo trong bracket. Kết quả do người tham gia hoặc trọng tài báo cáo được lưu trong \textit{tournament\_match\_reports}.
+
+Ngoài nhóm bảng bracket cơ bản, hệ thống còn có các bảng phục vụ vận hành giải đấu theo vai trò. \textit{tournament\_roles} và \textit{tournament\_role\_bindings} lưu các vai trò như quản trị giải đấu, trọng tài, bình luận viên, khán giả hoặc người chơi. \textit{tournament\_match\_workspaces} lưu các kênh riêng được tạo cho từng trận, gồm kênh đội A, đội B, caster, referee, spectator, admin và livestream. Khi bật ghi hình, \textit{tournament\_match\_recordings} lưu trạng thái ghi hình của từng kênh trong trận. Thiết kế này giúp nghiệp vụ giải đấu tách biệt với nghiệp vụ máy chủ chung nhưng vẫn tận dụng được các bảng nền tảng như \textit{users}, \textit{servers} và \textit{channels}.
+
+Về mặt triển khai vật lý, cơ sở dữ liệu sử dụng hệ quản trị MySQL với các bảng InnoDB và bộ mã ký tự \textit{utf8mb4}. Các quan hệ quan trọng đều được ràng buộc bằng khóa ngoại để bảo toàn toàn vẹn dữ liệu. Với các bảng con phụ thuộc trực tiếp vào bảng cha, ví dụ \textit{server\_members} thuộc \textit{servers}, \textit{user\_game\_builds} thuộc \textit{user\_games}, hoặc \textit{tournament\_matches} thuộc \textit{tournaments}, hệ thống sử dụng chiến lược xóa dây chuyền khi dữ liệu cha bị xóa. Với các quan hệ tùy chọn như kênh cha của một kênh, tin nhắn được trả lời, hoặc kênh general của giải đấu, hệ thống sử dụng chiến lược đặt về rỗng khi bản ghi được tham chiếu không còn tồn tại.
+
+Các chỉ mục được thiết kế theo các truy vấn thường gặp của hệ thống: truy vấn thành viên theo máy chủ, truy vấn kênh theo máy chủ và thứ tự hiển thị, truy vấn tin nhắn theo kênh, truy vấn game theo trạng thái công bố hoặc điểm xu hướng, truy vấn giải đấu theo máy chủ và trạng thái, truy vấn trận đấu theo giải đấu, vòng đấu và trạng thái. Nhờ đó, cơ sở dữ liệu vừa đảm bảo tính toàn vẹn của quan hệ, vừa hỗ trợ tốt các luồng nghiệp vụ có tần suất cao như mở máy chủ, xem kênh, nhắn tin, duyệt game và theo dõi giải đấu.
+
+\section{Xây dựng ứng dụng}
+\label{section:4.3}
+
+Sau khi hoàn thành phân tích và thiết kế, hệ thống được xây dựng thành nhiều thành phần có thể chạy độc lập nhưng phối hợp với nhau qua API, WebSocket và cơ sở dữ liệu dùng chung. Phần backend được phát triển bằng Go để xử lý nghiệp vụ chính, xác thực, phân quyền, quản lý máy chủ, game và giải đấu. Phần frontend được xây dựng bằng React và TypeScript, bao gồm ứng dụng web và ứng dụng desktop. Các thành phần hạ tầng như MySQL, Redis và LiveKit được cấu hình bằng Docker Compose để thuận tiện cho quá trình phát triển, kiểm thử và triển khai thử nghiệm.
+
+\subsection{Thư viện và công cụ sử dụng}
+\label{subsection:4.3.1}
+
+Bảng \ref{tab:4-6-danh-sach-cong-cu-thu-vien} liệt kê các ngôn ngữ, thư viện và công cụ chính được sử dụng trong quá trình xây dựng hệ thống. Các phiên bản được ghi nhận theo cấu hình của mã nguồn và môi trường phát triển hiện tại.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-6-danh-sach-cong-cu-thu-vien.png}
+    \caption{Danh sách thư viện và công cụ sử dụng}
+    \label{tab:4-6-danh-sach-cong-cu-thu-vien}
+\end{table}
+
+Ngoài các công cụ chính trong bảng trên, đồ án còn sử dụng một số thư viện hỗ trợ như Axios để gọi API, React Query để quản lý dữ liệu bất đồng bộ, Zustand để quản lý trạng thái phía frontend, Cloudinary SDK để hỗ trợ lưu trữ tài nguyên media và các thư viện WebSocket/message queue phục vụ những tính năng thời gian thực. Các thư viện này không được trình bày tách riêng để tránh làm loãng nội dung, nhưng đều đóng vai trò hỗ trợ cho các nhóm chức năng đã phân tích ở Chương 2.
+
+\subsection{Kết quả đạt được}
+\label{subsection:4.3.2}
+
+Kết quả xây dựng của đồ án là một hệ thống cộng đồng chơi game có thể chạy theo mô hình web, desktop và backend service. Backend cung cấp API và WebSocket cho các nghiệp vụ tài khoản, bạn bè, máy chủ, kênh, tin nhắn, game và giải đấu. Frontend web cung cấp giao diện chính cho người dùng cuối, trong khi bản desktop đóng gói giao diện thành ứng dụng chạy trên Windows. Bên cạnh đó, đồ án còn có game SDK phục vụ việc tích hợp game vào hệ thống và cấu hình Docker Compose để khởi tạo nhanh các dịch vụ hạ tầng cần thiết.
+
+Bảng \ref{tab:4-7-san-pham-dong-goi} trình bày các sản phẩm chính thu được sau quá trình xây dựng và đóng gói trong môi trường phát triển.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-7-san-pham-dong-goi.png}
+    \caption{Các sản phẩm xây dựng và đóng gói}
+    \label{tab:4-7-san-pham-dong-goi}
+\end{table}
+
+Về mặt mã nguồn, hệ thống được tổ chức thành các thành phần chính gồm backend, frontend, game SDK và các module realtime phụ trợ. Bảng \ref{tab:4-8-thong-ke-ma-nguon} thống kê quy mô mã nguồn hiện tại của đồ án. Khi thống kê, các thư mục phụ thuộc và kết quả build như \textit{node\_modules}, \textit{dist}, \textit{release}, \textit{build}, \textit{coverage}, \textit{.git} được loại bỏ để phản ánh đúng phần mã nguồn do đồ án quản lý.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-8-thong-ke-ma-nguon.png}
+    \caption{Thống kê tổng quan mã nguồn}
+    \label{tab:4-8-thong-ke-ma-nguon}
+\end{table}
+
+Bảng \ref{tab:4-9-thong-ke-thu-muc} thống kê dung lượng theo từng nhóm thư mục chính. Có thể thấy backend và frontend là hai phần lớn nhất của hệ thống, tương ứng với tầng xử lý nghiệp vụ và tầng giao diện đã trình bày trong kiến trúc tổng quan.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-9-thong-ke-thu-muc.png}
+    \caption{Thống kê theo nhóm thư mục chính}
+    \label{tab:4-9-thong-ke-thu-muc}
+\end{table}
+
+Nhìn chung, đồ án đã xây dựng được đầy đủ các thành phần cốt lõi để vận hành hệ thống: backend xử lý nghiệp vụ và dữ liệu, frontend phục vụ tương tác người dùng, desktop app phục vụ trải nghiệm cài đặt, game SDK phục vụ tích hợp game, cùng môi trường Docker để khởi tạo các dịch vụ phụ trợ. Các kết quả này là cơ sở để triển khai thử nghiệm, kiểm thử nghiệp vụ và tiếp tục hoàn thiện hệ thống trong các giai đoạn sau.
+
+\section{Kiểm thử}
+\label{section:4.4}
+
+Trong quá trình phát triển hệ thống, đồ án sử dụng kiểm thử hộp đen để đánh giá các chức năng quan trọng từ góc nhìn đầu vào và đầu ra của hệ thống. Với cách tiếp cận này, người kiểm thử không cần phụ thuộc vào cấu trúc bên trong của mã nguồn mà tập trung vào việc gửi yêu cầu, quan sát phản hồi, trạng thái dữ liệu và sự kiện trả về. Kỹ thuật này phù hợp với hệ thống vì phần lớn nghiệp vụ được cung cấp thông qua REST API và WebSocket, có thể kiểm tra bằng các kịch bản sử dụng tương tự người dùng thực tế.
+
+Các kỹ thuật kiểm thử được sử dụng gồm phân hoạch tương đương, kiểm thử giá trị không hợp lệ và kiểm thử luồng nghiệp vụ. Phân hoạch tương đương được áp dụng cho các trường hợp dữ liệu hợp lệ như đăng ký tài khoản, đăng nhập, tạo máy chủ, tạo kênh hoặc gửi tin nhắn. Kiểm thử dữ liệu không hợp lệ được dùng cho các trường hợp thiếu token, loại kênh không hợp lệ hoặc người dùng không có quyền truy cập tài nguyên. Với chức năng nhắn tin, đồ án bổ sung kiểm thử sự kiện thời gian thực bằng cách mở kết nối WebSocket cho hai người dùng và kiểm tra sự kiện được phát sau khi tin nhắn được tạo.
+
+Môi trường kiểm thử được thiết lập cục bộ bằng Docker Compose, bao gồm cơ sở dữ liệu MySQL, Redis và message broker phục vụ các thành phần realtime. Backend chạy ở địa chỉ \textit{localhost:8080}, còn dịch vụ WebSocket thông báo chạy ở \textit{localhost:8085}. Các kịch bản kiểm thử API được thực hiện theo dạng request/response, trong khi kịch bản realtime sử dụng client WebSocket để ghi nhận sự kiện gửi về cho người dùng liên quan.
+
+Đồ án lựa chọn ba nhóm chức năng tiêu biểu để kiểm thử chi tiết: xác thực và hồ sơ người dùng, quản lý máy chủ và kênh, nhắn tin kết hợp đồng bộ thời gian thực. Đây là các chức năng nền tảng, có liên quan trực tiếp đến hầu hết các nghiệp vụ còn lại của hệ thống.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-10-kiem-thu-xac-thuc-ho-so.png}
+    \caption{Kết quả kiểm thử chức năng xác thực và hồ sơ người dùng}
+    \label{tab:4-10-kiem-thu-xac-thuc-ho-so}
+\end{table}
+
+Bảng \ref{tab:4-10-kiem-thu-xac-thuc-ho-so} trình bày các trường hợp kiểm thử liên quan đến đăng ký, đăng nhập, xem hồ sơ, cập nhật hồ sơ và truy cập tài nguyên cần xác thực khi thiếu token. Các test case này giúp kiểm tra cả luồng thành công lẫn trường hợp từ chối truy cập, bảo đảm hệ thống phản hồi đúng với trạng thái xác thực của người dùng.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-11-kiem-thu-may-chu-kenh.png}
+    \caption{Kết quả kiểm thử chức năng máy chủ và kênh}
+    \label{tab:4-11-kiem-thu-may-chu-kenh}
+\end{table}
+
+Bảng \ref{tab:4-11-kiem-thu-may-chu-kenh} thể hiện kết quả kiểm thử nhóm chức năng máy chủ và kênh. Các kịch bản bao gồm tạo máy chủ, xem danh sách thành viên, tạo kênh văn bản, lấy chi tiết kênh, cập nhật vị trí kênh, tạo kênh với loại không hợp lệ và truy cập danh sách thành viên khi người dùng không thuộc máy chủ. Nhóm kiểm thử này tập trung vào tính đúng đắn của API, ràng buộc dữ liệu và phân quyền truy cập.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-12-kiem-thu-tin-nhan-realtime.png}
+    \caption{Kết quả kiểm thử chức năng nhắn tin và đồng bộ thời gian thực}
+    \label{tab:4-12-kiem-thu-tin-nhan-realtime}
+\end{table}
+
+Bảng \ref{tab:4-12-kiem-thu-tin-nhan-realtime} trình bày các kịch bản kiểm thử nhắn tin trong kênh. Ngoài việc kiểm tra API tạo và lấy danh sách tin nhắn, nhóm kiểm thử này còn kiểm tra khả năng phát sự kiện realtime tới các client đang kết nối WebSocket. Khi một người dùng gửi tin nhắn, cả hai client trong cùng ngữ cảnh đều nhận được sự kiện thông báo, cho thấy luồng đồng bộ thời gian thực hoạt động đúng như mong đợi.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-13-tong-hop-kiem-thu.png}
+    \caption{Tổng hợp kết quả kiểm thử}
+    \label{tab:4-13-tong-hop-kiem-thu}
+\end{table}
+
+Như trình bày trong Bảng \ref{tab:4-13-tong-hop-kiem-thu}, đồ án đã thiết kế 17 test case cho ba nhóm chức năng quan trọng. Kết quả kiểm thử đạt 17/17 test case, tương ứng tỉ lệ đạt 100\%. Không có trường hợp kiểm thử nào thất bại trong phạm vi đã thực hiện, do đó không phát sinh phân tích lỗi cụ thể. Kết quả này cho thấy các chức năng nền tảng được kiểm thử hoạt động đúng theo yêu cầu, đặc biệt là các luồng xác thực, phân quyền cơ bản và đồng bộ tin nhắn thời gian thực. Tuy nhiên, phạm vi kiểm thử hiện tại mới tập trung vào các API và sự kiện realtime tiêu biểu; các kiểm thử tải, kiểm thử bảo mật nâng cao và kiểm thử toàn bộ giao diện người dùng cần tiếp tục được bổ sung trong giai đoạn hoàn thiện sau.
+
+\section{Triển khai}
+\label{section:4.5}
+
+Sau khi hoàn thành các chức năng chính, đồ án xây dựng một mô hình triển khai thử nghiệm nhằm kiểm tra khả năng vận hành của hệ thống trong điều kiện gần với thực tế. Mô hình này sử dụng máy ảo Ubuntu Server tự host, Docker Compose để quản lý các dịch vụ, ngrok để tạo đường truy cập tạm thời từ Internet và JMeter để mô phỏng tải người dùng. Đây là môi trường triển khai thử nghiệm, chưa phải môi trường production chính thức, do đó các số liệu trong mục này được xem là số liệu mô phỏng và tham khảo.
+
+Trong mô hình triển khai, các thành phần chính của hệ thống được đóng gói thành container gồm frontend, backend, MySQL, Redis và LiveKit. Frontend được build thành các tệp tĩnh và phục vụ qua Nginx, backend cung cấp REST API và WebSocket, MySQL lưu trữ dữ liệu chính, Redis hỗ trợ trạng thái tạm và các thành phần thời gian thực. LiveKit luôn được bật trong môi trường này để phục vụ các chức năng voice/livestream, giúp quá trình thử nghiệm sát hơn với nghiệp vụ thực tế của hệ thống. Thành phần LiveKit Egress chỉ được xem là tùy chọn mở rộng cho recording/transcoding và không bật mặc định vì tiêu thụ tài nguyên lớn hơn đáng kể.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong4/Trien-khai-tu-host-ngrok-livekit.png}
+    \caption{Mô hình triển khai thử nghiệm tự host với ngrok và LiveKit}
+    \label{fig:4-14-trien-khai-tu-host-ngrok-livekit}
+\end{figure}
+
+Hình \ref{fig:4-14-trien-khai-tu-host-ngrok-livekit} mô tả luồng triển khai thử nghiệm của hệ thống. Người dùng truy cập hệ thống thông qua URL do ngrok cung cấp. Yêu cầu giao diện được chuyển tới frontend/reverse proxy, các yêu cầu nghiệp vụ được gửi tới backend, sau đó backend truy cập MySQL hoặc Redis tùy theo loại dữ liệu. Riêng các chức năng voice/livestream sử dụng kết nối tới LiveKit, trong đó frontend tham gia phòng media còn backend có nhiệm vụ cấp token và kiểm soát quyền truy cập theo nghiệp vụ.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-14-cau-hinh-moi-truong-trien-khai.png}
+    \caption{Cấu hình môi trường triển khai thử nghiệm}
+    \label{tab:4-14-cau-hinh-moi-truong-trien-khai}
+\end{table}
+
+Bảng \ref{tab:4-14-cau-hinh-moi-truong-trien-khai} trình bày cấu hình môi trường đề xuất cho quá trình thử nghiệm. Với cấu hình 2 vCPU, 4GB RAM và 40GB SSD, hệ thống có thể chạy đồng thời backend, frontend, MySQL, Redis và LiveKit cho phạm vi demo nhóm nhỏ. Nếu chỉ sử dụng 2GB RAM, hệ thống vẫn có thể chạy trong điều kiện tối ưu, nhưng biên tài nguyên khá thấp và không nên bật thêm recording, transcoding hoặc các tác vụ upload lớn.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-15-danh-sach-container-trien-khai.png}
+    \caption{Danh sách container trong môi trường triển khai}
+    \label{tab:4-15-danh-sach-container-trien-khai}
+\end{table}
+
+Bảng \ref{tab:4-15-danh-sach-container-trien-khai} liệt kê các container chính trong mô hình triển khai. Cách tổ chức này giúp việc khởi động, dừng, cấu hình và thay thế từng thành phần trở nên đơn giản hơn. Đồng thời, Docker Compose cũng giúp môi trường thử nghiệm có tính lặp lại cao, thuận tiện cho việc kiểm thử trên máy cá nhân hoặc chuyển sang VPS khi cần.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-16-kich-ban-jmeter.png}
+    \caption{Kịch bản JMeter mô phỏng 10 người dùng đồng thời}
+    \label{tab:4-16-kich-ban-jmeter}
+\end{table}
+
+Để đánh giá sơ bộ khả năng đáp ứng của backend, đồ án xây dựng kịch bản JMeter như Bảng \ref{tab:4-16-kich-ban-jmeter}. Kịch bản sử dụng 10 người dùng ảo, thời gian tăng tải 10 giây, thời lượng kiểm thử 5 phút và khoảng nghỉ giữa các thao tác từ 500 đến 1500ms. Các API được lựa chọn là những API thường gặp trong quá trình sử dụng hệ thống như đăng nhập, xem thông tin cá nhân, xem máy chủ, xem kênh, đọc/gửi tin nhắn, xem danh sách game và xem giải đấu trong máy chủ. Do JMeter không phù hợp để đo trực tiếp luồng media WebRTC, chức năng LiveKit được kiểm tra bổ sung bằng 2 đến 4 client thật tham gia voice/livestream nhẹ trong lúc kịch bản API đang chạy.
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/4-17-ket-qua-mo-phong-jmeter-livekit.png}
+    \caption{Kết quả mô phỏng triển khai với JMeter và LiveKit}
+    \label{tab:4-17-ket-qua-mo-phong-jmeter-livekit}
+\end{table}
+
+Bảng \ref{tab:4-17-ket-qua-mo-phong-jmeter-livekit} tổng hợp kết quả mô phỏng tham khảo trong điều kiện 10 người dùng API đồng thời và 2 đến 4 client voice/livestream nhẹ. Hệ thống xử lý khoảng 1000 đến 1500 HTTP request trong 5 phút, throughput khoảng 3 đến 5 request/giây, tỉ lệ lỗi HTTP trong khoảng 0 đến 1\%. Các API nhẹ có thời gian phản hồi trung bình khoảng 50 đến 120ms, API danh sách server/channel/message khoảng 100 đến 250ms, còn API gửi tin nhắn khoảng 150 đến 350ms. Khi LiveKit bật nhưng chưa có người tham gia voice, RAM sử dụng khoảng 1.5 đến 2.1GB; khi có 2 đến 4 client voice/livestream nhẹ, RAM tăng lên khoảng 2.0 đến 3.2GB và CPU dao động khoảng 35 đến 70\% tùy chất lượng media.
+
+Từ kết quả mô phỏng, mô hình tự host kết hợp Docker Compose và ngrok phù hợp cho mục đích demo, kiểm thử nhóm nhỏ và bảo vệ đồ án. Tuy nhiên, ngrok chỉ nên dùng như đường public tạm thời, không thay thế cho phương án triển khai production với domain, HTTPS và reverse proxy cố định. Nếu triển khai thực tế với LiveKit luôn bật, hệ thống nên sử dụng tối thiểu 4GB RAM; khi số lượng phòng voice/livestream tăng hoặc cần bật recording/transcoding, nên tách LiveKit và LiveKit Egress sang máy chủ riêng để tránh ảnh hưởng tới backend và cơ sở dữ liệu.
+
+
+\end{document}

@@ -1,0 +1,35 @@
+stateDiagram-v2
+    [*] --> Draft: "Tạo giải đấu"
+    Draft --> Registration: "Mở đăng ký"
+    Registration --> CheckIn: "Đến giai đoạn check-in"
+    CheckIn --> InProgress: "Bắt đầu giải đấu"
+    InProgress --> Completed: "Hoàn thành bracket"
+    Draft --> Cancelled: "Hủy giải"
+    Registration --> Cancelled: "Hủy giải"
+    CheckIn --> Cancelled: "Hủy giải"
+    InProgress --> Cancelled: "Hủy giải"
+    Completed --> [*]
+    Cancelled --> [*]
+
+    state Registration {
+        [*] --> Join
+        Join: "Người chơi / đội đăng ký"
+        Join --> TeamManage: "Nếu giải theo đội"
+        TeamManage: "Đội trưởng quản lý thành viên"
+        Join --> [*]
+        TeamManage --> [*]
+    }
+
+    state InProgress {
+        [*] --> GenerateBracket
+        GenerateBracket: "Sinh bracket"
+        GenerateBracket --> MatchWorkspace
+        MatchWorkspace: "Tạo workspace trận"
+        MatchWorkspace --> ReportResult
+        ReportResult: "Báo cáo kết quả"
+        ReportResult --> VerifyResult
+        VerifyResult: "Trọng tài xác minh / xử lý khiếu nại"
+        VerifyResult --> UpdateBracket
+        UpdateBracket: "Cập nhật bracket"
+        UpdateBracket --> [*]
+    }

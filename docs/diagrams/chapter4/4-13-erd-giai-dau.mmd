@@ -1,0 +1,146 @@
+erDiagram
+  USERS {
+    string id PK
+    string username
+  }
+
+  SERVERS {
+    string id PK
+    string name
+    string owner_id FK
+  }
+
+  CHANNELS {
+    string id PK
+    string server_id FK
+    string type
+    string name
+  }
+
+  TOURNAMENTS {
+    string id PK
+    string server_id FK
+    string name
+    string game
+    string format
+    string status
+    int max_participants
+    string participant_type
+    int team_size
+    string created_by FK
+    string tournament_general_channel_id FK
+    boolean recording_enabled
+  }
+
+  TOURNAMENT_TEAMS {
+    string id PK
+    string tournament_id FK
+    string name
+    string captain_id FK
+  }
+
+  TOURNAMENT_TEAM_MEMBERS {
+    string team_id PK
+    string user_id PK
+    int joined_at
+  }
+
+  TOURNAMENT_PARTICIPANTS {
+    string id PK
+    string tournament_id FK
+    string user_id FK
+    string team_id FK
+    int seed
+    string status
+    int final_rank
+  }
+
+  TOURNAMENT_MATCHES {
+    string id PK
+    string tournament_id FK
+    int round
+    int match_number
+    string bracket_side
+    string participant1_id FK
+    string participant2_id FK
+    string winner_id FK
+    string status
+    string next_match_id FK
+    string loser_next_match_id FK
+  }
+
+  TOURNAMENT_MATCH_REPORTS {
+    string id PK
+    string match_id FK
+    string reported_by FK
+    string winner_id FK
+    int score1
+    int score2
+    string status
+  }
+
+  TOURNAMENT_ROLES {
+    string id PK
+    string tournament_id FK
+    string code
+    string name
+  }
+
+  TOURNAMENT_ROLE_BINDINGS {
+    string id PK
+    string tournament_id FK
+    string role_id FK
+    string user_id FK
+  }
+
+  TOURNAMENT_MATCH_WORKSPACES {
+    string id PK
+    string tournament_id FK
+    string match_id FK
+    string server_id FK
+    string team_a_channel_id FK
+    string team_b_channel_id FK
+    string caster_channel_id FK
+    string admin_channel_id FK
+    string referee_channel_id FK
+    string spectator_channel_id FK
+    string livestream_channel_id FK
+  }
+
+  TOURNAMENT_MATCH_RECORDINGS {
+    string id PK
+    string tournament_id FK
+    string match_id FK
+    string channel_id FK
+    string source_role
+    string status
+  }
+
+  USERS ||--o{ TOURNAMENTS : creates
+  USERS ||--o{ TOURNAMENT_TEAMS : captains
+  USERS ||--o{ TOURNAMENT_TEAM_MEMBERS : joins
+  USERS ||--o{ TOURNAMENT_PARTICIPANTS : registers
+  USERS ||--o{ TOURNAMENT_MATCH_REPORTS : reports
+  USERS ||--o{ TOURNAMENT_ROLE_BINDINGS : assigned
+  SERVERS ||--o{ TOURNAMENTS : hosts
+  SERVERS ||--o{ TOURNAMENT_MATCH_WORKSPACES : contains
+  CHANNELS ||--o{ TOURNAMENTS : general
+  CHANNELS ||--o{ TOURNAMENT_MATCH_WORKSPACES : workspace_channels
+  CHANNELS ||--o{ TOURNAMENT_MATCH_RECORDINGS : records
+  TOURNAMENTS ||--o{ TOURNAMENT_TEAMS : has
+  TOURNAMENTS ||--o{ TOURNAMENT_PARTICIPANTS : has
+  TOURNAMENTS ||--o{ TOURNAMENT_MATCHES : generates
+  TOURNAMENTS ||--o{ TOURNAMENT_ROLES : defines
+  TOURNAMENTS ||--o{ TOURNAMENT_ROLE_BINDINGS : has
+  TOURNAMENTS ||--o{ TOURNAMENT_MATCH_WORKSPACES : provisions
+  TOURNAMENTS ||--o{ TOURNAMENT_MATCH_RECORDINGS : has
+  TOURNAMENT_TEAMS ||--o{ TOURNAMENT_TEAM_MEMBERS : includes
+  TOURNAMENT_TEAMS ||--o{ TOURNAMENT_PARTICIPANTS : registers
+  TOURNAMENT_PARTICIPANTS ||--o{ TOURNAMENT_MATCHES : participant1
+  TOURNAMENT_PARTICIPANTS ||--o{ TOURNAMENT_MATCHES : participant2
+  TOURNAMENT_PARTICIPANTS ||--o{ TOURNAMENT_MATCHES : wins
+  TOURNAMENT_MATCHES ||--o{ TOURNAMENT_MATCHES : next
+  TOURNAMENT_MATCHES ||--o{ TOURNAMENT_MATCH_REPORTS : has
+  TOURNAMENT_MATCHES ||--o{ TOURNAMENT_MATCH_WORKSPACES : workspace
+  TOURNAMENT_MATCHES ||--o{ TOURNAMENT_MATCH_RECORDINGS : recordings
+  TOURNAMENT_ROLES ||--o{ TOURNAMENT_ROLE_BINDINGS : assigned

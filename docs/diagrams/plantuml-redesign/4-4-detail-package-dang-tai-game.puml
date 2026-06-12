@@ -1,0 +1,55 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+package "Presentation" {
+  [GameUploadPage]
+  [GameManagePage]
+}
+package "Controller" {
+  [GameController]
+  [GameBuildController]
+}
+package "Service" {
+  [GameService]
+  [BuildService]
+  [ReviewService]
+}
+package "Repository" {
+  [GameRepository]
+  [BuildRepository]
+  [MediaRepository]
+}
+package "Infrastructure" {
+  [StorageProvider]
+  [ZipValidator]
+  [Database]
+}
+package "Domain" {
+  [Game]
+  [GameBuild]
+  [GameMedia]
+  [PublishState]
+}
+[GameUploadPage] --> [GameController]
+[GameUploadPage] --> [GameBuildController]
+[GameController] --> [GameService]
+[GameBuildController] --> [BuildService]
+[GameService] --> [GameRepository]
+[BuildService] --> [BuildRepository]
+[BuildService] --> [ZipValidator]
+[BuildService] --> [StorageProvider]
+[ReviewService] --> [GameRepository]
+[GameRepository] --> [Database]
+[BuildRepository] --> [Database]
+[MediaRepository] --> [Database]
+[GameService] ..> [Game]
+[BuildService] ..> [GameBuild]
+@enduml

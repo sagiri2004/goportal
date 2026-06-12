@@ -1,0 +1,86 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+hide circle
+entity "users" as users {
+  * id : uuid
+  --
+  username
+  email
+  password_hash
+}
+entity "friendships" as friendships {
+  * id : uuid
+  --
+  requester_id
+  addressee_id
+  status
+}
+entity "servers" as servers {
+  * id : uuid
+  --
+  owner_id
+  name
+  visibility
+}
+entity "server_members" as members {
+  * id : uuid
+  --
+  server_id
+  user_id
+  joined_at
+}
+entity "server_roles" as roles {
+  * id : uuid
+  --
+  server_id
+  name
+  permission_bits
+}
+entity "member_roles" as member_roles {
+  * member_id
+  * role_id
+}
+entity "channels" as channels {
+  * id : uuid
+  --
+  server_id
+  parent_id
+  type
+  name
+}
+entity "channel_permissions" as perms {
+  * id : uuid
+  --
+  channel_id
+  subject_id
+  allow_bits
+  deny_bits
+}
+entity "messages" as messages {
+  * id : uuid
+  --
+  channel_id
+  author_id
+  content
+  created_at
+}
+users ||--o{ friendships
+users ||--o{ servers
+users ||--o{ members
+servers ||--o{ members
+servers ||--o{ roles
+members ||--o{ member_roles
+roles ||--o{ member_roles
+servers ||--o{ channels
+channels ||--o{ perms
+channels ||--o{ messages
+users ||--o{ messages
+@enduml

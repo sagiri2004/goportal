@@ -1,0 +1,45 @@
+@startuml
+title Quy trình nghiệp vụ Đăng tải game
+
+|Nhà phát triển|
+start
+:Tạo thông tin game;
+:Nhập mô tả, ảnh đại diện và metadata;
+
+|Hệ thống|
+:Chuẩn hóa slug;
+:Tạo game ở trạng thái draft;
+
+|Nhà phát triển|
+:Đóng gói bản build dạng zip;
+:Tải lên bản build;
+
+|Hệ thống|
+:Kiểm tra quyền sở hữu game;
+:Kiểm tra định dạng file zip;
+if (Build hợp lệ?) then (Có)
+  :Giải nén build;
+  :Kiểm tra index.html;
+  :Lưu bundle và đường dẫn chơi game;
+  :Đánh dấu build sẵn sàng;
+else (Không)
+  :Trả lỗi upload build;
+  stop
+endif
+
+|Nhà phát triển|
+:Gửi game vào hàng đợi kiểm duyệt;
+
+|Quản trị viên|
+:Xem thông tin game và bản build;
+if (Duyệt phát hành?) then (Có)
+  |Hệ thống|
+  :Cập nhật trạng thái published;
+  :Hiển thị game trên chợ game;
+else (Không)
+  |Hệ thống|
+  :Cập nhật trạng thái cần chỉnh sửa;
+endif
+
+stop
+@enduml

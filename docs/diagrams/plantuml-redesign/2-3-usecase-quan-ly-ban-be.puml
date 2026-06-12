@@ -1,0 +1,29 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Người dùng" as User
+rectangle "Quản lý bạn bè" {
+  usecase "Xem danh sách\nbạn bè" as UC_List
+  usecase "Gửi yêu cầu\nkết bạn" as UC_Send
+  usecase "Chấp nhận\nkết bạn" as UC_Accept
+  usecase "Từ chối\nkết bạn" as UC_Reject
+  usecase "Hủy kết bạn" as UC_Unfriend
+  usecase "Chặn người dùng" as UC_Block
+  usecase "Bỏ chặn" as UC_Unblock
+}
+User --> UC_List
+User --> UC_Send
+User --> UC_Accept
+User --> UC_Reject
+User --> UC_Unfriend
+User --> UC_Block
+User --> UC_Unblock
+@enduml

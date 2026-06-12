@@ -1,0 +1,27 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+top to bottom direction
+
+package "Frontend" as Frontend {
+  package "Routing" as Routing
+  package "Layouts" as Layouts
+  package "Pages" as Pages
+  package "Components" as Components
+  package "State Management" as State
+  package "API & Realtime Services" as Services
+  package "Assets & Utilities" as Shared
+}
+
+Routing ..> Pages
+Pages ..> Layouts
+Pages ..> Components
+Pages ..> State
+Pages ..> Services
+Components ..> Shared
+State ..> Services
+Services ..> Shared
+@enduml

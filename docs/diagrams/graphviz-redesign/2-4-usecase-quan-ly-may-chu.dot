@@ -1,0 +1,46 @@
+digraph G {
+  graph [rankdir=LR, charset="UTF-8", labelloc=t, label="Quản lý máy chủ", fontsize=22, fontname="Arial", nodesep=0.55, ranksep=0.85, splines=ortho, outputorder=edgesfirst];
+  node [fontname="Arial", fontsize=14, color="#333333"];
+  edge [fontname="Arial", fontsize=12, color="#333333", arrowsize=0.7];
+
+  Owner [shape=box, style="rounded", label="Chủ máy chủ"];
+  User [shape=box, style="rounded", label="Người dùng"];
+  Manager [shape=box, style="rounded", label="Thành viên có
+quyền quản trị"];
+
+  subgraph cluster_user {
+    label="Thao tác tham gia"; style="rounded"; color="#555555";
+    View [shape=ellipse, label="Xem danh sách
+máy chủ"];
+    Join [shape=ellipse, label="Tham gia
+máy chủ"];
+    Request [shape=ellipse, label="Gửi yêu cầu
+tham gia"];
+    Leave [shape=ellipse, label="Rời máy chủ"];
+  }
+  subgraph cluster_manager {
+    label="Quản trị bằng RBAC"; style="rounded"; color="#555555";
+    Invite [shape=ellipse, label="Tạo lời mời"];
+    Review [shape=ellipse, label="Duyệt yêu cầu
+tham gia"];
+    Member [shape=ellipse, label="Quản lý
+thành viên"];
+    Role [shape=ellipse, label="Quản lý
+vai trò"];
+    Channel [shape=ellipse, label="Quản lý kênh"];
+    Permission [shape=ellipse, label="Phân quyền kênh"];
+  }
+  subgraph cluster_owner {
+    label="Quyền chủ máy chủ"; style="rounded"; color="#555555";
+    Update [shape=ellipse, label="Cập nhật
+máy chủ"];
+    Delete [shape=ellipse, label="Xóa máy chủ"];
+  }
+
+  User -> View [arrowhead=none]; User -> Join [arrowhead=none]; User -> Leave [arrowhead=none];
+  Join -> Request [style=dashed, label="extend"];
+  Manager -> Invite [arrowhead=none]; Manager -> Review [arrowhead=none]; Manager -> Member [arrowhead=none]; Manager -> Role [arrowhead=none]; Manager -> Channel [arrowhead=none];
+  Channel -> Permission [style=dashed, label="include"];
+  Owner -> Update [arrowhead=none]; Owner -> Delete [arrowhead=none];
+  Owner -> Manager [style=dashed, label="kế thừa quyền", arrowhead=empty];
+}

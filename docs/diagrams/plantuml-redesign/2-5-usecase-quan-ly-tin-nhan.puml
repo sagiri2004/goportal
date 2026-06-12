@@ -1,0 +1,30 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Người dùng" as User
+rectangle "Quản lý tin nhắn" {
+  usecase "Xem tin nhắn" as UC_View
+  usecase "Gửi tin nhắn" as UC_Send
+  usecase "Trả lời tin nhắn" as UC_Reply
+  usecase "Chỉnh sửa\ntin nhắn" as UC_Edit
+  usecase "Xóa tin nhắn" as UC_Delete
+  usecase "Thả phản ứng" as UC_React
+  usecase "Đánh dấu\nđã đọc" as UC_Read
+}
+User --> UC_View
+User --> UC_Send
+User --> UC_Reply
+User --> UC_Edit
+User --> UC_Delete
+User --> UC_React
+User --> UC_Read
+UC_Reply ..> UC_Send : <<extend>>
+@enduml

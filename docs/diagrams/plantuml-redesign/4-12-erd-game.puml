@@ -1,0 +1,91 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+hide circle
+entity "users" as users {
+  * id : uuid
+  --
+  username
+}
+entity "user_games" as games {
+  * id : uuid
+  --
+  owner_id
+  title
+  slug
+  publish_state
+}
+entity "game_builds" as builds {
+  * id : uuid
+  --
+  game_id
+  version
+  entry_url
+  status
+}
+entity "game_media" as media {
+  * id : uuid
+  --
+  game_id
+  type
+  url
+}
+entity "game_sessions" as sessions {
+  * id : uuid
+  --
+  game_id
+  user_id
+  started_at
+}
+entity "game_scores" as scores {
+  * id : uuid
+  --
+  game_id
+  user_id
+  score
+}
+entity "game_achievements" as achievements {
+  * id : uuid
+  --
+  game_id
+  key
+  name
+}
+entity "user_achievements" as user_achievements {
+  * user_id
+  * achievement_id
+  unlocked_at
+}
+entity "game_rooms" as rooms {
+  * id : uuid
+  --
+  game_id
+  host_id
+  status
+}
+entity "game_room_members" as room_members {
+  * room_id
+  * user_id
+  role
+}
+users ||--o{ games
+games ||--o{ builds
+games ||--o{ media
+games ||--o{ sessions
+users ||--o{ sessions
+games ||--o{ scores
+users ||--o{ scores
+games ||--o{ achievements
+achievements ||--o{ user_achievements
+users ||--o{ user_achievements
+games ||--o{ rooms
+rooms ||--o{ room_members
+users ||--o{ room_members
+@enduml

@@ -1,0 +1,28 @@
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Thiết kế chi tiết lớp Tournament}}{42}{table.caption.31}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Thiết kế chi tiết lớp TournamentCreateEditDialog}}{43}{table.caption.32}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Thiết kế chi tiết lớp TournamentService}}{44}{table.caption.33}%
+\contentsline {table}{\numberline {4.4}{\ignorespaces Thiết kế chi tiết interface TournamentRepository}}{45}{table.caption.34}%
+\contentsline {table}{\numberline {4.5}{\ignorespaces Tổng hợp các cụm dữ liệu chính của hệ thống}}{47}{table.caption.36}%
+\contentsline {table}{\numberline {4.6}{\ignorespaces Danh sách thư viện và công cụ sử dụng}}{51}{table.caption.40}%
+\contentsline {table}{\numberline {4.7}{\ignorespaces Các sản phẩm xây dựng và đóng gói}}{52}{table.caption.41}%
+\contentsline {table}{\numberline {4.8}{\ignorespaces Thống kê tổng quan mã nguồn}}{52}{table.caption.42}%
+\contentsline {table}{\numberline {4.9}{\ignorespaces Thống kê theo nhóm thư mục chính}}{53}{table.caption.43}%
+\contentsline {table}{\numberline {4.10}{\ignorespaces Kết quả kiểm thử chức năng xác thực và hồ sơ người dùng}}{54}{table.caption.44}%
+\contentsline {table}{\numberline {4.11}{\ignorespaces Kết quả kiểm thử chức năng máy chủ và kênh}}{54}{table.caption.45}%
+\contentsline {table}{\numberline {4.12}{\ignorespaces Kết quả kiểm thử chức năng nhắn tin và đồng bộ thời gian thực}}{55}{table.caption.46}%
+\contentsline {table}{\numberline {4.13}{\ignorespaces Tổng hợp kết quả kiểm thử}}{55}{table.caption.47}%
+\contentsline {table}{\numberline {4.14}{\ignorespaces Cấu hình môi trường triển khai thử nghiệm}}{57}{table.caption.49}%
+\contentsline {table}{\numberline {4.15}{\ignorespaces Danh sách container trong môi trường triển khai}}{57}{table.caption.50}%
+\contentsline {table}{\numberline {4.16}{\ignorespaces Kịch bản JMeter mô phỏng 10 người dùng đồng thời}}{58}{table.caption.51}%
+\contentsline {table}{\numberline {4.17}{\ignorespaces Kết quả mô phỏng triển khai với JMeter và LiveKit}}{58}{table.caption.52}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {A.1}{\ignorespaces Danh sách use case đặc tả tiêu biểu}}{72}{table.caption.57}%
+\contentsline {table}{\numberline {A.2}{\ignorespaces Các trường dữ liệu tham khảo trong đặc tả use case}}{74}{table.caption.58}%
+\contentsfinish 
+\contentsfinish 

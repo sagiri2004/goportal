@@ -1,0 +1,136 @@
+erDiagram
+  USERS {
+    string id PK
+    string username
+    string avatar_url
+  }
+
+  CHANNELS {
+    string id PK
+    string server_id FK
+    string type
+    string name
+  }
+
+  USER_GAMES {
+    string id PK
+    string owner_user_id FK
+    string source_type
+    string title
+    string slug
+    string visibility
+    string status
+    string publish_state
+    string category
+    json tags
+    string age_rating
+    double avg_rating
+    int rating_count
+    int launch_count
+  }
+
+  USER_GAME_BUILDS {
+    string id PK
+    string game_id FK
+    string version
+    string storage_zip_url
+    string play_base_path
+    string entry_file
+    int file_size
+    string checksum
+    string status
+  }
+
+  GAME_RATINGS {
+    string id PK
+    string game_id FK
+    string user_id FK
+    int score
+  }
+
+  GAME_REVIEWS {
+    string id PK
+    string game_id FK
+    string user_id FK
+    string title
+    string content
+    int rating_score
+    string status
+  }
+
+  GAME_REVIEW_VOTES {
+    string id PK
+    string review_id FK
+    string user_id FK
+    string vote_type
+  }
+
+  GAME_REPORTS {
+    string id PK
+    string game_id FK
+    string reporter_user_id FK
+    string reason
+    string status
+  }
+
+  GAME_SESSIONS {
+    string id PK
+    string game_id FK
+    string user_id FK
+    string channel_id FK
+    string room_id FK
+    string status
+    json metadata
+  }
+
+  GAME_EVENTS {
+    string id PK
+    string game_id FK
+    string session_id FK
+    string user_id FK
+    string event_type
+    string idempotency_key
+    int score
+    string achievement_code
+    json payload
+  }
+
+  GAME_ROOMS {
+    string id PK
+    string game_id FK
+    string channel_id FK
+    string host_user_id FK
+    string room_code
+    string status
+    int max_players
+    json current_state
+  }
+
+  GAME_ROOM_MEMBERS {
+    string id PK
+    string room_id FK
+    string user_id FK
+    string role
+    string status
+  }
+
+  USERS ||--o{ USER_GAMES : owns
+  USERS ||--o{ GAME_RATINGS : rates
+  USERS ||--o{ GAME_REVIEWS : reviews
+  USERS ||--o{ GAME_REPORTS : reports
+  USERS ||--o{ GAME_SESSIONS : plays
+  USERS ||--o{ GAME_EVENTS : creates
+  USERS ||--o{ GAME_ROOMS : hosts
+  USERS ||--o{ GAME_ROOM_MEMBERS : joins
+  USER_GAMES ||--o{ USER_GAME_BUILDS : has
+  USER_GAMES ||--o{ GAME_RATINGS : receives
+  USER_GAMES ||--o{ GAME_REVIEWS : receives
+  USER_GAMES ||--o{ GAME_REPORTS : receives
+  USER_GAMES ||--o{ GAME_SESSIONS : starts
+  USER_GAMES ||--o{ GAME_EVENTS : emits
+  USER_GAMES ||--o{ GAME_ROOMS : opens
+  GAME_REVIEWS ||--o{ GAME_REVIEW_VOTES : has
+  GAME_SESSIONS ||--o{ GAME_EVENTS : records
+  GAME_ROOMS ||--o{ GAME_ROOM_MEMBERS : includes
+  CHANNELS ||--o{ GAME_SESSIONS : context
+  CHANNELS ||--o{ GAME_ROOMS : context

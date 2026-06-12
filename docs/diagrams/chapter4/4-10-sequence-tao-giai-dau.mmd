@@ -1,0 +1,32 @@
+sequenceDiagram
+autonumber
+actor User as Người tổ chức
+participant Dialog as TournamentCreateEditDialog
+participant Controller as TournamentController
+participant Service as tournamentService
+participant ServerRepo as ServerRepository
+participant TournamentRepo as TournamentRepository
+participant ChannelRepo as ChannelRepository
+participant Publisher as Watermill
+
+User->>Dialog: Nhập thông tin giải đấu
+Dialog->>Dialog: Kiểm tra dữ liệu giao diện
+Dialog->>Controller: POST /servers/{serverId}/tournaments
+Controller->>Service: CreateTournament(actorID, input)
+Service->>ServerRepo: FindMember(serverID, actorID)
+ServerRepo-->>Service: Thành viên hợp lệ
+Service->>ServerRepo: HasPermission(manage_channels)
+ServerRepo-->>Service: Có quyền
+Service->>Service: Chuẩn hóa và kiểm tra input
+Service->>TournamentRepo: CreateTournament(tournament draft)
+TournamentRepo-->>Service: Tournament đã tạo
+Service->>ChannelRepo: ListByServerID(serverID)
+ChannelRepo-->>Service: Danh sách kênh
+Service->>ChannelRepo: Create general channel nếu chưa có
+ChannelRepo-->>Service: General channel
+Service->>TournamentRepo: UpdateTournament(generalChannelID)
+TournamentRepo-->>Service: Cập nhật thành công
+Service->>Publisher: Publish tournament.created
+Service-->>Controller: Tournament
+Controller-->>Dialog: 201 Created
+Dialog-->>User: Đóng hộp thoại và refresh danh sách

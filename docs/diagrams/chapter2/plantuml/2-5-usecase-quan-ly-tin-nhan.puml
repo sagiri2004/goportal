@@ -1,0 +1,24 @@
+@startuml
+left to right direction
+
+actor "Người dùng" as User
+
+rectangle "GoPortal - Quản lý tin nhắn" {
+  usecase "Xem tin nhắn" as UC_ViewMessages
+  usecase "Gửi tin nhắn" as UC_SendMessage
+  usecase "Chỉnh sửa tin nhắn" as UC_EditMessage
+  usecase "Xóa tin nhắn" as UC_DeleteMessage
+  usecase "Trả lời tin nhắn" as UC_ReplyMessage
+  usecase "Thả phản ứng" as UC_ReactMessage
+  usecase "Đánh dấu đã đọc" as UC_MarkRead
+}
+
+User --> UC_ViewMessages
+User --> UC_SendMessage
+User --> UC_EditMessage
+User --> UC_DeleteMessage
+User --> UC_ReplyMessage
+User --> UC_ReactMessage
+User --> UC_MarkRead
+
+@enduml

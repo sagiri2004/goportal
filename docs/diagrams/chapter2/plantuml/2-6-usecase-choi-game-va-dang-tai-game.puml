@@ -1,0 +1,44 @@
+@startuml
+left to right direction
+
+actor "Khách" as Guest
+actor "Người dùng" as User
+actor "Nhà phát triển" as Developer
+
+rectangle "GoPortal - Chơi game và Đăng tải game" {
+  usecase "Xem danh sách game" as UC_ListGames
+  usecase "Xem chi tiết game" as UC_ViewGame
+  usecase "Chơi game công khai" as UC_PlayPublic
+
+  usecase "Chơi game" as UC_PlayGame
+  usecase "Tạo phiên chơi" as UC_CreateSession
+  usecase "Đồng bộ trạng thái" as UC_SyncState
+  usecase "Chia sẻ điểm số" as UC_ShareScore
+  usecase "Chia sẻ thành tích" as UC_ShareAchievement
+
+  usecase "Tạo thông tin game" as UC_CreateGame
+  usecase "Cập nhật thông tin game" as UC_UpdateGame
+  usecase "Tải lên bản build" as UC_UploadBuild
+  usecase "Gửi kiểm duyệt" as UC_SubmitReview
+  usecase "Quản lý game đã đăng" as UC_ManageGames
+}
+
+Guest --> UC_ListGames
+Guest --> UC_ViewGame
+Guest --> UC_PlayPublic
+
+User --> UC_ListGames
+User --> UC_ViewGame
+User --> UC_PlayGame
+User --> UC_CreateSession
+User --> UC_SyncState
+User --> UC_ShareScore
+User --> UC_ShareAchievement
+
+Developer --> UC_CreateGame
+Developer --> UC_UpdateGame
+Developer --> UC_UploadBuild
+Developer --> UC_SubmitReview
+Developer --> UC_ManageGames
+
+@enduml

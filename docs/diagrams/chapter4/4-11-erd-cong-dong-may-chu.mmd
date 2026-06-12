@@ -1,0 +1,137 @@
+erDiagram
+  USERS {
+    string id PK
+    string username
+    string password
+    boolean is_admin
+    string status
+    string avatar_url
+  }
+
+  USER_RELATIONSHIPS {
+    string id PK
+    string requester_id FK
+    string addressee_id FK
+    string status
+  }
+
+  SERVERS {
+    string id PK
+    string name
+    string owner_id FK
+    boolean is_public
+    string default_role_id FK
+    string icon_url
+    string banner_url
+  }
+
+  SERVER_MEMBERS {
+    string id PK
+    string server_id FK
+    string user_id FK
+    string status
+  }
+
+  SERVER_JOIN_REQUESTS {
+    string id PK
+    string server_id FK
+    string user_id FK
+    string status
+    string reviewed_by FK
+  }
+
+  ROLES {
+    string id PK
+    string server_id FK
+    string name
+    int position
+    int permissions
+  }
+
+  SERVER_MEMBER_ROLE {
+    string id PK
+    string server_member_id FK
+    string role_id FK
+  }
+
+  CHANNELS {
+    string id PK
+    string server_id FK
+    string parent_id FK
+    string type
+    string name
+    int position
+    boolean is_private
+  }
+
+  CHANNEL_MEMBERS {
+    string id PK
+    string channel_id FK
+    string user_id FK
+  }
+
+  CHANNEL_PERMISSION_OVERWRITES {
+    string id PK
+    string channel_id FK
+    string subject_type
+    string subject_id
+    int allow_bits
+    int deny_bits
+  }
+
+  MESSAGES {
+    string id PK
+    string channel_id FK
+    string reply_to_id FK
+    string author_id FK
+    json content
+    boolean is_edited
+    boolean is_pinned
+  }
+
+  MESSAGE_ATTACHMENTS {
+    string id PK
+    string message_id FK
+    string file_url
+    string file_type
+    int file_size
+    string file_name
+  }
+
+  MESSAGE_REACTIONS {
+    string id PK
+    string message_id FK
+    string user_id FK
+    string emoji
+  }
+
+  USER_CHANNEL_READS {
+    string user_id PK
+    string channel_id PK
+    int last_read_at
+    int unread_count
+  }
+
+  USERS ||--o{ USER_RELATIONSHIPS : requester
+  USERS ||--o{ USER_RELATIONSHIPS : addressee
+  USERS ||--o{ SERVERS : owns
+  USERS ||--o{ SERVER_MEMBERS : joins
+  USERS ||--o{ SERVER_JOIN_REQUESTS : requests
+  USERS ||--o{ MESSAGES : writes
+  USERS ||--o{ MESSAGE_REACTIONS : reacts
+  USERS ||--o{ CHANNEL_MEMBERS : can_access
+  USERS ||--o{ USER_CHANNEL_READS : reads
+  SERVERS ||--o{ SERVER_MEMBERS : has
+  SERVERS ||--o{ SERVER_JOIN_REQUESTS : receives
+  SERVERS ||--o{ ROLES : defines
+  SERVERS ||--o{ CHANNELS : contains
+  ROLES ||--o{ SERVER_MEMBER_ROLE : assigned
+  SERVER_MEMBERS ||--o{ SERVER_MEMBER_ROLE : has
+  CHANNELS ||--o{ CHANNELS : parent
+  CHANNELS ||--o{ CHANNEL_MEMBERS : includes
+  CHANNELS ||--o{ CHANNEL_PERMISSION_OVERWRITES : overrides
+  CHANNELS ||--o{ MESSAGES : contains
+  CHANNELS ||--o{ USER_CHANNEL_READS : tracked
+  MESSAGES ||--o{ MESSAGE_ATTACHMENTS : has
+  MESSAGES ||--o{ MESSAGE_REACTIONS : has
+  MESSAGES ||--o{ MESSAGES : replies

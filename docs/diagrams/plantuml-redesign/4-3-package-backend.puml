@@ -1,0 +1,57 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam linetype ortho
+skinparam ArrowColor Black
+
+left to right direction
+
+package "Backend" as Backend {
+  package "API Layer" as API {
+    package "Routers" as Routers
+    package "Controllers" as Controllers
+    package "Middlewares" as Middlewares
+  }
+
+  package "Business Services" as Business {
+    package "Service Interfaces" as Services
+    package "Service Impl" as ServiceImpl
+    package "Realtime Hubs" as Realtime
+    package "Notifications & Jobs" as Jobs
+  }
+
+  package "Data Access" as Data {
+    package "Repository Interfaces" as Repositories
+    package "Repository Impl" as RepositoryImpl
+  }
+
+  package "Domain" as Domain {
+    package "Models" as Models
+    package "Serializers" as Serializers
+    package "Application Errors" as AppErrors
+  }
+
+  package "Infrastructure" as Infra {
+    package "Initialize & Config" as InitializeConfig
+    package "Database & Cache" as DatabaseCache
+    package "Storage" as Storage
+    package "LiveKit" as LiveKit
+    package "Message Bus & Logger" as MessageBusLogger
+  }
+}
+
+Routers ..> Controllers
+Controllers ..> Middlewares
+Middlewares ..> Domain
+API ..> Business
+API ..> Domain
+ServiceImpl ..> Services
+Business ..> Data
+Business ..> Domain
+Business ..> Infra
+RepositoryImpl ..> Repositories
+Data ..> Domain
+Data ..> Infra
+@enduml

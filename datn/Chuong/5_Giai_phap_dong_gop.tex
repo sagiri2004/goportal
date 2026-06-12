@@ -1,0 +1,103 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+Các chương trước đã trình bày bài toán, yêu cầu, công nghệ sử dụng và thiết kế tổng thể của hệ thống. Chương này tập trung vào những giải pháp và đóng góp nổi bật nhất trong quá trình thực hiện đồ án. Thay vì lặp lại danh sách chức năng hoặc các bản thiết kế đã mô tả ở Chương 2 và Chương 4, nội dung chương này đi sâu hơn vào các vấn đề khó, cách đồ án lựa chọn hướng giải quyết và giá trị thu được sau khi triển khai.
+
+Các đóng góp được lựa chọn đều gắn trực tiếp với đặc thù của một nền tảng cộng đồng game: người dùng cần quản lý cộng đồng theo máy chủ, game cần giao tiếp an toàn với hệ thống chính, còn các hoạt động nhắn tin và gameplay cần được đồng bộ gần thời gian thực. Vì vậy, chương này tập trung vào ba nhóm giải pháp tiêu biểu là phân quyền máy chủ và kênh, Game SDK với cầu nối iframe, và đồng bộ realtime.
+
+\section{Giải pháp phân quyền linh hoạt trong máy chủ và kênh}
+\label{section:5.1}
+
+\subsection{Bài toán đặt ra}
+\label{subsection:5.1.1}
+
+Trong các hệ thống cộng đồng trực tuyến, một máy chủ thường không chỉ có hai loại người dùng đơn giản là chủ sở hữu và thành viên. Khi số lượng thành viên tăng lên, cộng đồng cần phân chia trách nhiệm cho nhiều nhóm khác nhau như quản trị viên, điều hành viên, người kiểm duyệt, thành viên thường hoặc thành viên mới. Mỗi nhóm có phạm vi thao tác khác nhau: người này có thể tạo lời mời, người khác có thể quản lý kênh, duyệt yêu cầu tham gia, xóa tin nhắn hoặc quản lý vai trò. Nếu hệ thống chỉ dùng một cờ quyền đơn giản như “chủ máy chủ” thì toàn bộ quyền quản trị sẽ bị tập trung, khó mở rộng và không phản ánh được cách vận hành thực tế của cộng đồng.
+
+Bài toán còn phức tạp hơn khi xét tới kênh. Trong cùng một máy chủ, không phải kênh nào cũng dành cho toàn bộ thành viên. Một số kênh cần công khai để mọi người đọc và gửi tin nhắn, một số kênh chỉ dành cho ban quản trị, đội thi đấu hoặc người tổ chức giải đấu. Đối với các kênh được tạo tự động cho trận đấu, hệ thống còn cần phân biệt kênh dành cho đội A, đội B, trọng tài, bình luận viên, khán giả và quản trị giải đấu. Vì vậy, phân quyền không thể chỉ dừng ở mức máy chủ mà cần có khả năng điều chỉnh ở mức kênh cụ thể.
+
+\subsection{Giải pháp thực hiện}
+\label{subsection:5.1.2}
+
+Đồ án lựa chọn mô hình phân quyền dựa trên vai trò, thường gọi là RBAC. Trong mô hình này, mỗi máy chủ có tập vai trò riêng; mỗi vai trò chứa một tập quyền được biểu diễn bằng bitset; mỗi thành viên có thể được gán một hoặc nhiều vai trò. Cách biểu diễn bằng bitset giúp việc kiểm tra quyền trở nên gọn nhẹ: thay vì lưu từng quyền rời rạc ở nhiều bản ghi, hệ thống có thể kết hợp các quyền của nhiều vai trò để tính ra quyền hiệu lực của một thành viên trong máy chủ.
+
+Ở mức máy chủ, hệ thống định nghĩa các quyền nền tảng như xem kênh, gửi tin nhắn, đọc lịch sử tin nhắn, quản lý tin nhắn, tạo lời mời, quản lý máy chủ, quản lý kênh, quản lý vai trò, duyệt thành viên, chặn hoặc loại bỏ thành viên. Quyền quản trị cao nhất được xem như quyền bao phủ, cho phép người dùng thực hiện các thao tác quản trị mà không phải kiểm tra từng quyền nhỏ. Thiết kế này giúp chủ máy chủ có thể ủy quyền cho thành viên khác mà không cần chia sẻ tài khoản hay can thiệp trực tiếp vào mọi thao tác.
+
+Ở mức kênh, đồ án bổ sung cơ chế ghi đè quyền. Một thành viên có thể có quyền chung trong máy chủ nhưng vẫn bị hạn chế ở một kênh riêng tư; ngược lại, một vai trò có thể được cấp thêm quyền ở một kênh đặc biệt. Cách kết hợp giữa quyền nền ở máy chủ và ghi đè ở kênh giúp hệ thống xử lý được nhiều tình huống thực tế: kênh thông báo chỉ cho phép quản trị viên gửi tin, kênh nội bộ chỉ cho ban tổ chức xem, hoặc kênh trận đấu chỉ mở cho đúng nhóm người liên quan.
+
+Điểm quan trọng của giải pháp là tách quyền khỏi người dùng. Người dùng không được gán trực tiếp toàn bộ quyền nghiệp vụ, mà nhận quyền thông qua vai trò và quan hệ thành viên trong máy chủ. Nhờ vậy, khi cần thay đổi chính sách quản trị, chủ máy chủ chỉ cần chỉnh vai trò hoặc phân quyền kênh, không cần cập nhật từng thành viên một cách thủ công.
+
+\subsection{Kết quả đạt được}
+\label{subsection:5.1.3}
+
+Giải pháp phân quyền đã tạo nền tảng cho hầu hết các chức năng cộng đồng của hệ thống. Các nghiệp vụ như tạo kênh, cập nhật kênh, duyệt yêu cầu tham gia, gửi tin nhắn, xóa tin nhắn, quản lý thành viên và tạo workspace cho giải đấu đều có thể dựa trên cùng một cơ chế kiểm tra quyền. Điều này giúp hệ thống nhất quán hơn, tránh việc mỗi chức năng tự định nghĩa một kiểu phân quyền riêng.
+
+Về mặt vận hành, mô hình RBAC giúp máy chủ có thể mở rộng từ một nhóm nhỏ sang cộng đồng lớn hơn. Chủ máy chủ có thể phân công trách nhiệm cho nhiều người, tạo nhóm quản trị, nhóm kiểm duyệt hoặc nhóm tổ chức giải đấu. Về mặt phát triển, giải pháp này cũng giúp các chức năng mới dễ tích hợp hơn: khi cần thêm một nghiệp vụ yêu cầu quyền, hệ thống chỉ cần bổ sung quyền tương ứng và kiểm tra quyền đó trong service hoặc middleware liên quan.
+
+Đóng góp nổi bật của phần này là đồ án không chỉ triển khai các thao tác quản lý máy chủ đơn giản, mà xây dựng được một mô hình phân quyền đủ linh hoạt để phục vụ cả kênh chat, cộng đồng game và không gian vận hành giải đấu. Đây là nền tảng quan trọng để các giải pháp ở những mục sau có thể hoạt động an toàn và có kiểm soát.
+
+\section{Giải pháp Game SDK và cầu nối iframe}
+\label{section:5.2}
+
+\subsection{Bài toán đặt ra}
+\label{subsection:5.2.1}
+
+Khi cho phép người dùng đăng tải game HTML hoặc game xây dựng bằng React/Vite, hệ thống cần một cách để game tương tác với nền tảng chính. Game cần biết mình đang chạy trong ngữ cảnh nào, người chơi là ai, có thể chia sẻ điểm số hay thành tích không, có thể tạo phòng chơi hay đồng bộ trạng thái không. Một cách đơn giản là cho game gọi trực tiếp API backend. Tuy nhiên, cách này có nhiều hạn chế: game phải tự xử lý xác thực, tự biết cấu trúc API, dễ bị phụ thuộc vào thay đổi backend và khó kiểm soát trải nghiệm chia sẻ vào cộng đồng.
+
+Ngoài ra, game được nhúng trong iframe nên nó nằm trong một vùng thực thi tách biệt với ứng dụng chính. Sự tách biệt này tốt cho an toàn và đóng gói, nhưng cũng khiến việc giao tiếp giữa game và hệ thống không thể dùng trực tiếp các hàm nội bộ của frontend. Nếu không có một lớp trung gian ổn định, mỗi game sẽ phải tự cài đặt cách giao tiếp riêng, dẫn đến thiếu thống nhất và khó hỗ trợ nhà phát triển bên ngoài.
+
+\subsection{Giải pháp thực hiện}
+\label{subsection:5.2.2}
+
+Đồ án xây dựng Game SDK phiên bản 2 theo hướng cầu nối iframe. Game không gọi trực tiếp backend mà gửi các yêu cầu dạng command tới ứng dụng host thông qua \textit{postMessage}. Ứng dụng host tiếp nhận yêu cầu, kiểm tra ngữ cảnh, gọi API backend tương ứng và trả kết quả lại cho game bằng response envelope. Quy trình này được mô tả ở Hình \ref{fig:5-1-sdk-bridge}. File phác thảo của hình được lưu trong thư mục \textit{docs/diagrams}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong5/SDK-bridge.png}
+    \caption{Mô hình Game SDK và cầu nối iframe}
+    \label{fig:5-1-sdk-bridge}
+\end{figure}
+
+SDK bắt đầu bằng bước handshake thông qua hàm \textit{ready}. Kết quả handshake trả về phiên bản giao thức, danh sách capability và context hiện tại như mã game hoặc mã kênh. Sau đó game gọi \textit{init} để tạo phiên chơi, rồi sử dụng các command như chia sẻ điểm số, chia sẻ thành tích, chia sẻ game, tạo phòng, tham gia phòng, rời phòng, lấy trạng thái phòng hoặc gửi trạng thái mới. Mỗi command đều có request id, timeout và response tương ứng, giúp game nhận biết thao tác thành công hay thất bại.
+
+Một điểm đáng chú ý là SDK hỗ trợ hai cách tích hợp: script global cho game HTML tĩnh và package NPM/ESM cho game hiện đại. Điều này giúp nhà phát triển không bị bó buộc vào một công nghệ frontend cụ thể. Game đơn giản có thể chỉ nhúng một file JavaScript, trong khi game dùng bundler có thể import SDK như một thư viện TypeScript thông thường. Ngoài ra, SDK còn giữ một số hàm legacy để giảm chi phí chuyển đổi khi nâng cấp giao thức.
+
+\subsection{Kết quả đạt được}
+\label{subsection:5.2.3}
+
+Giải pháp SDK giúp tách game khỏi chi tiết nội bộ của hệ thống. Game chỉ cần biết các command mà SDK cung cấp, không cần biết endpoint backend, token xác thực hay cấu trúc service phía host. Điều này giúp giảm rủi ro bảo mật, giảm độ phức tạp cho nhà phát triển game và tạo ra một hợp đồng giao tiếp ổn định giữa game với nền tảng.
+
+Về trải nghiệm người dùng, SDK cho phép game chia sẻ điểm số, thành tích hoặc phiên chơi trực tiếp vào kênh cộng đồng. Khi kết hợp với room và realtime event, game có thể đồng bộ trạng thái phòng chơi cho nhiều người. Đóng góp chính của phần này là đồ án đã xây dựng được một lớp tích hợp riêng cho game cộng đồng, biến hệ thống từ nơi hiển thị game thành một nền tảng có khả năng mở rộng cho các game do bên thứ ba phát triển.
+
+\section{Giải pháp đồng bộ thời gian thực cho nhắn tin và gameplay}
+\label{section:5.3}
+
+\subsection{Bài toán đặt ra}
+\label{subsection:5.3.1}
+
+Các chức năng cộng đồng game đòi hỏi phản hồi nhanh. Khi một người gửi tin nhắn, các thành viên trong kênh cần nhìn thấy gần như ngay lập tức. Khi người chơi tham gia phòng game, rời phòng hoặc cập nhật trạng thái gameplay, những người còn lại trong phòng cũng cần nhận được sự kiện mới. Nếu hệ thống chỉ dùng cơ chế client liên tục gọi API để hỏi dữ liệu mới, trải nghiệm sẽ chậm, tốn tài nguyên và không phù hợp với các hoạt động có tính tương tác cao.
+
+Đặc thù của hệ thống là realtime không chỉ phục vụ một loại dữ liệu. Tin nhắn cần gửi tới thành viên có quyền xem kênh. Sự kiện game room cần gửi tới người đang ở trong phòng hoặc người đã đăng ký theo dõi phòng. Thông báo lại có thể gửi tới từng người dùng. Do đó, bài toán không chỉ là mở một kết nối WebSocket, mà còn là xác định đúng phạm vi phát sự kiện để tránh gửi thừa, gửi sai người hoặc làm lộ dữ liệu riêng tư.
+
+\subsection{Giải pháp thực hiện}
+\label{subsection:5.3.2}
+
+Đồ án triển khai cơ chế đồng bộ thời gian thực dựa trên WebSocket hub. Client thiết lập kết nối tới backend, sau đó backend duy trì danh sách kết nối đang hoạt động và phát sự kiện tới các kết nối phù hợp. Với gameplay, người dùng có thể subscribe vào một phòng game cụ thể. Khi có sự kiện cập nhật trạng thái phòng, hub kiểm tra danh sách người nhận: thành viên trong phòng được nhận trực tiếp, còn người đã subscribe phòng cũng được nhận sự kiện nếu phù hợp.
+
+Đối với trạng thái phòng game, hệ thống sử dụng cấu trúc sự kiện có các thông tin như mã sự kiện, loại sự kiện, thời điểm xảy ra, mã game, mã phòng, người thực hiện, danh sách thành viên liên quan, trạng thái phòng và phiên bản trạng thái. Cách biểu diễn này giúp client không chỉ biết “có thay đổi”, mà còn biết thay đổi thuộc phòng nào, do ai thực hiện và có nên cập nhật giao diện hiện tại hay không.
+
+Một điểm quan trọng là realtime được thiết kế như lớp truyền sự kiện, không thay thế hoàn toàn API nghiệp vụ. Các thao tác quan trọng như tạo phòng, tham gia phòng, ghi nhận sự kiện game hoặc gửi tin nhắn vẫn đi qua service và repository để đảm bảo kiểm tra dữ liệu, phân quyền và lưu trữ bền vững. Sau khi nghiệp vụ thành công, hệ thống mới phát sự kiện realtime để các client liên quan cập nhật giao diện. Cách tách này giúp dữ liệu nhất quán hơn so với việc để client tự phát trạng thái không qua backend.
+
+\subsection{Kết quả đạt được}
+\label{subsection:5.3.3}
+
+Giải pháp realtime giúp hệ thống giảm phụ thuộc vào thao tác tải lại trang hoặc polling thủ công. Tin nhắn, trạng thái phòng chơi và sự kiện gameplay có thể được phản ánh nhanh hơn trên giao diện. Đối với game multiplayer nhẹ, người chơi có thể tạo phòng, tham gia phòng, gửi trạng thái và nhận cập nhật từ người khác thông qua cùng một cơ chế sự kiện.
+
+Về mặt kiến trúc, đóng góp của phần này là xây dựng được cách phân phối sự kiện theo ngữ cảnh thay vì broadcast toàn cục. Sự kiện nào thuộc phòng thì gửi cho thành viên hoặc người theo dõi phòng; sự kiện nào thuộc kênh thì phục vụ nhóm người có quyền truy cập kênh. Điều này giúp hệ thống có hướng mở rộng tốt hơn, đồng thời tránh lẫn lộn giữa dữ liệu cộng đồng, dữ liệu chat và dữ liệu gameplay.
+
+\section{Kết luận chương}
+\label{section:5.4}
+
+Chương này đã trình bày ba giải pháp và đóng góp nổi bật của đồ án. Các giải pháp không tồn tại độc lập mà liên kết chặt chẽ với nhau: phân quyền máy chủ tạo nền tảng cho kênh và không gian cộng đồng; Game SDK giúp game giao tiếp an toàn với nền tảng; realtime giúp cộng đồng và gameplay phản hồi nhanh hơn.
+
+Nhìn chung, đóng góp chính của đồ án không chỉ nằm ở việc xây dựng một tập chức năng riêng lẻ, mà ở cách tổ chức chúng thành một nền tảng cộng đồng game có khả năng mở rộng. Hệ thống vừa hỗ trợ quản lý cộng đồng, vừa tạo cơ chế tích hợp game vào ứng dụng chính và đồng bộ các sự kiện quan trọng theo thời gian thực. Đây là cơ sở để tiếp tục phát triển hệ thống theo hướng hoàn thiện hơn về trải nghiệm cộng đồng, tối ưu realtime và mở rộng hệ sinh thái game.
+
+\end{document}

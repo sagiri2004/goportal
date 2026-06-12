@@ -1,0 +1,46 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Phụ lục này tổng hợp ngắn gọn các use case quan trọng đã được lựa chọn để đặc tả trong Chương 2. Các use case được chọn vì đại diện cho ba nhóm nghiệp vụ cốt lõi của hệ thống: quản lý cộng đồng máy chủ, đăng tải và vận hành game, tổ chức giải đấu. Nội dung chi tiết hơn có thể tiếp tục được chuyển thành các bảng đặc tả dạng ảnh để chèn vào mục 2.3 khi hoàn thiện bản trình bày cuối cùng.
+
+\section{Danh sách use case đặc tả}
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/phu-luc-danh-sach-usecase.png}
+    \caption{Danh sách use case đặc tả tiêu biểu}
+    \label{tab:appendix-usecase-list}
+\end{table}
+
+\section{Tóm tắt đặc tả use case}
+
+\subsection{UC001 -- Tham gia máy chủ}
+
+Tác nhân chính của use case này là Người dùng. Tiền điều kiện là Người dùng đã đăng nhập, máy chủ tồn tại và Người dùng chưa là thành viên của máy chủ đó. Với máy chủ công khai, hệ thống kiểm tra dữ liệu hợp lệ, thêm Người dùng vào danh sách thành viên và gán vai trò mặc định. Với máy chủ cần xét duyệt, hệ thống tạo yêu cầu tham gia ở trạng thái chờ duyệt; người có quyền duyệt có thể chấp nhận hoặc từ chối yêu cầu. Hậu điều kiện thành công là Người dùng trở thành thành viên của máy chủ và có quyền truy cập theo vai trò được gán.
+
+\subsection{UC002 -- Quản lý kênh và phân quyền}
+
+Use case này được thực hiện bởi Chủ máy chủ hoặc thành viên có quyền quản lý kênh. Tác nhân có thể tạo kênh văn bản, kênh thoại, danh mục hoặc kênh livestream; cập nhật tên, vị trí, kênh cha; thêm thành viên vào kênh riêng tư; và thiết lập quyền ghi đè cho vai trò hoặc người dùng. Hệ thống luôn kiểm tra quyền quản trị trước khi cho phép thao tác. Hậu điều kiện là cấu hình kênh và quyền truy cập được lưu lại, đồng thời danh sách kênh hiển thị cho mỗi thành viên được lọc theo quyền tương ứng.
+
+\subsection{UC003 -- Đăng tải và kiểm duyệt game}
+
+Use case này mô tả quy trình Nhà phát triển đưa game lên hệ thống. Nhà phát triển tạo metadata của game, tải lên hình ảnh và file build dạng \texttt{zip}. Hệ thống kiểm tra quyền sở hữu game, định dạng file, cấu trúc bundle và sự tồn tại của file \texttt{index.html}. Khi build hợp lệ, hệ thống tạo đường dẫn chơi game và cho phép gửi game vào hàng đợi kiểm duyệt. Quản trị viên xem xét nội dung và chuyển trạng thái game sang công bố, từ chối hoặc tạm ngừng. Hậu điều kiện thành công là game xuất hiện trên chợ game và có thể được người dùng truy cập để chơi.
+
+\subsection{UC004 -- Tổ chức giải đấu}
+
+Người tổ chức tạo giải đấu trong phạm vi máy chủ, nhập thông tin game, thể thức thi đấu, loại người tham gia, số lượng người chơi hoặc đội, luật và giải thưởng. Hệ thống kiểm tra quyền tổ chức, tạo giải đấu ở trạng thái nháp và tạo kênh chung cho giải đấu. Sau đó, Người tổ chức lần lượt mở đăng ký, chuyển sang check-in và bắt đầu giải đấu. Với giải đấu đội, Đội trưởng tạo đội và quản lý thành viên đội. Khi giải đấu bắt đầu, hệ thống sinh bracket và danh sách trận đấu, tạo cơ sở cho use case vận hành trận đấu.
+
+\subsection{UC005 -- Vận hành trận đấu và xử lý kết quả}
+
+Use case này diễn ra khi giải đấu đã bắt đầu. Người tổ chức hoặc Quản trị giải đấu có thể bắt đầu một trận đấu hợp lệ. Hệ thống chuyển trạng thái trận, tạo workspace gồm các kênh phục vụ đội thi đấu, trọng tài và livestream, sau đó phân quyền truy cập cho các vai trò liên quan. Người tham gia báo cáo kết quả sau trận; nếu có khiếu nại, Trọng tài hoặc Quản trị giải đấu xem xét và ghi đè kết quả khi cần. Hậu điều kiện là kết quả trận đấu, bracket, bảng xếp hạng và trạng thái các trận tiếp theo được cập nhật nhất quán.
+
+\section{Bảng trường dữ liệu tham khảo}
+
+\begin{table}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Bangbieu/phu-luc-truong-du-lieu-usecase.png}
+    \caption{Các trường dữ liệu tham khảo trong đặc tả use case}
+    \label{tab:appendix-usecase-fields}
+\end{table}
+
+\end{document}

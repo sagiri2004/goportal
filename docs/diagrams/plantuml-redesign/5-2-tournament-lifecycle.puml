@@ -1,0 +1,33 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+title Vòng đời giải đấu
+[*] --> Draft : Tạo giải đấu
+Draft --> Registration : Mở đăng ký
+Registration --> CheckIn : Chuyển sang check-in
+CheckIn --> Running : Bắt đầu giải đấu\nTạo bracket
+Running --> Completed : Hoàn thành tất cả trận
+Draft --> Cancelled : Hủy
+Registration --> Cancelled : Hủy
+CheckIn --> Cancelled : Hủy
+Running --> Cancelled : Hủy khẩn cấp
+state Running {
+  [*] --> CreateMatch
+  CreateMatch --> MatchWorkspace : Tạo workspace trận
+  MatchWorkspace --> Playing : Bắt đầu trận
+  Playing --> Reported : Báo cáo kết quả
+  Reported --> Disputed : Khiếu nại
+  Disputed --> Verified : Trọng tài xử lý
+  Reported --> Verified : Xác nhận kết quả
+  Verified --> [*] : Cập nhật bracket
+}
+Completed --> [*]
+Cancelled --> [*]
+@enduml

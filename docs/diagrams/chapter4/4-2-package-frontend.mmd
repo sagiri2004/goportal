@@ -1,0 +1,46 @@
+flowchart TB
+    subgraph PkgFrontend["pkgfrontend"]
+        subgraph ClientApps["Client Applications"]
+            WebClient["Web Client"]
+            DesktopClient["Desktop Client"]
+        end
+
+        subgraph AppCore["App Core"]
+            Router["Routing"]
+            Layout["Layout"]
+            AppShell["Application Shell"]
+        end
+
+        subgraph FeatureModules["Feature Modules"]
+            AuthFeature["Authentication"]
+            ServerFeature["Server Management"]
+            ChannelFeature["Channel and Message"]
+            GameFeature["Game Marketplace"]
+            TournamentFeature["Tournament"]
+            VoiceFeature["Voice and Livestream"]
+        end
+
+        subgraph Common["Common Packages"]
+            SharedUI["Shared UI"]
+            ClientServices["Client Services"]
+            StateManagement["State Management"]
+            SharedTypes["Shared Types and Config"]
+        end
+    end
+
+    WebClient -.-> AppCore
+    DesktopClient -.-> AppCore
+
+    AppCore -.-> Router
+    AppCore -.-> Layout
+    AppCore -.-> AppShell
+    AppShell -.-> FeatureModules
+
+    FeatureModules -.-> SharedUI
+    FeatureModules -.-> ClientServices
+    FeatureModules -.-> StateManagement
+    FeatureModules -.-> SharedTypes
+
+    ClientServices -.-> SharedTypes
+    StateManagement -.-> SharedTypes
+    SharedUI -.-> SharedTypes
