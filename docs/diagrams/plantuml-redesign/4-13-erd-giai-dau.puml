@@ -1,0 +1,105 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam linetype ortho
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+
+hide circle
+left to right direction
+entity "servers" as servers {
+  * id : uuid
+  --
+  name
+}
+entity "user_games" as games {
+  * id : uuid
+  --
+  title
+}
+entity "users" as users {
+  * id : uuid
+  --
+  username
+}
+entity "tournaments" as tournaments {
+  * id : uuid
+  --
+  server_id
+  game_id
+  organizer_id
+  format
+  status
+}
+entity "tournament_roles" as roles {
+  * id : uuid
+  --
+  tournament_id
+  user_id
+  role
+}
+entity "tournament_participants" as participants {
+  * id : uuid
+  --
+  tournament_id
+  user_id
+  seed
+  checked_in
+}
+entity "tournament_teams" as teams {
+  * id : uuid
+  --
+  tournament_id
+  captain_id
+  name
+}
+entity "team_members" as team_members {
+  * team_id
+  * user_id
+}
+entity "tournament_matches" as matches {
+  * id : uuid
+  --
+  tournament_id
+  round
+  status
+  winner_id
+}
+entity "match_reports" as reports {
+  * id : uuid
+  --
+  match_id
+  reporter_id
+  winner_id
+  status
+}
+entity "match_workspaces" as workspaces {
+  * id : uuid
+  --
+  match_id
+  category_channel_id
+}
+servers ||--o{ tournaments
+games ||--o{ tournaments
+users ||--o{ tournaments : organizer
+
+tournaments ||--o{ roles
+tournaments ||--o{ participants
+tournaments ||--o{ teams
+tournaments ||--o{ matches
+
+users ||--o{ roles
+users ||--o{ participants
+users ||--o{ teams : captain
+teams ||--o{ team_members
+users ||--o{ team_members
+
+matches ||--o{ reports
+users ||--o{ reports : reporter
+matches ||--o{ workspaces
+@enduml

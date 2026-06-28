@@ -1,0 +1,48 @@
+flowchart LR
+  User["Người dùng"]
+  Manager["Thành viên có quyền quản trị"]
+  Owner["Chủ máy chủ"]
+
+  Owner -. "có quyền quản trị cao nhất" .-> Manager
+
+  subgraph System["Hệ thống - Quản lý máy chủ"]
+    ViewServers(("Xem danh sách máy chủ"))
+    JoinServer(("Tham gia máy chủ"))
+    RequestJoin(("Gửi yêu cầu tham gia"))
+    LeaveServer(("Rời máy chủ"))
+
+    ReviewJoin(("Duyệt yêu cầu tham gia"))
+    CreateInvite(("Tạo lời mời"))
+    CreateRole(("Tạo vai trò"))
+    UpdateRole(("Cập nhật vai trò"))
+    DeleteRole(("Xóa vai trò"))
+    AssignRole(("Gán vai trò thành viên"))
+    CreateChannel(("Tạo kênh"))
+    UpdateChannel(("Cập nhật kênh"))
+    ManageChannelMembers(("Quản lý thành viên kênh"))
+    ChannelPermission(("Phân quyền kênh"))
+
+    UpdateServer(("Cập nhật máy chủ"))
+    DeleteServer(("Xóa máy chủ"))
+    KickMember(("Loại thành viên"))
+  end
+
+  User --> ViewServers
+  User --> JoinServer
+  User --> RequestJoin
+  User --> LeaveServer
+
+  Manager --> ReviewJoin
+  Manager --> CreateInvite
+  Manager --> CreateRole
+  Manager --> UpdateRole
+  Manager --> DeleteRole
+  Manager --> AssignRole
+  Manager --> CreateChannel
+  Manager --> UpdateChannel
+  Manager --> ManageChannelMembers
+  Manager --> ChannelPermission
+
+  Owner --> UpdateServer
+  Owner --> DeleteServer
+  Owner --> KickMember

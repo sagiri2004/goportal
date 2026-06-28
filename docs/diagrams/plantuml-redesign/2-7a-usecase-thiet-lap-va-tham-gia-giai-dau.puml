@@ -1,0 +1,51 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Người tổ chức" as Organizer
+actor "Quản trị\ngiải đấu" as TournamentAdmin
+actor "Người tham gia" as Participant
+actor "Đội trưởng" as Captain
+rectangle "Thiết lập và tham gia giải đấu" {
+  usecase "Tạo giải đấu" as UC_Create
+  usecase "Cập nhật\ngiải đấu" as UC_Update
+  usecase "Mở đăng ký" as UC_Open
+  usecase "Chuyển sang\ncheck-in" as UC_CheckStage
+  usecase "Bắt đầu\ngiải đấu" as UC_Start
+  usecase "Tạo bracket" as UC_Bracket
+  usecase "Gán vai trò\ngiải đấu" as UC_AssignRole
+  usecase "Quản lý\nngười tham gia" as UC_Manage
+  usecase "Xem giải đấu" as UC_View
+  usecase "Đăng ký\ncá nhân" as UC_Register
+  usecase "Hủy đăng ký" as UC_Cancel
+  usecase "Check-in" as UC_CheckIn
+  usecase "Tạo đội" as UC_Team
+  usecase "Quản lý\nthành viên đội" as UC_TeamMember
+  usecase "Check-in đội" as UC_TeamCheckIn
+}
+Organizer --> UC_Create
+Organizer --> UC_Update
+Organizer --> UC_Open
+Organizer --> UC_CheckStage
+Organizer --> UC_Start
+Organizer --> UC_Manage
+TournamentAdmin --> UC_AssignRole
+TournamentAdmin --> UC_Manage
+Participant --> UC_View
+Participant --> UC_Register
+Participant --> UC_Cancel
+Participant --> UC_CheckIn
+Captain --> UC_Team
+Captain --> UC_TeamMember
+Captain --> UC_TeamCheckIn
+UC_Start ..> UC_Bracket : <<include>>
+UC_Team ..> UC_Register : <<extend>>
+UC_TeamCheckIn ..> UC_CheckIn : <<extend>>
+@enduml

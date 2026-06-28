@@ -4,13 +4,14 @@ import { VideoTrack, useParticipants, useTracks } from '@livekit/components-reac
 import { Room, RoomEvent, Track } from 'livekit-client'
 import { Button, cn } from '@goportal/ui'
 import { useAuthStore } from '@goportal/store'
-import { Mic, MicOff, RadioTower, ScreenShare, ScreenShareOff, Signal } from 'lucide-react'
+import { Archive, Download, Loader2, Mic, MicOff, RadioTower, ScreenShare, ScreenShareOff, Signal, Square } from 'lucide-react'
 import { ThreadPanelChat } from './components/ThreadPanelChat'
 
 type CategoryChannel = {
   id: string
   name: string
   type: 'text' | 'voice' | 'livestream'
+  isArchived?: boolean
 }
 
 type CategoryGroup = {
@@ -22,6 +23,22 @@ type CategoryGroup = {
 type LiveTokenResponse = {
   token: string
   url: string
+}
+
+type RecordingItem = {
+  id: string
+  channel_id: string
+  server_id: string
+  started_by: string
+  egress_id: string
+  type: string
+  status: string
+  file_url?: string
+  rtmp_url?: string
+  duration_seconds?: number
+  started_at: number
+  ended_at?: number
+  created_at: number
 }
 
 type ObserverFeed = {
@@ -41,6 +58,9 @@ type ShellContext = {
   activeCategories?: CategoryGroup[]
   requestLivestreamToken?: (channelId: string, mode?: 'viewer' | 'streamer') => Promise<LiveTokenResponse>
   requestTournamentObserverTokens?: (channelId: string) => Promise<ObserverBundle | null>
+  requestChannelRecordings?: (channelId: string, opts?: { limit?: number; offset?: number }) => Promise<{ items: RecordingItem[]; limit: number; offset: number }>
+  requestStartChannelRecording?: (channelId: string) => Promise<RecordingItem>
+  requestStopChannelRecording?: (channelId: string) => Promise<RecordingItem>
   pushToast?: (message: string) => void
 }
 
@@ -275,6 +295,9 @@ export const LivestreamChannelView: React.FC = () => {
     activeCategories = [],
     requestLivestreamToken,
     requestTournamentObserverTokens,
+    requestChannelRecordings,
+    requestStartChannelRecording,
+    requestStopChannelRecording,
     pushToast,
   } = useOutletContext<ShellContext>()
   const currentUser = useAuthStore((state: any) => state.user)
@@ -289,6 +312,10 @@ export const LivestreamChannelView: React.FC = () => {
   const [observerFeeds, setObserverFeeds] = useState<ObserverFeed[]>([])
   const [observerLoaded, setObserverLoaded] = useState(false)
   const [selectedSource, setSelectedSource] = useState<SourceKey>('team-a')
+  const [recordings, setRecordings] = useState<RecordingItem[]>([])
+  const [recordingsLoading, setRecordingsLoading] = useState(false)
+  const [recordingActionLoading, setRecordingActionLoading] = useState(false)
+  const [recordingError, setRecordingError] = useState<string | null>(null)
 
   const connectAttemptRef = useRef(0)
   const roomRef = useRef<Room | null>(null)
@@ -305,6 +332,9 @@ export const LivestreamChannelView: React.FC = () => {
 
   const channelName = channel?.name ?? channelId
   const isCasterConsole = canUseCasterConsole && !Boolean(currentUser?.is_admin)
+  const isArchivedLive = Boolean(channel?.isArchived)
+  const canManageArchive = Boolean(currentUser?.is_admin || canUseCasterConsole)
+  const activeRecording = recordings.find((item) => item.type === 'room_composite' && item.status === 'active') ?? null
   const observerFeedsKey = useMemo(
     () => observerFeeds.map(observerFeedSignature).sort().join('::'),
     [observerFeeds],
@@ -313,6 +343,27 @@ export const LivestreamChannelView: React.FC = () => {
   useEffect(() => {
     requestObserverTokensRef.current = requestTournamentObserverTokens
   }, [requestTournamentObserverTokens])
+
+  const loadRecordings = useCallback(async () => {
+    if (!channelId || !requestChannelRecordings) {
+      setRecordings([])
+      return
+    }
+    setRecordingsLoading(true)
+    setRecordingError(null)
+    try {
+      const response = await requestChannelRecordings(channelId, { limit: 20 })
+      setRecordings(response.items ?? [])
+    } catch (e: any) {
+      setRecordingError(e?.message ?? 'Cannot load archived live sessions.')
+    } finally {
+      setRecordingsLoading(false)
+    }
+  }, [channelId, requestChannelRecordings])
+
+  useEffect(() => {
+    void loadRecordings()
+  }, [loadRecordings])
 
   useEffect(() => {
     observerRoomsRef.current = observerRooms
@@ -387,6 +438,13 @@ export const LivestreamChannelView: React.FC = () => {
     if (!channelId) {
       return
     }
+    if (isArchivedLive) {
+      connectAttemptRef.current += 1
+      void disconnectRoom()
+      setMode('viewer')
+      setError(null)
+      return
+    }
     connectAttemptRef.current += 1
     void connectRoom('viewer')
 
@@ -394,11 +452,11 @@ export const LivestreamChannelView: React.FC = () => {
       connectAttemptRef.current += 1
       void disconnectRoom()
     }
-  }, [channelId, connectRoom, disconnectRoom])
+  }, [channelId, connectRoom, disconnectRoom, isArchivedLive])
 
   useEffect(() => {
     let cancelled = false
-    if (!channelId || !requestLivestreamToken) {
+    if (!channelId || !requestLivestreamToken || isArchivedLive) {
       setCanUseCasterConsole(false)
       setIsCheckingCasterPermission(false)
       return
@@ -426,11 +484,11 @@ export const LivestreamChannelView: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [channelId, requestLivestreamToken])
+  }, [channelId, isArchivedLive, requestLivestreamToken])
 
   useEffect(() => {
     let cancelled = false
-    if (!channelId || !canUseCasterConsole) {
+    if (!channelId || !canUseCasterConsole || isArchivedLive) {
       setObserverLoaded(true)
       setObserverFeeds([])
       return
@@ -478,7 +536,7 @@ export const LivestreamChannelView: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [canUseCasterConsole, channelId])
+  }, [canUseCasterConsole, channelId, isArchivedLive])
 
   useEffect(() => {
     let disposed = false
@@ -604,6 +662,35 @@ export const LivestreamChannelView: React.FC = () => {
     await room.localParticipant.setScreenShareEnabled(!room.localParticipant.isScreenShareEnabled)
   }, [mode, room])
 
+  const toggleRecording = useCallback(async () => {
+    if (!channelId || isArchivedLive || !requestStartChannelRecording || !requestStopChannelRecording) {
+      return
+    }
+    setRecordingActionLoading(true)
+    setRecordingError(null)
+    try {
+      if (activeRecording) {
+        await requestStopChannelRecording(channelId)
+        pushToast?.('Đã dừng lưu trữ live.')
+      } else {
+        await requestStartChannelRecording(channelId)
+        pushToast?.('Đã bắt đầu lưu trữ live.')
+      }
+      await loadRecordings()
+    } catch (e: any) {
+      const msg = e?.message ?? 'Cannot update live archive.'
+      setRecordingError(msg)
+      pushToast?.(msg)
+    } finally {
+      setRecordingActionLoading(false)
+    }
+  }, [activeRecording, channelId, isArchivedLive, loadRecordings, pushToast, requestStartChannelRecording, requestStopChannelRecording])
+
+  const formatRecordingTime = (value?: number) => {
+    if (!value) return '-'
+    return new Date(value * 1000).toLocaleString()
+  }
+
   const teamAState = observerFeeds.find((feed) => feed.role === 'team-a')
   const teamBState = observerFeeds.find((feed) => feed.role === 'team-b')
 
@@ -643,22 +730,33 @@ export const LivestreamChannelView: React.FC = () => {
             <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300">
               LIVESTREAM
             </span>
+            {isArchivedLive && (
+              <span className="rounded border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
+                ĐÃ LƯU TRỮ
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {!isCheckingCasterPermission && !isCasterConsole && (
+            {isArchivedLive ? (
+              <span className="rounded border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
+                Chỉ xem lại
+              </span>
+            ) : !isCheckingCasterPermission && !isCasterConsole && (
               <span className="rounded border border-zinc-500/40 bg-zinc-700/20 px-2 py-0.5 text-[11px] text-zinc-300">
                 Viewer only
               </span>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isConnecting || mode === 'viewer'}
-              onClick={() => void connectRoom('viewer')}
-            >
-              Viewer
-            </Button>
-            {isCasterConsole && (
+            {!isArchivedLive && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isConnecting || mode === 'viewer'}
+                onClick={() => void connectRoom('viewer')}
+              >
+                Viewer
+              </Button>
+            )}
+            {!isArchivedLive && isCasterConsole && (
               <Button
                 size="sm"
                 disabled={isConnecting || mode === 'streamer'}
@@ -677,7 +775,7 @@ export const LivestreamChannelView: React.FC = () => {
             </div>
           )}
 
-          {isCasterConsole && (
+          {!isArchivedLive && isCasterConsole && (
             <section className="mb-4 rounded-xl border border-cyan-400/30 bg-cyan-500/10 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <Signal className="h-4 w-4 text-cyan-300" />
@@ -772,24 +870,106 @@ export const LivestreamChannelView: React.FC = () => {
             </section>
           )}
 
-          <section className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <RadioTower className="h-4 w-4 text-rose-400" />
-                <span className="text-sm font-semibold text-zinc-100">Public Live Stage</span>
+          {!isArchivedLive && (
+            <section className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <RadioTower className="h-4 w-4 text-rose-400" />
+                  <span className="text-sm font-semibold text-zinc-100">Public Live Stage</span>
+                </div>
+                <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-zinc-300">
+                  {mode === 'streamer' ? 'Streamer mode' : 'Viewer mode'}
+                </span>
               </div>
-              <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-zinc-300">
-                {mode === 'streamer' ? 'Streamer mode' : 'Viewer mode'}
-              </span>
-            </div>
 
-            {isCasterConsole ? (
-              renderCasterSelectedStage()
-            ) : room ? (
-              <RoomFeedView room={room} label="public-live" className="min-h-[360px]" />
+              {isCasterConsole ? (
+                renderCasterSelectedStage()
+              ) : room ? (
+                <RoomFeedView room={room} label="public-live" className="min-h-[360px]" />
+              ) : (
+                <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-white/10 bg-[hsl(240,8%,14%)] text-sm text-muted-foreground">
+                  Connecting livestream room...
+                </div>
+              )}
+            </section>
+          )}
+
+          <section className={cn('rounded-xl border border-white/10 bg-black/20 p-3', !isArchivedLive && 'mt-4')}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4 text-emerald-300" />
+                <span className="text-sm font-semibold text-zinc-100">
+                  {isArchivedLive ? 'Bản phát lại' : 'Lưu trữ / Xem lại'}
+                </span>
+                {!isArchivedLive && activeRecording && (
+                  <span className="rounded border border-red-400/40 bg-red-500/15 px-2 py-0.5 text-[11px] text-red-100">
+                    Đang lưu
+                  </span>
+                )}
+              </div>
+              {canManageArchive && !isArchivedLive && (
+                <Button
+                  size="sm"
+                  variant={activeRecording ? 'destructive' : 'outline'}
+                  onClick={() => void toggleRecording()}
+                  disabled={recordingActionLoading || !requestStartChannelRecording || !requestStopChannelRecording}
+                >
+                  {recordingActionLoading ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : activeRecording ? (
+                    <Square className="mr-1.5 h-4 w-4" />
+                  ) : (
+                    <Archive className="mr-1.5 h-4 w-4" />
+                  )}
+                  {activeRecording ? 'Dừng lưu' : 'Bắt đầu lưu'}
+                </Button>
+              )}
+            </div>
+            {recordingError && (
+              <div className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {recordingError}
+              </div>
+            )}
+            {recordingsLoading ? (
+              <div className="flex min-h-[80px] items-center justify-center text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang tải bản lưu...
+              </div>
+            ) : recordings.length === 0 ? (
+              <div className="rounded-lg border border-white/10 bg-[hsl(240,8%,14%)] px-3 py-4 text-sm text-muted-foreground">
+                Chưa có bản lưu cho live này.
+              </div>
             ) : (
-              <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-white/10 bg-[hsl(240,8%,14%)] text-sm text-muted-foreground">
-                Connecting livestream room...
+              <div className="space-y-2">
+                {recordings.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-[hsl(240,8%,14%)] px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-zinc-100">{item.type === 'rtmp' ? 'RTMP stream' : 'Live recording'}</span>
+                        <span className={cn(
+                          'rounded border px-1.5 py-0.5 text-[10px] uppercase',
+                          item.status === 'completed' ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-100' :
+                            item.status === 'active' ? 'border-red-400/40 bg-red-500/15 text-red-100' :
+                              'border-amber-400/40 bg-amber-500/15 text-amber-100',
+                        )}>
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-zinc-400">
+                        {formatRecordingTime(item.started_at)}
+                        {item.duration_seconds ? ` · ${Math.round(item.duration_seconds / 60)} phút` : ''}
+                      </p>
+                    </div>
+                    {item.file_url ? (
+                      <a href={item.file_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-md border border-white/10 px-2 text-xs text-zinc-100 hover:bg-white/10">
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        Xem lại
+                      </a>
+                    ) : (
+                      <span className="text-xs text-zinc-500">{item.status === 'active' ? 'Đang ghi' : 'Chưa có file'}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </section>
@@ -819,13 +999,13 @@ export const LivestreamChannelView: React.FC = () => {
         )}
       </div>
 
-      {!isCasterConsole && (
+      {!isCasterConsole && !isArchivedLive && (
         <aside className="w-[380px] flex-shrink-0">
           <ThreadPanelChat channelName={channelName} channelId={channelId} />
         </aside>
       )}
 
-      {isCheckingCasterPermission && (
+      {isCheckingCasterPermission && !isArchivedLive && (
         <div className="pointer-events-none absolute right-4 top-14 rounded-md border border-white/10 bg-black/70 px-3 py-1 text-xs text-zinc-300">
           Checking streamer permission...
         </div>

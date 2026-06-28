@@ -1,0 +1,73 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam linetype ortho
+
+left to right direction
+
+package "Presentation" as Presentation {
+  class TournamentCreateEditDialog
+  class TournamentDetailPage
+  class MatchWorkspaceView
+}
+
+package "API Layer" as API {
+  class TournamentController
+}
+
+package "Business Services" as Business {
+  interface TournamentService
+  class tournamentService
+  interface LiveKitService
+  interface MessagePublisher
+}
+
+package "Data Access" as Data {
+  interface TournamentRepository
+  interface ServerRepository
+  interface ChannelRepository
+  interface UserRepository
+  class tournamentRepository
+  class serverRepository
+  class channelRepository
+  class userRepository
+}
+
+package "Domain" as Domain {
+  class Tournament
+  class Participant
+  class Team
+  class Match
+  class MatchWorkspace
+  class TournamentRole
+}
+
+package "Infrastructure" as Infra {
+  class GormDatabase
+  class Watermill
+  class LiveKit
+}
+
+TournamentCreateEditDialog ..> TournamentController
+TournamentDetailPage ..> TournamentController
+MatchWorkspaceView ..> TournamentController
+TournamentController ..> TournamentService
+tournamentService ..|> TournamentService
+tournamentService ..> TournamentRepository
+tournamentService ..> ServerRepository
+tournamentService ..> ChannelRepository
+tournamentService ..> UserRepository
+tournamentService ..> LiveKitService
+tournamentService ..> MessagePublisher
+tournamentRepository ..|> TournamentRepository
+serverRepository ..|> ServerRepository
+channelRepository ..|> ChannelRepository
+userRepository ..|> UserRepository
+LiveKit ..|> LiveKitService
+Watermill ..|> MessagePublisher
+Data ..> GormDatabase
+Data ..> Domain
+@enduml

@@ -124,12 +124,18 @@ func (ctrl *tournamentController) Update(c *gin.Context) {
 		return
 	}
 	t, err := containers.TournamentService().UpdateTournament(c.Request.Context(), actorID, c.Param("id"), services.TournamentUpdateInput{
-		Name:                 req.Name,
-		Description:          req.Description,
-		Rules:                req.Rules,
-		PrizePool:            req.PrizePool,
-		MaxParticipants:      req.MaxParticipants,
-		RegistrationDeadline: req.RegistrationDeadline,
+		Name:                           req.Name,
+		Description:                    req.Description,
+		Rules:                          req.Rules,
+		PrizePool:                      req.PrizePool,
+		MaxParticipants:                req.MaxParticipants,
+		RegistrationDeadline:           req.RegistrationDeadline,
+		RecordingEnabled:               req.RecordingEnabled,
+		RecordTeamA:                    req.RecordTeamA,
+		RecordTeamB:                    req.RecordTeamB,
+		RecordReferee:                  req.RecordReferee,
+		RecordLivestream:               req.RecordLivestream,
+		AutoStartRecordingOnMatchStart: req.AutoStartRecordingOnMatchStart,
 	})
 	if err != nil {
 		ctrl.respondError(c, err)
@@ -695,6 +701,32 @@ func (ctrl *tournamentController) StartMatch(c *gin.Context) {
 		"match":                 serializers.NewTournamentMatchResponse(*match),
 		"workspace":             workspace,
 		"screen_share_required": true,
+	}))
+}
+
+func (ctrl *tournamentController) CloseMatchLive(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ae, _ := apperr.From(err)
+		c.JSON(ae.HTTPCode, serializers.Error(ae.Code, ae.Message))
+		return
+	}
+	result, err := containers.TournamentService().CloseMatchLive(c.Request.Context(), actorID, c.Param("id"), c.Param("matchId"))
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	recordings := make([]serializers.RecordingResponse, 0, len(result.Recordings))
+	for i := range result.Recordings {
+		recordings = append(recordings, serializers.NewRecordingResponse(&result.Recordings[i]))
+	}
+	stoppedStreams := make([]serializers.RecordingResponse, 0, len(result.StoppedStreams))
+	for i := range result.StoppedStreams {
+		stoppedStreams = append(stoppedStreams, serializers.NewRecordingResponse(&result.StoppedStreams[i]))
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Match live closed", gin.H{
+		"recordings":      recordings,
+		"stopped_streams": stoppedStreams,
 	}))
 }
 

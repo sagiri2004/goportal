@@ -1,0 +1,54 @@
+classDiagram
+direction LR
+
+namespace Presentation {
+  class GameStudioPage
+  class GameUploadDialog
+}
+
+namespace API {
+  class GameController
+  class UploadController
+}
+
+namespace Service {
+  class IGameService
+  class GameService
+  class IStorageService
+  class StorageService
+}
+
+namespace Repository {
+  class IGameRepository
+  class GameRepository
+}
+
+namespace Domain {
+  class UserGame
+  class UserGameBuild
+  class GameReview
+  class GameAsset
+}
+
+namespace Infrastructure {
+  class CloudStorageProvider
+  class DatabaseContext
+}
+
+GameStudioPage ..> GameController : call API
+GameUploadDialog ..> UploadController : upload file
+GameController ..> IGameService : use
+UploadController ..> IStorageService : use
+IGameService <|.. GameService : implements
+IStorageService <|.. StorageService : implements
+IGameRepository <|.. GameRepository : implements
+GameService ..> IGameRepository : use
+GameService ..> IStorageService : upload build
+StorageService ..> CloudStorageProvider : use
+GameRepository ..> DatabaseContext : use
+GameRepository --> UserGame : persist
+GameRepository --> UserGameBuild : persist
+GameRepository --> GameReview : persist
+UserGame *-- UserGameBuild : builds
+UserGame o-- GameReview : reviews
+UserGame o-- GameAsset : assets

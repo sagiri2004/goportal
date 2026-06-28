@@ -1,0 +1,21 @@
+flowchart LR
+    Dev["Nhà phát triển game"] --> Game["Game HTML / React chạy trong iframe"]
+    Game --> SDK["Game SDK v2"]
+    SDK -->|"ready / init / commands"| Bridge["Host app bridge"]
+    Bridge -->|"REST API"| Backend["Backend service"]
+    Backend --> DB["Cơ sở dữ liệu"]
+    Backend --> Realtime["WebSocket / Realtime hub"]
+    Realtime --> Bridge
+    Bridge -->|"GOPORTAL_SDK_RESPONSE"| SDK
+    Bridge -->|"GOPORTAL_GAME_EVENT"| SDK
+    SDK --> Game
+
+    subgraph Commands["Nhóm command chính"]
+        C1["Chia sẻ điểm số"]
+        C2["Chia sẻ thành tích"]
+        C3["Tạo / tham gia phòng"]
+        C4["Gửi trạng thái phòng"]
+        C5["Lấy thông tin người dùng"]
+    end
+
+    SDK -.-> Commands

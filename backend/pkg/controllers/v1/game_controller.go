@@ -502,6 +502,74 @@ func (ctrl *gameController) AddSessionEvent(c *gin.Context) {
 	c.JSON(http.StatusCreated, serializers.Success("OK", "Game event stored", serializers.NewGameEventResponse(event)))
 }
 
+func (ctrl *gameController) SubmitScore(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var req serializers.SubmitGameScoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid JSON payload"))
+		return
+	}
+	if req.Score == nil {
+		c.JSON(http.StatusBadRequest, serializers.Error("MISSING_FIELDS", "Score is required"))
+		return
+	}
+	metadata := json.RawMessage(nil)
+	if req.Metadata != nil {
+		raw, err := json.Marshal(req.Metadata)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, serializers.Error("INVALID_JSON", "Invalid metadata payload"))
+			return
+		}
+		metadata = raw
+	}
+	result, err := containers.GameService().SubmitScore(c.Request.Context(), actorID, services.GameScoreSubmitInput{
+		GameID:        c.Param("id"),
+		SessionID:     req.SessionID,
+		LeaderboardID: req.LeaderboardID,
+		Score:         *req.Score,
+		Metadata:      metadata,
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, serializers.Success("OK", "Score submitted", serializers.NewGameScoreSubmitResponse(result)))
+}
+
+func (ctrl *gameController) Leaderboard(c *gin.Context) {
+	actorID, err := getCurrentUserID(c)
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	var serverID *string
+	if v := strings.TrimSpace(c.Query("server_id")); v != "" {
+		serverID = &v
+	}
+	var channelID *string
+	if v := strings.TrimSpace(c.Query("channel_id")); v != "" {
+		channelID = &v
+	}
+	result, err := containers.GameService().GetLeaderboard(c.Request.Context(), actorID, services.GameLeaderboardFilter{
+		GameID:        c.Param("id"),
+		LeaderboardID: c.Param("leaderboardId"),
+		Scope:         c.Query("scope"),
+		ServerID:      serverID,
+		ChannelID:     channelID,
+		Limit:         parseIntDefault(c.Query("limit"), 20),
+		Offset:        parseIntDefault(c.Query("offset"), 0),
+	})
+	if err != nil {
+		ctrl.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, serializers.Success("OK", "Leaderboard fetched", serializers.NewGameLeaderboardResponse(result)))
+}
+
 func (ctrl *gameController) ShareToChannel(c *gin.Context) {
 	actorID, err := getCurrentUserID(c)
 	if err != nil {

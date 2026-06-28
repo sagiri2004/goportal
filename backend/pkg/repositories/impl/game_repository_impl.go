@@ -507,6 +507,178 @@ func (r *gameRepository) FindEventByIdempotency(ctx context.Context, sessionID, 
 	return &event, nil
 }
 
+func (r *gameRepository) CreateScoreEntry(ctx context.Context, entry *models.GameScoreEntry) error {
+	if err := r.db.WithContext(ctx).Create(entry).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *gameRepository) UpsertLeaderboardEntry(ctx context.Context, entry *models.GameLeaderboardEntry) error {
+	var existing models.GameLeaderboardEntry
+	query := r.db.WithContext(ctx).
+		Where("game_id = ? AND leaderboard_id = ? AND scope = ? AND user_id = ? AND deleted_at = 0", entry.GameID, entry.LeaderboardID, entry.Scope, entry.UserID)
+	if entry.ServerID == nil || *entry.ServerID == "" {
+		query = query.Where("server_id IS NULL")
+	} else {
+		query = query.Where("server_id = ?", *entry.ServerID)
+	}
+	err := query.First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := r.db.WithContext(ctx).Create(entry).Error; err != nil {
+				return apperr.E("DB_ERROR", err)
+			}
+			return nil
+		}
+		return apperr.E("DB_ERROR", err)
+	}
+	if entry.BestScore < existing.BestScore {
+		*entry = existing
+		return nil
+	}
+	if entry.BestScore == existing.BestScore && entry.AchievedAt >= existing.AchievedAt {
+		*entry = existing
+		return nil
+	}
+	existing.BestScore = entry.BestScore
+	existing.BestScoreEntryID = entry.BestScoreEntryID
+	existing.Metadata = entry.Metadata
+	existing.AchievedAt = entry.AchievedAt
+	if err := r.db.WithContext(ctx).Save(&existing).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	*entry = existing
+	return nil
+}
+
+type leaderboardScanRow struct {
+	Rank             int64
+	ID               string
+	GameID           string
+	LeaderboardID    string
+	Scope            string
+	ServerID         *string
+	UserID           string
+	BestScore        int64
+	BestScoreEntryID string
+	Metadata         []byte
+	AchievedAt       int64
+	CreatedAt        int64
+	UpdatedAt        int64
+	DeletedAt        int64
+	Username         string
+	AvatarURL        *string
+}
+
+func (r *gameRepository) ListLeaderboard(ctx context.Context, filter repositories.GameLeaderboardFilter) ([]repositories.GameLeaderboardRow, error) {
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	query, args := leaderboardWhereSQL(filter)
+	args = append(args, limit, offset)
+	rows := []leaderboardScanRow{}
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT ranked.*, u.username, u.avatar_url
+FROM (
+  SELECT e.*, RANK() OVER (ORDER BY e.best_score DESC, e.achieved_at ASC) AS rank
+  FROM game_leaderboard_entries e
+  WHERE `+query+`
+) ranked
+INNER JOIN users u ON u.id = ranked.user_id
+ORDER BY ranked.rank ASC
+LIMIT ? OFFSET ?`, args...).Scan(&rows).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return mapLeaderboardRows(rows), nil
+}
+
+func (r *gameRepository) FindLeaderboardEntry(ctx context.Context, gameID, leaderboardID, scope string, serverID *string, userID string) (*repositories.GameLeaderboardRow, error) {
+	filter := repositories.GameLeaderboardFilter{
+		GameID:        gameID,
+		LeaderboardID: leaderboardID,
+		Scope:         scope,
+		ServerID:      serverID,
+	}
+	query, args := leaderboardWhereSQL(filter)
+	args = append(args, userID)
+	rows := []leaderboardScanRow{}
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT ranked.*, u.username, u.avatar_url
+FROM (
+  SELECT e.*, RANK() OVER (ORDER BY e.best_score DESC, e.achieved_at ASC) AS rank
+  FROM game_leaderboard_entries e
+  WHERE `+query+`
+) ranked
+INNER JOIN users u ON u.id = ranked.user_id
+WHERE ranked.user_id = ?
+LIMIT 1`, args...).Scan(&rows).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	if len(rows) == 0 {
+		return nil, apperr.E("GAME_LEADERBOARD_ENTRY_NOT_FOUND", gorm.ErrRecordNotFound)
+	}
+	mapped := mapLeaderboardRows(rows)
+	return &mapped[0], nil
+}
+
+func leaderboardWhereSQL(filter repositories.GameLeaderboardFilter) (string, []any) {
+	leaderboardID := strings.TrimSpace(filter.LeaderboardID)
+	if leaderboardID == "" {
+		leaderboardID = "default"
+	}
+	scope := strings.TrimSpace(filter.Scope)
+	if scope == "" {
+		scope = models.GameLeaderboardScopeGlobal
+	}
+	query := "e.deleted_at = 0 AND e.game_id = ? AND e.leaderboard_id = ? AND e.scope = ?"
+	args := []any{filter.GameID, leaderboardID, scope}
+	if scope == models.GameLeaderboardScopeServer {
+		if filter.ServerID == nil || strings.TrimSpace(*filter.ServerID) == "" {
+			query += " AND e.server_id IS NULL"
+		} else {
+			query += " AND e.server_id = ?"
+			args = append(args, strings.TrimSpace(*filter.ServerID))
+		}
+	} else {
+		query += " AND e.server_id IS NULL"
+	}
+	return query, args
+}
+
+func mapLeaderboardRows(rows []leaderboardScanRow) []repositories.GameLeaderboardRow {
+	out := make([]repositories.GameLeaderboardRow, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		out = append(out, repositories.GameLeaderboardRow{
+			Rank: row.Rank,
+			Entry: models.GameLeaderboardEntry{
+				ID:               row.ID,
+				GameID:           row.GameID,
+				LeaderboardID:    row.LeaderboardID,
+				Scope:            row.Scope,
+				ServerID:         row.ServerID,
+				UserID:           row.UserID,
+				BestScore:        row.BestScore,
+				BestScoreEntryID: row.BestScoreEntryID,
+				Metadata:         row.Metadata,
+				AchievedAt:       row.AchievedAt,
+				CreatedAt:        row.CreatedAt,
+				UpdatedAt:        row.UpdatedAt,
+				DeletedAt:        row.DeletedAt,
+			},
+			Username:  row.Username,
+			AvatarURL: row.AvatarURL,
+		})
+	}
+	return out
+}
+
 func (r *gameRepository) CreateRoom(ctx context.Context, room *models.GameRoom) error {
 	if err := r.db.WithContext(ctx).Create(room).Error; err != nil {
 		return apperr.E("DB_ERROR", err)

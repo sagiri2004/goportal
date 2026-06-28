@@ -1,0 +1,34 @@
+digraph G {
+  graph [rankdir=TB, charset="UTF-8", labelloc=t, label="Biểu đồ phụ thuộc gói Backend", fontsize=22, fontname="Arial", nodesep=0.55, ranksep=0.75, splines=ortho];
+  node [shape=component, fontname="Arial", fontsize=14, color="#333333", style="filled", fillcolor="#F5F5F5"];
+  edge [fontname="Arial", fontsize=12, color="#333333", arrowsize=0.7];
+
+  subgraph cluster_api { label="API Layer"; style="rounded"; color="#555555"; Routes; Controllers; Middlewares; }
+  subgraph cluster_service { label="Service Layer"; style="rounded"; color="#555555"; AuthService; ServerService; GameService; TournamentService; RealtimeService; }
+  subgraph cluster_repo { label="Repository Layer"; style="rounded"; color="#555555"; UserRepository; ServerRepository; GameRepository; TournamentRepository; }
+  subgraph cluster_infra { label="Infrastructure"; style="rounded"; color="#555555"; Database [shape=cylinder]; Storage; Redis; WebSocketHub; LiveKit; }
+  subgraph cluster_domain { label="Domain Layer"; style="rounded"; color="#555555"; Models; DTOs; Enums; Errors; }
+
+  Routes -> Controllers -> Middlewares;
+  Controllers -> AuthService;
+  Controllers -> ServerService;
+  Controllers -> GameService;
+  Controllers -> TournamentService;
+  ServerService -> ServerRepository;
+  GameService -> GameRepository;
+  TournamentService -> TournamentRepository;
+  AuthService -> UserRepository;
+  UserRepository -> Database;
+  ServerRepository -> Database;
+  GameRepository -> Database;
+  TournamentRepository -> Database;
+  GameService -> Storage;
+  RealtimeService -> Redis;
+  RealtimeService -> WebSocketHub;
+  RealtimeService -> LiveKit;
+  Controllers -> DTOs [style=dashed];
+  AuthService -> Models [style=dashed];
+  ServerService -> Models [style=dashed];
+  GameService -> Models [style=dashed];
+  TournamentService -> Models [style=dashed];
+}

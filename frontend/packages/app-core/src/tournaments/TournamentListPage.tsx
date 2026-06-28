@@ -1,9 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
-import { Badge, Button } from '@goportal/ui'
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@goportal/ui'
 import type { TournamentDTO } from '@goportal/types'
-import { Eye, Plus } from 'lucide-react'
-import { listTournamentsByServer } from '../services'
+import { Eye, Loader2, Plus, Trash2 } from 'lucide-react'
+import { deleteTournament, listTournamentsByServer } from '../services'
 import {
   formatDateTime,
   formatRelativeCountdown,
@@ -14,6 +23,8 @@ import {
 type ShellContext = {
   canManageTournaments?: boolean
   openTournamentCreateDialog?: () => void
+  pushToast?: (message: string) => void
+  refreshActiveServerTournaments?: () => void
 }
 
 const TournamentCardSkeleton: React.FC = () => (
@@ -28,7 +39,9 @@ const TournamentCardSkeleton: React.FC = () => (
 const TournamentCard: React.FC<{
   tournament: TournamentDTO
   onOpen: () => void
-}> = ({ tournament, onOpen }) => {
+  onDelete?: () => void
+  canDelete?: boolean
+}> = ({ tournament, onOpen, onDelete, canDelete }) => {
   const statusMeta = TOURNAMENT_STATUS_META[tournament.status]
   const formatMeta = TOURNAMENT_FORMAT_META[tournament.format]
 
@@ -61,10 +74,17 @@ const TournamentCard: React.FC<{
         </p>
       </div>
 
-      <Button type="button" variant="outline" className="mt-4 w-full" onClick={onOpen}>
-        <Eye className="mr-2 h-4 w-4" />
-        Xem chi tiết
-      </Button>
+      <div className={canDelete ? 'mt-4 grid grid-cols-[1fr_auto] gap-2' : 'mt-4'}>
+        <Button type="button" variant="outline" className="w-full" onClick={onOpen}>
+          <Eye className="mr-2 h-4 w-4" />
+          Xem chi tiết
+        </Button>
+        {canDelete && (
+          <Button type="button" variant="destructive" size="icon" onClick={onDelete} aria-label="Xóa giải đấu">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
     </article>
   )
 }
@@ -72,10 +92,17 @@ const TournamentCard: React.FC<{
 export const TournamentListPage: React.FC = () => {
   const navigate = useNavigate()
   const { serverId = '' } = useParams<{ serverId: string }>()
-  const { canManageTournaments, openTournamentCreateDialog } = useOutletContext<ShellContext>()
+  const {
+    canManageTournaments,
+    openTournamentCreateDialog,
+    pushToast,
+    refreshActiveServerTournaments,
+  } = useOutletContext<ShellContext>()
   const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<TournamentDTO[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<TournamentDTO | null>(null)
 
   const load = useCallback(async () => {
     if (!serverId) {
@@ -101,6 +128,28 @@ export const TournamentListPage: React.FC = () => {
     () => [...items].sort((left, right) => right.created_at - left.created_at),
     [items],
   )
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    if (deleteTarget.status !== 'draft') {
+      setError('Chỉ có thể xóa giải đấu đang ở trạng thái nháp.')
+      setDeleteTarget(null)
+      return
+    }
+    setIsDeleting(true)
+    setError(null)
+    try {
+      await deleteTournament(deleteTarget.id)
+      setItems((current) => current.filter((item) => item.id !== deleteTarget.id))
+      pushToast?.('Đã xóa giải đấu.')
+      refreshActiveServerTournaments?.()
+      setDeleteTarget(null)
+    } catch (deleteError: any) {
+      setError(deleteError?.message ?? 'Không thể xóa giải đấu.')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col bg-[hsl(240,10%,7%)]">
@@ -140,11 +189,38 @@ export const TournamentListPage: React.FC = () => {
                 key={tournament.id}
                 tournament={tournament}
                 onOpen={() => navigate(`/app/servers/${serverId}/tournaments/${tournament.id}`)}
+                canDelete={Boolean(canManageTournaments && tournament.status === 'draft')}
+                onDelete={() => setDeleteTarget(tournament)}
               />
             ))}
           </div>
         )}
       </section>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !isDeleting && !open && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xóa giải đấu</DialogTitle>
+            <DialogDescription>
+              Thao tác này sẽ xóa giải "{deleteTarget?.name}" khỏi server. Chỉ các giải đang ở trạng thái nháp mới có thể xóa.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDelete()}
+              disabled={isDeleting || deleteTarget?.status !== 'draft'}
+            >
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Xóa giải đấu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

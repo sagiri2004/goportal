@@ -1,0 +1,49 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Khách" as Guest
+actor "Người dùng" as User
+actor "Nhà phát triển" as Dev
+rectangle "Chơi game và đăng tải game" {
+  usecase "Xem danh sách\ngame" as UC_List
+  usecase "Xem chi tiết\ngame" as UC_Detail
+  usecase "Chơi game\ncông khai" as UC_Public
+  usecase "Chơi game" as UC_Play
+  usecase "Tạo phiên chơi" as UC_Session
+  usecase "Đồng bộ\ntrạng thái" as UC_Sync
+  usecase "Chia sẻ\nđiểm số" as UC_Score
+  usecase "Chia sẻ\nthành tích" as UC_Achievement
+  usecase "Tạo thông tin\ngame" as UC_Create
+  usecase "Cập nhật\nthông tin game" as UC_Update
+  usecase "Tải lên\nbản build" as UC_Upload
+  usecase "Gửi kiểm duyệt" as UC_Review
+  usecase "Quản lý game\nđã đăng" as UC_Manage
+}
+Guest --> UC_List
+Guest --> UC_Detail
+Guest --> UC_Public
+User --> UC_List
+User --> UC_Detail
+User --> UC_Play
+User --> UC_Session
+User --> UC_Sync
+User --> UC_Score
+User --> UC_Achievement
+Dev --> UC_Create
+Dev --> UC_Update
+Dev --> UC_Upload
+Dev --> UC_Review
+Dev --> UC_Manage
+UC_Play ..> UC_Session : <<include>>
+UC_Sync ..> UC_Play : <<extend>>
+UC_Score ..> UC_Play : <<extend>>
+UC_Achievement ..> UC_Play : <<extend>>
+@enduml

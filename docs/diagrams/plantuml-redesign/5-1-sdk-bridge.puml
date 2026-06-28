@@ -1,0 +1,36 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam linetype ortho
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+
+left to right direction
+rectangle "Game chạy trong iframe" as Game
+rectangle "Game SDK v2" as SDK
+rectangle "Host App Bridge" as Bridge
+rectangle "Backend API" as API
+database "Database" as DB
+queue "WebSocket Hub" as WS
+rectangle "Command chính" as CMD {
+  [shareScore]
+  [unlockAchievement]
+  [createRoom]
+  [joinRoom]
+  [syncState]
+}
+Game -right-> SDK : command
+SDK -right-> Bridge : postMessage
+Bridge -right-> API : REST API
+API -right-> DB : lưu dữ liệu
+API -down-> WS : phát sự kiện
+WS -left-> Bridge : realtime event
+Bridge -left-> SDK : response/event
+SDK -left-> Game : callback
+SDK -down-> CMD : đóng gói lệnh
+@enduml

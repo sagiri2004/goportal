@@ -1,0 +1,46 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Đặt vấn đề}
+\label{section:1.1}
+
+Trong những năm gần đây, trò chơi điện tử trực tuyến không chỉ còn là một hình thức giải trí cá nhân mà đã trở thành môi trường giao lưu, thi đấu và xây dựng cộng đồng. Người chơi thường tham gia các nhóm theo sở thích, trao đổi chiến thuật, tổ chức trận đấu, chia sẻ thành tích và theo dõi các hoạt động của cộng đồng thông qua nhiều nền tảng khác nhau. Các ứng dụng như Discord cung cấp mô hình máy chủ, kênh trò chuyện, kênh thoại và chia sẻ màn hình, giúp cộng đồng duy trì tương tác thời gian thực. Các nền tảng như Challonge hỗ trợ tạo giải đấu, quản lý người tham gia, bảng đấu và kết quả thi đấu. Trong khi đó, các nền tảng phân phối game như itch.io cho phép nhà phát triển đăng tải trò chơi HTML5 để người dùng có thể chơi trực tiếp trên trình duyệt, còn Steam cung cấp các dịch vụ bổ trợ như bảng xếp hạng và thành tích cho trò chơi \cite{discord-developer-docs,challonge-api,itchio-html5,steamworks-docs}.
+
+Tuy nhiên, các giải pháp trên thường tập trung vào từng nhóm chức năng riêng biệt. Một cộng đồng game nhỏ muốn vận hành đầy đủ các hoạt động thường phải sử dụng Discord để giao tiếp, Challonge để tổ chức giải đấu, một nền tảng khác để đăng tải trò chơi, và các dịch vụ riêng để lưu điểm số hoặc đồng bộ trạng thái chơi. Cách tiếp cận phân tán này làm tăng chi phí tích hợp, gây gián đoạn trải nghiệm người dùng và khiến dữ liệu cộng đồng bị chia cắt giữa nhiều hệ thống. Đối với các nhóm phát triển game độc lập hoặc cộng đồng sinh viên, hạn chế này càng rõ rệt vì họ cần một môi trường đơn giản, có thể tùy biến, vừa hỗ trợ giao tiếp, vừa hỗ trợ phát hành và chơi thử game, đồng thời có khả năng tổ chức các hoạt động thi đấu nội bộ.
+
+Từ thực tế đó, bài toán đặt ra là xây dựng một nền tảng tích hợp cho cộng đồng game, trong đó người dùng có thể tạo không gian sinh hoạt chung, trao đổi qua tin nhắn và thoại, tham gia hoặc tổ chức giải đấu, chơi các trò chơi HTML được đăng tải trên hệ thống, đồng thời chia sẻ điểm số, thành tích và trạng thái chơi theo thời gian thực. Việc giải quyết bài toán này có ý nghĩa thực tiễn đối với các cộng đồng game quy mô nhỏ và vừa, các nhóm phát triển trò chơi độc lập, cũng như các môi trường học tập cần một nền tảng thử nghiệm cho các sản phẩm game web. Ngoài lĩnh vực game, hướng tiếp cận này cũng có thể mở rộng cho các hệ thống cộng đồng trực tuyến có nhu cầu kết hợp giao tiếp, nội dung tương tác và quản lý sự kiện.
+
+\section{Mục tiêu và phạm vi đề tài}
+\label{section:1.2}
+
+Mục tiêu của đề tài là phân tích, thiết kế và xây dựng một nền tảng cộng đồng game tích hợp giao tiếp thời gian thực và quản lý giải đấu. Thay vì chỉ xây dựng một ứng dụng trò chuyện hoặc một hệ thống quản lý giải đấu độc lập, đề tài tập trung vào việc kết hợp nhiều thành phần có liên quan trực tiếp đến trải nghiệm của cộng đồng game, bao gồm quản lý người dùng, quan hệ xã hội, máy chủ, kênh trò chuyện, phân quyền, nhắn tin, thoại, thông báo thời gian thực, kho game, phiên chơi, phòng chơi nhiều người và giải đấu.
+
+Về phía người dùng cuối, hệ thống cần hỗ trợ các chức năng cơ bản như đăng ký, đăng nhập, quản lý hồ sơ cá nhân, kết bạn, chặn người dùng, tham gia máy chủ và tương tác trong các kênh. Trong mỗi máy chủ, người dùng có thể trao đổi qua kênh văn bản, gửi phản hồi, quản lý tin nhắn và theo dõi các nội dung được chia sẻ. Chủ sở hữu hoặc người quản trị máy chủ có thể quản lý thành viên, vai trò và quyền truy cập theo từng nhóm người dùng, từ đó tạo ra không gian cộng đồng có kiểm soát. Đối với giao tiếp thời gian thực, hệ thống hướng tới hỗ trợ kênh thoại, trạng thái người tham gia, ghi hình phòng thoại và phát trực tiếp thông qua hạ tầng media server.
+
+Về phía nội dung game, hệ thống cho phép người dùng tạo thông tin trò chơi, tải lên gói game HTML dưới dạng tệp nén, công bố trò chơi lên khu vực marketplace và khởi chạy trò chơi trực tiếp trong iframe. Đề tài cũng đặt phạm vi xây dựng Game SDK để trò chơi nhúng có thể giao tiếp với ứng dụng chủ thông qua cơ chế postMessage. SDK này hỗ trợ các thao tác như khởi tạo phiên chơi, chia sẻ điểm số, chia sẻ thành tích, tạo và tham gia phòng chơi, đồng bộ trạng thái phòng và truy vấn bảng xếp hạng. Nhờ đó, các trò chơi HTML không chỉ được hiển thị như nội dung tĩnh mà có thể tham gia vào luồng tương tác xã hội của nền tảng.
+
+Về phía tổ chức hoạt động cộng đồng, hệ thống cần hỗ trợ tạo và quản lý giải đấu trong phạm vi máy chủ. Các chức năng chính bao gồm tạo giải đấu, cập nhật thông tin, quản lý trạng thái đăng ký, check-in, danh sách người tham gia, đội thi đấu, trận đấu, nhánh đấu, bảng xếp hạng và lịch sử kết quả. Phạm vi đề tài tập trung vào việc xây dựng nguyên mẫu có đầy đủ các thành phần lõi để chứng minh tính khả thi của kiến trúc tích hợp. Các vấn đề nâng cao như tối ưu vận hành ở quy mô rất lớn, hệ thống chống gian lận chuyên sâu, thanh toán, thương mại hóa nội dung game và đóng gói bộ cài hoàn chỉnh cho desktop chưa phải là trọng tâm chính của đồ án.
+
+\section{Định hướng giải pháp}
+\label{section:1.3}
+
+Để giải quyết bài toán đã nêu, đề tài lựa chọn định hướng xây dựng một nền tảng web và desktop theo kiến trúc client-server, kết hợp API truyền thống với các cơ chế thời gian thực. Backend được phát triển bằng ngôn ngữ Go, sử dụng Gin để xây dựng REST API, GORM để thao tác cơ sở dữ liệu, MySQL hoặc SQLite để lưu trữ dữ liệu, Redis cho các tác vụ trạng thái và định tuyến thời gian thực, WebSocket cho thông báo và đồng bộ sự kiện, đồng thời tích hợp LiveKit cho chức năng thoại, ghi hình và phát trực tiếp. Frontend được xây dựng bằng React, TypeScript, Tailwind, Vite và Electron, cho phép chia sẻ phần giao diện giữa phiên bản web và desktop.
+
+Giải pháp của đồ án được tổ chức theo các miền chức năng chính. Miền cộng đồng quản lý người dùng, quan hệ bạn bè, máy chủ, kênh, vai trò, quyền hạn và tin nhắn. Miền thời gian thực xử lý thông báo, trạng thái kênh thoại, sự kiện phòng game và các cập nhật cần đẩy trực tiếp đến người dùng. Miền game marketplace quản lý vòng đời của trò chơi do người dùng đăng tải, từ tạo metadata, tải lên bản build, kiểm duyệt, hiển thị, đánh giá, tìm kiếm đến khởi chạy phiên chơi. Miền Game SDK đóng vai trò cầu nối giữa trò chơi chạy trong iframe và nền tảng, giúp trò chơi có thể sử dụng các chức năng xã hội của hệ thống mà không cần gọi trực tiếp backend. Miền giải đấu hỗ trợ các nghiệp vụ liên quan đến tổ chức thi đấu, quản lý người tham gia, trận đấu và kết quả.
+
+Lý do lựa chọn hướng tiếp cận này là vì bài toán của đề tài không chỉ nằm ở một chức năng đơn lẻ, mà nằm ở khả năng kết nối nhiều hoạt động thường xuất hiện trong một cộng đồng game. Kiến trúc client-server giúp hệ thống tách biệt rõ ràng giữa giao diện, nghiệp vụ và lưu trữ dữ liệu. REST API phù hợp với các thao tác quản lý có cấu trúc, trong khi WebSocket phù hợp với các sự kiện cần cập nhật nhanh như tin nhắn, thông báo, trạng thái thoại và trạng thái phòng chơi. Việc sử dụng iframe kết hợp SDK giúp nền tảng có thể chạy các game HTML do người dùng đăng tải mà vẫn kiểm soát được luồng giao tiếp giữa game và hệ thống chủ. Bên cạnh đó, việc phát triển cả phiên bản web và desktop giúp mở rộng khả năng sử dụng của hệ thống trong nhiều môi trường khác nhau.
+
+Đóng góp chính của đồ án là xây dựng một nguyên mẫu nền tảng cộng đồng game tích hợp, trong đó các chức năng giao tiếp, quản lý cộng đồng, kho game, SDK game realtime và tổ chức giải đấu được thiết kế để hoạt động trong cùng một hệ sinh thái. Kết quả đạt được là hệ thống có backend API theo nhiều miền nghiệp vụ, frontend dùng chung cho web và desktop, cơ chế WebSocket cho thông báo và đồng bộ phòng game, tích hợp LiveKit cho kênh thoại và media, cùng bộ Game SDK hỗ trợ trò chơi HTML tương tác với nền tảng. Đây là cơ sở để tiếp tục phát triển hệ thống thành một sản phẩm hoàn chỉnh hơn cho cộng đồng game, đặc biệt là các nhóm phát triển độc lập hoặc cộng đồng cần một môi trường vừa giao tiếp, vừa chơi thử, vừa tổ chức thi đấu.
+
+\section{Bố cục đồ án}
+\label{section:1.4}
+
+Phần còn lại của báo cáo đồ án tốt nghiệp được tổ chức như sau. Chương 2 trình bày khảo sát hiện trạng và phân tích yêu cầu của hệ thống, bao gồm các nền tảng tương tự, biểu đồ use case, quy trình nghiệp vụ và yêu cầu phi chức năng.
+
+Chương 3 trình bày nền tảng lý thuyết và các công nghệ sử dụng trong đồ án. Nội dung chương tập trung vào các nhóm công nghệ chính gồm frontend, backend, cơ sở dữ liệu, giao tiếp thời gian thực và hạ tầng triển khai.
+
+Chương 4 trình bày phân tích thiết kế, triển khai và đánh giá hệ thống, bao gồm lựa chọn kiến trúc, thiết kế gói, thiết kế giao diện, thiết kế lớp, thiết kế cơ sở dữ liệu, công cụ sử dụng và kết quả đạt được.
+
+Chương 5 trình bày các giải pháp và đóng góp nổi bật của đồ án, tập trung vào phân quyền máy chủ, đăng tải game cộng đồng, Game SDK, đồng bộ thời gian thực và tổ chức giải đấu nhiều vai trò. Cuối cùng, Chương 6 tổng kết kết quả đạt được, nêu các hạn chế còn tồn tại và đề xuất hướng phát triển tiếp theo cho hệ thống.
+
+\end{document}

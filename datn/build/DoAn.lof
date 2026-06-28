@@ -1,0 +1,40 @@
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Biểu đồ use case tổng quát}}{8}{figure.caption.6}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Biểu đồ use case phân rã Quản lý tài khoản}}{9}{figure.caption.7}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Biểu đồ use case phân rã Quản lý bạn bè}}{10}{figure.caption.8}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces Biểu đồ use case phân rã Quản lý máy chủ}}{11}{figure.caption.9}%
+\contentsline {figure}{\numberline {2.5}{\ignorespaces Biểu đồ use case phân rã Quản lý tin nhắn}}{12}{figure.caption.10}%
+\contentsline {figure}{\numberline {2.6}{\ignorespaces Biểu đồ use case phân rã Chơi game và Đăng tải game}}{13}{figure.caption.11}%
+\contentsline {figure}{\numberline {2.7}{\ignorespaces Biểu đồ use case phân rã Thiết lập và Tham gia giải đấu}}{14}{figure.caption.12}%
+\contentsline {figure}{\numberline {2.8}{\ignorespaces Biểu đồ use case phân rã Vận hành trận đấu trong giải đấu}}{15}{figure.caption.13}%
+\contentsline {figure}{\numberline {2.9}{\ignorespaces Quy trình nghiệp vụ Quản lý và Tham gia máy chủ}}{16}{figure.caption.14}%
+\contentsline {figure}{\numberline {2.10}{\ignorespaces Quy trình nghiệp vụ Tổ chức và Vận hành giải đấu}}{17}{figure.caption.15}%
+\contentsline {figure}{\numberline {2.11}{\ignorespaces Quy trình nghiệp vụ Đăng tải game}}{18}{figure.caption.16}%
+\contentsline {figure}{\numberline {2.12}{\ignorespaces Đặc tả use case Tham gia máy chủ}}{20}{figure.caption.17}%
+\contentsline {figure}{\numberline {2.13}{\ignorespaces Đặc tả use case Quản lý kênh và phân quyền}}{21}{figure.caption.18}%
+\contentsline {figure}{\numberline {2.14}{\ignorespaces Đặc tả use case Đăng tải và kiểm duyệt game}}{22}{figure.caption.19}%
+\contentsline {figure}{\numberline {2.15}{\ignorespaces Đặc tả use case Tổ chức giải đấu}}{23}{figure.caption.20}%
+\contentsline {figure}{\numberline {2.16}{\ignorespaces Đặc tả use case Vận hành trận đấu và xử lý kết quả}}{24}{figure.caption.21}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Kiến trúc đa tầng được áp dụng vào hệ thống}}{31}{figure.caption.22}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Biểu đồ phụ thuộc gói ứng dụng Frontend}}{32}{figure.caption.23}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Biểu đồ phụ thuộc gói ứng dụng Backend}}{33}{figure.caption.24}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Biểu đồ chi tiết gói chức năng Tạo mới máy chủ}}{35}{figure.caption.25}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces Biểu đồ chi tiết gói chức năng Tổ chức và vận hành giải đấu}}{36}{figure.caption.26}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces Phác thảo giao diện màn hình máy chủ và kênh}}{39}{figure.caption.27}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces Phác thảo giao diện danh sách game và đăng tải game}}{39}{figure.caption.28}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Phác thảo giao diện màn hình giải đấu}}{40}{figure.caption.29}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces Thiết kế lớp chức năng Tạo giải đấu}}{41}{figure.caption.30}%
+\contentsline {figure}{\numberline {4.10}{\ignorespaces Biểu đồ trình tự use case Tạo giải đấu}}{46}{figure.caption.35}%
+\contentsline {figure}{\numberline {4.11}{\ignorespaces Sơ đồ E-R cụm dữ liệu cộng đồng và máy chủ}}{47}{figure.caption.37}%
+\contentsline {figure}{\numberline {4.12}{\ignorespaces Sơ đồ E-R cụm dữ liệu game}}{48}{figure.caption.38}%
+\contentsline {figure}{\numberline {4.13}{\ignorespaces Sơ đồ E-R cụm dữ liệu giải đấu}}{49}{figure.caption.39}%
+\contentsline {figure}{\numberline {4.14}{\ignorespaces Mô hình triển khai thử nghiệm tự host với ngrok và LiveKit}}{56}{figure.caption.48}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Mô hình Game SDK và cầu nối iframe}}{63}{figure.caption.53}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsfinish 
+\contentsfinish 

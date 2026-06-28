@@ -1,0 +1,49 @@
+@startuml
+title Quy trình nghiệp vụ Quản lý và Tham gia máy chủ
+
+|Chủ máy chủ|
+start
+:Tạo máy chủ;
+
+|Hệ thống|
+:Khởi tạo vai trò mặc định;
+:Tạo kênh mặc định;
+
+|Chủ máy chủ|
+:Cấu hình thông tin máy chủ;
+:Tạo kênh và phân quyền;
+
+|Người dùng|
+:Xem danh sách máy chủ;
+if (Máy chủ công khai?) then (Có)
+  :Tham gia máy chủ;
+  |Hệ thống|
+  :Thêm người dùng vào thành viên;
+  :Gán vai trò mặc định;
+else (Không)
+  :Gửi yêu cầu tham gia;
+  |Hệ thống|
+  :Lưu yêu cầu ở trạng thái chờ duyệt;
+  |Người có quyền duyệt|
+  :Xem yêu cầu tham gia;
+  if (Chấp nhận?) then (Có)
+    |Hệ thống|
+    :Thêm người dùng vào thành viên;
+    :Gán vai trò mặc định;
+  else (Không)
+    |Hệ thống|
+    :Cập nhật yêu cầu bị từ chối;
+    stop
+  endif
+endif
+
+|Người dùng|
+:Truy cập các kênh được phép;
+
+|Người có quyền quản lý|
+:Cập nhật vai trò hoặc quyền kênh khi cần;
+
+|Hệ thống|
+:Áp dụng quyền truy cập theo RBAC;
+stop
+@enduml

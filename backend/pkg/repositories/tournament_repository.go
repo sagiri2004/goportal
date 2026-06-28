@@ -87,5 +87,9 @@ type TournamentRepository interface {
 	FindMatchWorkspace(ctx context.Context, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error)
 	FindMatchWorkspaceByChannelID(ctx context.Context, channelID string) (*models.TournamentMatchWorkspace, error)
 	CreateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error
+	UpdateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error
 	ListMatchWorkspaces(ctx context.Context, tournamentID string) ([]models.TournamentMatchWorkspace, error)
+	CreateMatchRecording(ctx context.Context, row *models.TournamentMatchRecording) error
+	UpdateMatchRecording(ctx context.Context, row *models.TournamentMatchRecording) error
+	ListActiveMatchRecordingsByChannel(ctx context.Context, matchID, channelID string) ([]models.TournamentMatchRecording, error)
 }

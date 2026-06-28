@@ -1,0 +1,26 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Kết luận}
+
+Đồ án đã hoàn thành việc phân tích, thiết kế và xây dựng nguyên mẫu nền tảng cộng đồng game tích hợp giao tiếp thời gian thực và quản lý giải đấu. Xuất phát từ thực tế các cộng đồng game thường phải sử dụng nhiều công cụ rời rạc cho các hoạt động giao tiếp, đăng tải game và tổ chức thi đấu, đồ án lựa chọn hướng tiếp cận xây dựng một hệ thống thống nhất, trong đó các chức năng cộng đồng, game marketplace, realtime và giải đấu được thiết kế để phối hợp với nhau trong cùng một nền tảng.
+
+Về mặt phân tích yêu cầu, đồ án đã khảo sát các nền tảng phổ biến như Discord, Challonge, itch.io và Steam, từ đó rút ra các nhóm chức năng cốt lõi cần có cho hệ thống. Các chức năng này bao gồm quản lý tài khoản, quản lý bạn bè, quản lý máy chủ và kênh, phân quyền theo vai trò, nhắn tin, chơi và đăng tải game, Game SDK, voice/livestream và quản lý giải đấu nhiều vai trò. Các yêu cầu được mô tả thông qua biểu đồ use case, quy trình nghiệp vụ và các bản đặc tả chức năng tiêu biểu.
+
+Về mặt thiết kế và triển khai, hệ thống được tổ chức theo kiến trúc đa tầng kết hợp mô hình client-server. Frontend đảm nhiệm giao diện người dùng và trải nghiệm tương tác; backend xử lý API, nghiệp vụ, xác thực, phân quyền và dữ liệu; các thành phần realtime hỗ trợ tin nhắn, sự kiện phòng game, voice channel và livestream. Cơ sở dữ liệu được thiết kế theo các cụm chính tương ứng với cộng đồng máy chủ, game marketplace và giải đấu. Bên cạnh đó, đồ án cũng xây dựng giải pháp Game SDK và cầu nối iframe để game HTML có thể tương tác với nền tảng chủ mà không cần gọi trực tiếp toàn bộ backend.
+
+Kết quả đạt được là một hệ thống nguyên mẫu có khả năng chứng minh tính khả thi của hướng tiếp cận tích hợp. Hệ thống hỗ trợ quản lý cộng đồng theo mô hình máy chủ, tổ chức kênh và vai trò, trao đổi tin nhắn, đăng tải và chơi game HTML, đồng bộ một số trạng thái theo thời gian thực, cũng như tạo và vận hành giải đấu trong phạm vi cộng đồng. So với các giải pháp rời rạc, đóng góp chính của đồ án nằm ở việc kết nối các miền nghiệp vụ này thành một trải nghiệm liền mạch hơn cho người dùng và người quản trị cộng đồng.
+
+Tuy nhiên, do phạm vi thời gian và nguồn lực của đồ án tốt nghiệp, hệ thống vẫn còn một số hạn chế. Một số chức năng mới dừng ở mức nguyên mẫu, chưa được kiểm chứng trên lượng người dùng lớn. Các bài toán như chống gian lận trong game, kiểm duyệt nội dung tự động, tối ưu hiệu năng ở quy mô cao, thanh toán, thương mại hóa game và vận hành hạ tầng production hoàn chỉnh chưa được triển khai sâu. Ngoài ra, giao diện người dùng và trải nghiệm desktop vẫn còn có thể tiếp tục hoàn thiện để đạt mức sản phẩm thương mại.
+
+\section{Hướng phát triển}
+
+Trong tương lai, hệ thống có thể được phát triển theo một số hướng chính. Trước hết, cần hoàn thiện hơn các chức năng cộng đồng như thông báo nâng cao, tìm kiếm nội dung trong máy chủ, quản lý file đính kèm, lịch sự kiện, nhật ký quản trị và hệ thống kiểm duyệt nội dung. Các chức năng này giúp nền tảng phù hợp hơn với những cộng đồng có quy mô lớn và yêu cầu quản lý phức tạp.
+
+Đối với phân hệ game, hướng phát triển tiếp theo là mở rộng Game SDK để hỗ trợ nhiều loại sự kiện hơn, bổ sung leaderboard nâng cao, achievement theo mùa, matchmaking, lưu tiến trình chơi và phân tích hành vi người chơi. Bên cạnh đó, hệ thống đăng tải game có thể được bổ sung quy trình kiểm duyệt bảo mật chặt chẽ hơn, cơ chế quét file build, giới hạn quyền iframe và chính sách sandbox rõ ràng để giảm rủi ro khi chạy game do cộng đồng cung cấp.
+
+Đối với phân hệ giải đấu, hệ thống có thể mở rộng thêm nhiều thể thức thi đấu như vòng bảng kết hợp loại trực tiếp, Swiss system, double elimination hoàn chỉnh và các cơ chế seeding nâng cao. Các vai trò trọng tài, bình luận viên và khán giả cũng có thể được phát triển sâu hơn thông qua bảng điều khiển trận đấu, thống kê thời gian thực, lịch phát sóng, replay và tích hợp công cụ livestream.
+
+Cuối cùng, ở góc độ triển khai, hệ thống cần được kiểm thử tải, tối ưu truy vấn cơ sở dữ liệu, tách các dịch vụ realtime có tải cao và xây dựng pipeline triển khai tự động. Khi các thành phần này được hoàn thiện, nền tảng có thể tiến gần hơn tới một sản phẩm thực tế phục vụ các cộng đồng game độc lập, câu lạc bộ eSports hoặc môi trường học tập cần tổ chức hoạt động game và thi đấu nội bộ.
+
+\end{document}

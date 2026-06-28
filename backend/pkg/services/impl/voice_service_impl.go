@@ -31,6 +31,10 @@ const (
 	livestreamModeStreamer = "streamer"
 )
 
+func isRecordableRealtimeChannel(channelType string) bool {
+	return channelType == models.ChannelTypeVoice || channelType == models.ChannelTypeLivestream
+}
+
 func NewVoiceService(
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
@@ -179,6 +183,78 @@ func (s *voiceService) canStreamTournamentLivestreamChannel(ctx context.Context,
 	return false, nil
 }
 
+func (s *voiceService) canControlTournamentLivestreamRecording(ctx context.Context, actorID, channelID string) (bool, error) {
+	if s.tournamentRepo == nil {
+		return false, nil
+	}
+	workspace, err := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, channelID)
+	if err != nil {
+		if ae, ok := apperr.From(err); ok && ae.Code == "TOURNAMENT_WORKSPACE_NOT_FOUND" {
+			return false, nil
+		}
+		return false, err
+	}
+	if workspace.LivestreamChannelID == nil || strings.TrimSpace(*workspace.LivestreamChannelID) != strings.TrimSpace(channelID) {
+		return false, nil
+	}
+	tournament, err := s.tournamentRepo.FindTournamentByID(ctx, workspace.TournamentID)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(tournament.CreatedBy) == strings.TrimSpace(actorID) {
+		return true, nil
+	}
+	roles, err := s.tournamentRepo.ListRoles(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	roleByID := make(map[string]string, len(roles))
+	for i := range roles {
+		roleByID[roles[i].ID] = strings.TrimSpace(roles[i].Code)
+	}
+	bindings, err := s.tournamentRepo.ListRoleBindings(ctx, tournament.ID)
+	if err != nil {
+		return false, err
+	}
+	for i := range bindings {
+		if strings.TrimSpace(bindings[i].UserID) != strings.TrimSpace(actorID) {
+			continue
+		}
+		switch roleByID[bindings[i].RoleID] {
+		case models.TournamentRoleAdmin, models.TournamentRoleReferee, models.TournamentRoleCaster:
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *voiceService) ensureChannelRecordingControlAccess(ctx context.Context, actorID, channelID string) (*models.Channel, error) {
+	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if !isRecordableRealtimeChannel(channel.Type) {
+		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
+	}
+	hasManage, err := s.serverRepo.HasPermission(ctx, channel.ServerID, strings.TrimSpace(actorID), models.PermissionManageChannels)
+	if err != nil {
+		return nil, err
+	}
+	if hasManage {
+		return channel, nil
+	}
+	if channel.Type == models.ChannelTypeLivestream {
+		canControl, err := s.canControlTournamentLivestreamRecording(ctx, actorID, channel.ID)
+		if err != nil {
+			return nil, err
+		}
+		if canControl {
+			return channel, nil
+		}
+	}
+	return nil, apperr.E("INSUFFICIENT_PERMISSION", nil)
+}
+
 func (s *voiceService) GenerateLivestreamToken(ctx context.Context, actorID, channelID, mode string) (*services.VoiceTokenResult, error) {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if mode == "" {
@@ -190,7 +266,29 @@ func (s *voiceService) GenerateLivestreamToken(ctx context.Context, actorID, cha
 
 	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, false)
 	if err != nil {
-		return nil, err
+		// Tournament livestream viewer fallback:
+		// allow server members to watch public match livestreams even if strict
+		// channel permission check fails.
+		if mode != livestreamModeViewer {
+			return nil, err
+		}
+		fallbackChannel, findErr := s.channelRepo.FindByID(ctx, strings.TrimSpace(channelID))
+		if findErr != nil {
+			return nil, err
+		}
+		if fallbackChannel.Type != models.ChannelTypeLivestream {
+			return nil, err
+		}
+		if _, memberErr := s.serverRepo.FindMember(ctx, fallbackChannel.ServerID, strings.TrimSpace(actorID)); memberErr != nil {
+			return nil, err
+		}
+		if s.tournamentRepo == nil {
+			return nil, err
+		}
+		if _, wsErr := s.tournamentRepo.FindMatchWorkspaceByChannelID(ctx, fallbackChannel.ID); wsErr != nil {
+			return nil, err
+		}
+		channel = fallbackChannel
 	}
 	if channel.Type != models.ChannelTypeLivestream {
 		return nil, apperr.E("LIVESTREAM_CHANNEL_REQUIRED", nil)
@@ -296,7 +394,7 @@ func (s *voiceService) ListChannelParticipants(ctx context.Context, actorID, cha
 	if err != nil {
 		return nil, err
 	}
-	if channel.Type != models.ChannelTypeVoice {
+	if !isRecordableRealtimeChannel(channel.Type) {
 		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 
@@ -312,12 +410,9 @@ func (s *voiceService) ListChannelParticipants(ctx context.Context, actorID, cha
 }
 
 func (s *voiceService) StartChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error) {
-	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, true)
+	channel, err := s.ensureChannelRecordingControlAccess(ctx, actorID, channelID)
 	if err != nil {
 		return nil, err
-	}
-	if channel.Type != models.ChannelTypeVoice {
-		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 
 	if existing, err := s.recordingRepo.FindActiveByChannelAndType(ctx, channel.ID, models.RecordingTypeRoomComposite); err == nil && existing != nil {
@@ -348,7 +443,7 @@ func (s *voiceService) StartChannelRecording(ctx context.Context, actorID, chann
 }
 
 func (s *voiceService) StopChannelRecording(ctx context.Context, actorID, channelID string) (*models.Recording, error) {
-	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, true)
+	channel, err := s.ensureChannelRecordingControlAccess(ctx, actorID, channelID)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +469,7 @@ func (s *voiceService) ListChannelRecordings(ctx context.Context, actorID, chann
 	if err != nil {
 		return nil, err
 	}
-	if channel.Type != models.ChannelTypeVoice {
+	if !isRecordableRealtimeChannel(channel.Type) {
 		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 	if limit <= 0 || limit > 100 {
@@ -387,12 +482,9 @@ func (s *voiceService) ListChannelRecordings(ctx context.Context, actorID, chann
 }
 
 func (s *voiceService) StartChannelRTMPStream(ctx context.Context, actorID, channelID, rtmpURL string) (*models.Recording, error) {
-	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, true)
+	channel, err := s.ensureChannelRecordingControlAccess(ctx, actorID, channelID)
 	if err != nil {
 		return nil, err
-	}
-	if channel.Type != models.ChannelTypeVoice {
-		return nil, apperr.E("VOICE_CHANNEL_REQUIRED", nil)
 	}
 	rtmpURL = strings.TrimSpace(rtmpURL)
 	if !strings.HasPrefix(rtmpURL, "rtmp://") && !strings.HasPrefix(rtmpURL, "rtmps://") {
@@ -428,7 +520,7 @@ func (s *voiceService) StartChannelRTMPStream(ctx context.Context, actorID, chan
 }
 
 func (s *voiceService) StopChannelRTMPStream(ctx context.Context, actorID, channelID string) (*models.Recording, error) {
-	channel, err := s.ensureChannelAccess(ctx, actorID, channelID, true)
+	channel, err := s.ensureChannelRecordingControlAccess(ctx, actorID, channelID)
 	if err != nil {
 		return nil, err
 	}

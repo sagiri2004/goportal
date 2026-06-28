@@ -8,6 +8,7 @@ import {
   createPlaySession,
   createGameEvent,
   createGameRoom,
+  getGameLeaderboard,
   listMyGames,
   listReviews,
   listTrendingGames,
@@ -16,6 +17,7 @@ import {
   searchGames,
   shareGameToChannel,
   startGameSession,
+  submitGameScore,
   submitGameForReview,
   joinGameRoom,
   getGameRoomState,
@@ -1300,18 +1302,6 @@ export const GamePlayerPage: React.FC = () => {
       const run = async () => {
         const storageUserKey = currentUserId || 'guest'
         const dataKeyPrefix = `goportal:sdk:data:${gameId}:${storageUserKey}:`
-        const leaderboardStorageKey = `goportal:sdk:leaderboard:${gameId}`
-        const parseLeaderboard = () => {
-          try {
-            const raw = window.localStorage.getItem(leaderboardStorageKey)
-            return raw ? (JSON.parse(raw) as Record<string, Array<Record<string, unknown>>>) : {}
-          } catch {
-            return {}
-          }
-        }
-        const saveLeaderboard = (value: Record<string, Array<Record<string, unknown>>>) => {
-          window.localStorage.setItem(leaderboardStorageKey, JSON.stringify(value))
-        }
 
         if (action === 'handshake' || action === 'ready') {
           sendResponse({
@@ -1406,11 +1396,18 @@ export const GamePlayerPage: React.FC = () => {
 
             if (shareAction === 'shareScore') {
               const sessionId = await ensureSession(targetChannelId)
+              const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : ''
+              const eventPayload =
+                leaderboardID && typeof body.payload === 'object' && body.payload !== null && !Array.isArray(body.payload)
+                  ? { ...(body.payload as Record<string, unknown>), leaderboard_id: leaderboardID }
+                  : leaderboardID
+                    ? { leaderboard_id: leaderboardID, value: body.payload ?? null }
+                    : body.payload
               const eventCreated = await createGameEvent(gameId, sessionId, {
                 event_type: 'score',
                 idempotency_key: body.idempotency_key,
                 score: body.score,
-                payload: body.payload,
+                payload: eventPayload,
               })
               const shared = Boolean(shareEnabled && targetChannelId)
               if (shared && targetChannelId) {
@@ -1773,65 +1770,59 @@ export const GamePlayerPage: React.FC = () => {
           return
         }
         if (action === 'submitScore') {
-          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : ''
+          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : 'default'
           const score = Number(body.score ?? NaN)
-          if (!leaderboardID || Number.isNaN(score)) {
-            fail('leaderboard_id and score are required', 'ERR_BAD_REQUEST', false)
+          if (Number.isNaN(score)) {
+            fail('score is required', 'ERR_BAD_REQUEST', false)
             return
           }
-          const allBoards = parseLeaderboard()
-          const list = Array.isArray(allBoards[leaderboardID]) ? allBoards[leaderboardID] : []
-          list.push({
-            user_id: currentUserId || 'guest',
-            display_name: currentUserId ? `User ${currentUserId.slice(0, 8)}` : 'Guest',
-            score,
-            metadata: body.metadata ?? null,
-            created_at: new Date().toISOString(),
-          })
-          list.sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
-          allBoards[leaderboardID] = list.slice(0, 200)
-          saveLeaderboard(allBoards)
-          const rank = allBoards[leaderboardID].findIndex((item) => item.user_id === (currentUserId || 'guest') && Number(item.score) === score) + 1
-          sendResponse({
-            requestId,
-            ok: true,
-            protocolVersion: '2.0',
-            targetOrigin: responseOrigin,
-            data: { accepted: true, rank: rank > 0 ? rank : undefined },
-          })
+          ensureSession(channelIdFromQuery)
+            .then((sessionId) =>
+              submitGameScore(gameId, {
+                session_id: sessionId,
+                leaderboard_id: leaderboardID,
+                score,
+                metadata: body.metadata ?? null,
+              }),
+            )
+            .then((result) => {
+              sendResponse({
+                requestId,
+                ok: true,
+                protocolVersion: '2.0',
+                targetOrigin: responseOrigin,
+                data: {
+                  accepted: result.accepted,
+                  rank: result.server?.rank ?? result.global?.rank,
+                  entry: result.entry,
+                  global: result.global,
+                  server: result.server,
+                },
+              })
+            })
+            .catch((err) => fail(err instanceof Error ? err.message : 'Unable to submit score', 'ERR_INTERNAL'))
           return
         }
         if (action === 'getLeaderboard') {
-          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : ''
-          if (!leaderboardID) {
-            fail('leaderboard_id is required', 'ERR_BAD_REQUEST', false)
-            return
-          }
-          const scope = body.scope === 'friends' || body.scope === 'channel' ? body.scope : 'global'
+          const leaderboardID = typeof body.leaderboard_id === 'string' ? body.leaderboard_id.trim() : 'default'
+          const scope = body.scope === 'server' || body.scope === 'channel' ? 'server' : 'global'
           const limit = Math.max(1, Math.min(100, Number(body.limit ?? 20)))
-          const allBoards = parseLeaderboard()
-          const list = Array.isArray(allBoards[leaderboardID]) ? allBoards[leaderboardID] : []
-          const entries = list.slice(0, limit).map((item, idx) => ({
-            rank: idx + 1,
-            user_id: String(item.user_id ?? 'guest'),
-            display_name: typeof item.display_name === 'string' ? item.display_name : undefined,
-            score: Number(item.score ?? 0),
-            metadata: item.metadata,
-            created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
-          }))
-          const me = entries.find((item) => item.user_id === (currentUserId || 'guest'))
-          sendResponse({
-            requestId,
-            ok: true,
-            protocolVersion: '2.0',
-            targetOrigin: responseOrigin,
-            data: {
-              leaderboard_id: leaderboardID,
-              scope,
-              entries,
-              me,
-            },
+          getGameLeaderboard(gameId, leaderboardID, {
+            scope,
+            limit,
+            server_id: normalizeOptionalID(body.server_id),
+            channel_id: normalizeOptionalID(body.channel_id) ?? channelIdFromQuery,
           })
+            .then((leaderboard) => {
+              sendResponse({
+                requestId,
+                ok: true,
+                protocolVersion: '2.0',
+                targetOrigin: responseOrigin,
+                data: leaderboard,
+              })
+            })
+            .catch((err) => fail(err instanceof Error ? err.message : 'Unable to fetch leaderboard', 'ERR_INTERNAL'))
           return
         }
         if (action === 'getRoomState') {

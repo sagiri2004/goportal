@@ -1,0 +1,260 @@
+Project "Hinh 4.13 - ERD giai dau" {
+  database_type: "MySQL"
+}
+
+Table users {
+  id char(36) [pk]
+  username varchar(255) [not null]
+  avatar_url varchar(512)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table servers {
+  id char(36) [pk]
+  owner_id char(36)
+  name varchar(120) [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table channels {
+  id char(36) [pk]
+  server_id char(36)
+  parent_id char(36)
+  type varchar(32)
+  name varchar(120)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table recordings {
+  id char(36) [pk]
+  channel_id char(36)
+  server_id char(36)
+  started_by char(36)
+  egress_id varchar(255) [unique]
+  type varchar(32)
+  status varchar(32)
+  file_url varchar(1024)
+  started_at bigint
+  ended_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table tournaments {
+  id char(36) [pk]
+  server_id char(36) [not null]
+  created_by char(36) [not null]
+  tournament_general_channel_id char(36)
+  name varchar(255) [not null]
+  description text
+  game varchar(255)
+  format varchar(32)
+  status varchar(32)
+  max_participants int
+  participant_type varchar(32)
+  team_size int
+  registration_deadline bigint
+  check_in_duration_minutes int
+  prize_pool text
+  rules text
+  started_at bigint
+  completed_at bigint
+  recording_enabled boolean
+  record_team_a boolean
+  record_team_b boolean
+  record_referee boolean
+  record_livestream boolean
+  auto_start_recording_on_match_start boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table tournament_teams {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  captain_id char(36) [not null]
+  name varchar(255) [not null]
+  created_at bigint
+
+  Indexes {
+    (tournament_id, name) [unique, name: "uq_tournament_teams_name"]
+  }
+}
+
+Table tournament_team_members {
+  team_id char(36) [not null]
+  user_id char(36) [not null]
+  joined_at bigint
+
+  Indexes {
+    (team_id, user_id) [pk]
+  }
+}
+
+Table tournament_participants {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  user_id char(36)
+  team_id char(36)
+  seed int
+  status varchar(32)
+  final_rank int
+  registered_at bigint
+  checked_in_at bigint
+
+  Indexes {
+    (tournament_id, user_id) [unique, name: "uq_tournament_participant_user"]
+    (tournament_id, team_id) [unique, name: "uq_tournament_participant_team"]
+  }
+}
+
+Table tournament_matches {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  participant1_id char(36)
+  participant2_id char(36)
+  winner_id char(36)
+  next_match_id char(36)
+  loser_next_match_id char(36)
+  round int
+  match_number int
+  bracket_side varchar(16)
+  score1 int
+  score2 int
+  status varchar(32)
+  scheduled_at bigint
+  completed_at bigint
+  created_at bigint
+}
+
+Table tournament_match_reports {
+  id char(36) [pk]
+  match_id char(36) [not null]
+  reported_by char(36) [not null]
+  winner_id char(36) [not null]
+  score1 int
+  score2 int
+  screenshot_url varchar(1024)
+  status varchar(32)
+  created_at bigint
+}
+
+Table tournament_roles {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  name varchar(64) [not null]
+  code varchar(64) [not null]
+  permissions bigint
+  created_at bigint
+  updated_at bigint
+}
+
+Table tournament_role_bindings {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  role_id char(36) [not null]
+  user_id char(36) [not null]
+  created_at bigint
+  updated_at bigint
+
+  Indexes {
+    (tournament_id, role_id, user_id) [unique, name: "uq_tournament_role_bindings"]
+  }
+}
+
+Table tournament_match_workspaces {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  match_id char(36) [not null]
+  server_id char(36) [not null]
+  category_channel_id char(36)
+  team_a_channel_id char(36)
+  team_b_channel_id char(36)
+  caster_channel_id char(36)
+  admin_channel_id char(36)
+  referee_channel_id char(36)
+  spectator_channel_id char(36)
+  created_by char(36)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (tournament_id, match_id) [unique, name: "uq_tournament_match_workspaces"]
+  }
+}
+
+Table tournament_match_recordings {
+  id char(36) [pk]
+  tournament_id char(36) [not null]
+  match_id char(36) [not null]
+  channel_id char(36) [not null]
+  recording_id char(36)
+  source_role varchar(32) [not null]
+  status varchar(32)
+  started_by char(36)
+  started_at bigint
+  ended_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Ref: servers.owner_id > users.id
+Ref: channels.server_id > servers.id
+Ref: channels.parent_id > channels.id
+Ref: recordings.channel_id > channels.id
+Ref: recordings.server_id > servers.id
+Ref: recordings.started_by > users.id
+
+Ref: tournaments.server_id > servers.id
+Ref: tournaments.created_by > users.id
+Ref: tournaments.tournament_general_channel_id > channels.id
+Ref: tournament_teams.tournament_id > tournaments.id
+Ref: tournament_teams.captain_id > users.id
+Ref: tournament_team_members.team_id > tournament_teams.id
+Ref: tournament_team_members.user_id > users.id
+Ref: tournament_participants.tournament_id > tournaments.id
+Ref: tournament_participants.user_id > users.id
+Ref: tournament_participants.team_id > tournament_teams.id
+
+Ref: tournament_matches.tournament_id > tournaments.id
+Ref: tournament_matches.participant1_id > tournament_participants.id
+Ref: tournament_matches.participant2_id > tournament_participants.id
+Ref: tournament_matches.winner_id > tournament_participants.id
+Ref: tournament_matches.next_match_id > tournament_matches.id
+Ref: tournament_matches.loser_next_match_id > tournament_matches.id
+Ref: tournament_match_reports.match_id > tournament_matches.id
+Ref: tournament_match_reports.reported_by > users.id
+Ref: tournament_match_reports.winner_id > tournament_participants.id
+
+Ref: tournament_roles.tournament_id > tournaments.id
+Ref: tournament_role_bindings.tournament_id > tournaments.id
+Ref: tournament_role_bindings.role_id > tournament_roles.id
+Ref: tournament_role_bindings.user_id > users.id
+
+Ref: tournament_match_workspaces.tournament_id > tournaments.id
+Ref: tournament_match_workspaces.match_id > tournament_matches.id
+Ref: tournament_match_workspaces.server_id > servers.id
+Ref: tournament_match_workspaces.category_channel_id > channels.id
+Ref: tournament_match_workspaces.team_a_channel_id > channels.id
+Ref: tournament_match_workspaces.team_b_channel_id > channels.id
+Ref: tournament_match_workspaces.caster_channel_id > channels.id
+Ref: tournament_match_workspaces.admin_channel_id > channels.id
+Ref: tournament_match_workspaces.referee_channel_id > channels.id
+Ref: tournament_match_workspaces.spectator_channel_id > channels.id
+Ref: tournament_match_workspaces.created_by > users.id
+
+Ref: tournament_match_recordings.tournament_id > tournaments.id
+Ref: tournament_match_recordings.match_id > tournament_matches.id
+Ref: tournament_match_recordings.channel_id > channels.id
+Ref: tournament_match_recordings.recording_id > recordings.id
+Ref: tournament_match_recordings.started_by > users.id

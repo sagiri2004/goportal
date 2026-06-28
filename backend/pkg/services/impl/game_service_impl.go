@@ -44,26 +44,29 @@ var allowedGameAssetExtensions = map[string]struct{}{
 }
 
 type gameService struct {
-	repo       repositories.GameRepository
-	storage    services.StorageService
-	messageSvc services.MessageService
-	notifySvc  services.NotificationService
-	publisher  message.Publisher
+	repo        repositories.GameRepository
+	channelRepo repositories.ChannelRepository
+	storage     services.StorageService
+	messageSvc  services.MessageService
+	notifySvc   services.NotificationService
+	publisher   message.Publisher
 }
 
 func NewGameService(
 	repo repositories.GameRepository,
+	channelRepo repositories.ChannelRepository,
 	storage services.StorageService,
 	messageSvc services.MessageService,
 	notifySvc services.NotificationService,
 	publisher message.Publisher,
 ) services.GameService {
 	return &gameService{
-		repo:       repo,
-		storage:    storage,
-		messageSvc: messageSvc,
-		notifySvc:  notifySvc,
-		publisher:  publisher,
+		repo:        repo,
+		channelRepo: channelRepo,
+		storage:     storage,
+		messageSvc:  messageSvc,
+		notifySvc:   notifySvc,
+		publisher:   publisher,
 	}
 }
 
@@ -659,7 +662,187 @@ func (s *gameService) RecordEvent(ctx context.Context, actorID string, input ser
 	if eventType == models.GameEventTypeState {
 		s.handleRoomStateSnapshot(ctx, actorID, event)
 	}
+	if eventType == models.GameEventTypeScore && input.Score != nil {
+		if _, err := s.persistScoreEntry(ctx, actorID, session.GameID, extractLeaderboardID(input.Payload), int64(*input.Score), input.Payload, session, event); err != nil {
+			return nil, err
+		}
+	}
 	return event, nil
+}
+
+func (s *gameService) SubmitScore(ctx context.Context, actorID string, input services.GameScoreSubmitInput) (*services.GameScoreSubmitResult, error) {
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(input.GameID))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertGamePlayableForActor(game, actorID); err != nil {
+		return nil, err
+	}
+
+	var session *models.GameSession
+	if input.SessionID != nil && strings.TrimSpace(*input.SessionID) != "" {
+		session, err = s.repo.FindSessionByID(ctx, strings.TrimSpace(*input.SessionID))
+		if err != nil {
+			return nil, err
+		}
+		if session.UserID != actorID || session.GameID != game.ID {
+			return nil, apperr.E("GAME_FORBIDDEN", nil)
+		}
+	}
+
+	entry, err := s.persistScoreEntry(
+		ctx,
+		actorID,
+		game.ID,
+		normalizeLeaderboardID(input.LeaderboardID),
+		input.Score,
+		input.Metadata,
+		session,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &services.GameScoreSubmitResult{
+		Accepted: true,
+		Entry:    *entry,
+	}
+	global, err := s.repo.FindLeaderboardEntry(ctx, game.ID, entry.LeaderboardID, models.GameLeaderboardScopeGlobal, nil, actorID)
+	if err == nil && global != nil {
+		result.Global = serviceLeaderboardEntry(*global, actorID)
+	}
+	if entry.ServerID != nil && strings.TrimSpace(*entry.ServerID) != "" {
+		server, err := s.repo.FindLeaderboardEntry(ctx, game.ID, entry.LeaderboardID, models.GameLeaderboardScopeServer, entry.ServerID, actorID)
+		if err == nil && server != nil {
+			result.Server = serviceLeaderboardEntry(*server, actorID)
+		}
+	}
+	return result, nil
+}
+
+func (s *gameService) GetLeaderboard(ctx context.Context, actorID string, filter services.GameLeaderboardFilter) (*services.GameLeaderboardResult, error) {
+	game, err := s.repo.FindGameByID(ctx, strings.TrimSpace(filter.GameID))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertGameVisibleForActor(game, actorID); err != nil {
+		return nil, err
+	}
+
+	leaderboardID := normalizeLeaderboardID(filter.LeaderboardID)
+	scope := normalizeLeaderboardScope(filter.Scope)
+	serverID := normalizeOptionalText(filter.ServerID)
+	if scope == models.GameLeaderboardScopeServer && serverID == nil && filter.ChannelID != nil && s.channelRepo != nil {
+		channel, err := s.channelRepo.FindByID(ctx, strings.TrimSpace(*filter.ChannelID))
+		if err == nil && channel != nil {
+			serverID = &channel.ServerID
+		}
+	}
+
+	rows, err := s.repo.ListLeaderboard(ctx, repositories.GameLeaderboardFilter{
+		GameID:        game.ID,
+		LeaderboardID: leaderboardID,
+		Scope:         scope,
+		ServerID:      serverID,
+		Limit:         filter.Limit,
+		Offset:        filter.Offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]services.GameLeaderboardEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, *serviceLeaderboardEntry(row, actorID))
+	}
+	result := &services.GameLeaderboardResult{
+		GameID:        game.ID,
+		LeaderboardID: leaderboardID,
+		Scope:         scope,
+		ServerID:      serverID,
+		Entries:       entries,
+	}
+	if actorID != "" {
+		me, err := s.repo.FindLeaderboardEntry(ctx, game.ID, leaderboardID, scope, serverID, actorID)
+		if err == nil && me != nil {
+			result.Me = serviceLeaderboardEntry(*me, actorID)
+		}
+	}
+	return result, nil
+}
+
+func (s *gameService) persistScoreEntry(
+	ctx context.Context,
+	actorID string,
+	gameID string,
+	leaderboardID string,
+	score int64,
+	metadata json.RawMessage,
+	session *models.GameSession,
+	event *models.GameEvent,
+) (*models.GameScoreEntry, error) {
+	leaderboardID = normalizeLeaderboardID(leaderboardID)
+	now := time.Now().Unix()
+	var sessionID *string
+	var eventID *string
+	var serverID *string
+	var channelID *string
+	if session != nil {
+		sessionID = &session.ID
+		channelID = session.ChannelID
+		if session.ChannelID != nil && s.channelRepo != nil {
+			if channel, err := s.channelRepo.FindByID(ctx, strings.TrimSpace(*session.ChannelID)); err == nil && channel != nil {
+				serverID = &channel.ServerID
+			}
+		}
+	}
+	if event != nil {
+		eventID = &event.ID
+	}
+	entry := &models.GameScoreEntry{
+		GameID:        gameID,
+		LeaderboardID: leaderboardID,
+		UserID:        actorID,
+		SessionID:     sessionID,
+		EventID:       eventID,
+		ServerID:      serverID,
+		ChannelID:     channelID,
+		Score:         score,
+		Metadata:      metadata,
+	}
+	if err := s.repo.CreateScoreEntry(ctx, entry); err != nil {
+		return nil, err
+	}
+	global := &models.GameLeaderboardEntry{
+		GameID:           gameID,
+		LeaderboardID:    leaderboardID,
+		Scope:            models.GameLeaderboardScopeGlobal,
+		UserID:           actorID,
+		BestScore:        score,
+		BestScoreEntryID: entry.ID,
+		Metadata:         metadata,
+		AchievedAt:       now,
+	}
+	if err := s.repo.UpsertLeaderboardEntry(ctx, global); err != nil {
+		return nil, err
+	}
+	if serverID != nil && strings.TrimSpace(*serverID) != "" {
+		server := &models.GameLeaderboardEntry{
+			GameID:           gameID,
+			LeaderboardID:    leaderboardID,
+			Scope:            models.GameLeaderboardScopeServer,
+			ServerID:         serverID,
+			UserID:           actorID,
+			BestScore:        score,
+			BestScoreEntryID: entry.ID,
+			Metadata:         metadata,
+			AchievedAt:       now,
+		}
+		if err := s.repo.UpsertLeaderboardEntry(ctx, server); err != nil {
+			return nil, err
+		}
+	}
+	return entry, nil
 }
 
 func (s *gameService) ShareToChannel(ctx context.Context, actorID string, input services.GameShareInput) error {
@@ -1120,6 +1303,69 @@ func normalizeOptionalText(value *string) *string {
 		return nil
 	}
 	return &v
+}
+
+func normalizeLeaderboardID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "default"
+	}
+	var out strings.Builder
+	for _, r := range raw {
+		switch {
+		case r >= 'a' && r <= 'z':
+			out.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			out.WriteRune(r + ('a' - 'A'))
+		case r >= '0' && r <= '9':
+			out.WriteRune(r)
+		case r == '_' || r == '-':
+			out.WriteRune(r)
+		}
+		if out.Len() >= 64 {
+			break
+		}
+	}
+	v := strings.Trim(out.String(), "_-")
+	if v == "" {
+		return "default"
+	}
+	return v
+}
+
+func normalizeLeaderboardScope(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case models.GameLeaderboardScopeServer, "channel":
+		return models.GameLeaderboardScopeServer
+	default:
+		return models.GameLeaderboardScopeGlobal
+	}
+}
+
+func extractLeaderboardID(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return "default"
+	}
+	var body struct {
+		LeaderboardID string `json:"leaderboard_id"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return "default"
+	}
+	return normalizeLeaderboardID(body.LeaderboardID)
+}
+
+func serviceLeaderboardEntry(row repositories.GameLeaderboardRow, actorID string) *services.GameLeaderboardEntry {
+	return &services.GameLeaderboardEntry{
+		Rank:             row.Rank,
+		UserID:           row.Entry.UserID,
+		Username:         row.Username,
+		AvatarURL:        row.AvatarURL,
+		Score:            row.Entry.BestScore,
+		Metadata:         row.Entry.Metadata,
+		AchievedAt:       row.Entry.AchievedAt,
+		CurrentUserEntry: actorID != "" && row.Entry.UserID == actorID,
+	}
 }
 
 func calculateTrendingScore(row repositories.GameTrendingRow, featured float64) float64 {

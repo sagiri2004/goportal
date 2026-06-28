@@ -1,11 +1,13 @@
 import {
   createGameEvent,
   createGameRoom,
+  getGameLeaderboard,
   getGameRoomState,
   joinGameRoom,
   leaveGameRoom,
   shareGameToChannel,
   startGameSession,
+  submitGameScore,
   type GameRoomStateDTO,
   type GameSessionDTO,
 } from './games'
@@ -99,16 +101,23 @@ export class GoPortalGameSDK {
       comment?: string
       channel_id?: string
       share?: boolean
+      leaderboard_id?: string
       idempotency_key?: string
       payload?: unknown
     } = {},
   ): Promise<{ event_id: string; session_id: string }> {
     const session = await this.ensureSession(payload.channel_id)
+    const eventPayload =
+      payload.leaderboard_id && typeof payload.payload === 'object' && payload.payload !== null && !Array.isArray(payload.payload)
+        ? { ...(payload.payload as Record<string, unknown>), leaderboard_id: payload.leaderboard_id }
+        : payload.leaderboard_id
+          ? { leaderboard_id: payload.leaderboard_id, value: payload.payload ?? null }
+          : payload.payload
     const event = await createGameEvent(this.gameId, session.id, {
       event_type: 'score',
       idempotency_key: payload.idempotency_key,
       score,
-      payload: payload.payload,
+      payload: eventPayload,
     })
     const targetChannelId = payload.channel_id ?? this.channelId
     if (targetChannelId && payload.share !== false) {
@@ -262,39 +271,31 @@ export class GoPortalGameSDK {
     return { ok: true }
   }
 
-  async submitScore(payload: { leaderboard_id: string; score: number; metadata?: unknown }) {
-    const storageKey = `goportal:sdk:leaderboard:${this.gameId}:${payload.leaderboard_id}`
-    const raw = window.localStorage.getItem(storageKey)
-    const rows = raw ? (JSON.parse(raw) as Array<{ user_id: string; display_name: string; score: number; metadata?: unknown; created_at: string }>) : []
-    const user = await this.getUser()
-    rows.push({
-      user_id: user.user_id,
-      display_name: user.display_name ?? user.user_id,
+  async submitScore(payload: { leaderboard_id?: string; score: number; metadata?: unknown }) {
+    const session = await this.ensureSession()
+    const result = await submitGameScore(this.gameId, {
+      session_id: session.id,
+      leaderboard_id: payload.leaderboard_id ?? 'default',
       score: payload.score,
       metadata: payload.metadata,
-      created_at: new Date().toISOString(),
     })
-    rows.sort((a, b) => b.score - a.score)
-    window.localStorage.setItem(storageKey, JSON.stringify(rows.slice(0, 200)))
-    const rank = rows.findIndex((item) => item.user_id === user.user_id && item.score === payload.score) + 1
-    return { accepted: true, rank: rank > 0 ? rank : undefined }
+    return {
+      accepted: result.accepted,
+      rank: result.server?.rank ?? result.global?.rank,
+      entry: result.entry,
+      global: result.global,
+      server: result.server,
+    }
   }
 
-  async getLeaderboard(payload: { leaderboard_id: string; scope?: 'global' | 'friends' | 'channel'; limit?: number }) {
-    const storageKey = `goportal:sdk:leaderboard:${this.gameId}:${payload.leaderboard_id}`
-    const raw = window.localStorage.getItem(storageKey)
-    const rows = raw ? (JSON.parse(raw) as Array<{ user_id: string; display_name: string; score: number; metadata?: unknown; created_at: string }>) : []
-    const entries = rows.slice(0, Math.max(1, Math.min(payload.limit ?? 20, 100))).map((item, idx) => ({
-      rank: idx + 1,
-      user_id: item.user_id,
-      display_name: item.display_name,
-      score: item.score,
-      metadata: item.metadata,
-      created_at: item.created_at,
-    }))
-    const meUser = await this.getUser()
-    const me = entries.find((item) => item.user_id === meUser.user_id)
-    return { leaderboard_id: payload.leaderboard_id, scope: payload.scope ?? 'global', entries, me }
+  async getLeaderboard(payload: { leaderboard_id?: string; scope?: 'global' | 'friends' | 'channel' | 'server'; limit?: number; server_id?: string; channel_id?: string }) {
+    const scope = payload.scope === 'channel' || payload.scope === 'server' ? 'server' : 'global'
+    return getGameLeaderboard(this.gameId, payload.leaderboard_id ?? 'default', {
+      scope,
+      server_id: payload.server_id,
+      channel_id: payload.channel_id,
+      limit: payload.limit,
+    })
   }
 
   on<K extends keyof SDKEventMap>(event: K, listener: SDKListener<SDKEventMap[K]>): () => void {
@@ -327,6 +328,7 @@ export class GoPortalGameSDK {
         comment?: string
         channel_id?: string
         share?: boolean
+        leaderboard_id?: string
         idempotency_key?: string
         payload?: unknown
       }) =>
@@ -334,6 +336,7 @@ export class GoPortalGameSDK {
           comment: payload.comment,
           channel_id: payload.channel_id,
           share: payload.share,
+          leaderboard_id: payload.leaderboard_id,
           idempotency_key: payload.idempotency_key,
           payload: payload.payload,
         }),
@@ -366,8 +369,8 @@ export class GoPortalGameSDK {
       dataGet: (payload: { key: string }) => this.dataGet(payload.key),
       dataSet: (payload: { key: string; value: unknown }) => this.dataSet(payload.key, payload.value),
       dataRemove: (payload: { key: string }) => this.dataRemove(payload.key),
-      submitScore: (payload: { leaderboard_id: string; score: number; metadata?: unknown }) => this.submitScore(payload),
-      getLeaderboard: (payload: { leaderboard_id: string; scope?: 'global' | 'friends' | 'channel'; limit?: number }) =>
+      submitScore: (payload: { leaderboard_id?: string; score: number; metadata?: unknown }) => this.submitScore(payload),
+      getLeaderboard: (payload: { leaderboard_id?: string; scope?: 'global' | 'friends' | 'channel' | 'server'; limit?: number; server_id?: string; channel_id?: string }) =>
         this.getLeaderboard(payload),
     }
   }

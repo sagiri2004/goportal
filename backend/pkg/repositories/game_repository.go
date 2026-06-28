@@ -43,6 +43,23 @@ type GameRoomMemberFilter struct {
 	Offset     int
 }
 
+type GameLeaderboardFilter struct {
+	GameID        string
+	LeaderboardID string
+	Scope         string
+	ServerID      *string
+	Limit         int
+	Offset        int
+}
+
+type GameLeaderboardRow struct {
+	Rank             int64
+	Entry            models.GameLeaderboardEntry
+	Username         string
+	AvatarURL        *string
+	CurrentUserEntry bool
+}
+
 type GameRepository interface {
 	CreateGame(ctx context.Context, game *models.UserGame) error
 	UpdateGame(ctx context.Context, game *models.UserGame) error
@@ -87,6 +104,10 @@ type GameRepository interface {
 	CreateEvent(ctx context.Context, event *models.GameEvent) error
 	FindEventByID(ctx context.Context, eventID string) (*models.GameEvent, error)
 	FindEventByIdempotency(ctx context.Context, sessionID, idempotencyKey string) (*models.GameEvent, error)
+	CreateScoreEntry(ctx context.Context, entry *models.GameScoreEntry) error
+	UpsertLeaderboardEntry(ctx context.Context, entry *models.GameLeaderboardEntry) error
+	ListLeaderboard(ctx context.Context, filter GameLeaderboardFilter) ([]GameLeaderboardRow, error)
+	FindLeaderboardEntry(ctx context.Context, gameID, leaderboardID, scope string, serverID *string, userID string) (*GameLeaderboardRow, error)
 
 	CreateRoom(ctx context.Context, room *models.GameRoom) error
 	FindRoomByID(ctx context.Context, roomID string) (*models.GameRoom, error)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/sagiri2004/goportal/pkg/apperr"
 	"github.com/sagiri2004/goportal/pkg/models"
@@ -47,6 +48,17 @@ func (r *channelRepository) ListByServerID(ctx context.Context, serverID string)
 		return nil, apperr.E("DB_ERROR", err)
 	}
 	return channels, nil
+}
+
+func (r *channelRepository) SoftDelete(ctx context.Context, channelID string) error {
+	now := time.Now().Unix()
+	if err := r.db.WithContext(ctx).
+		Model(&models.Channel{}).
+		Where("id = ? AND deleted_at = 0", channelID).
+		Update("deleted_at", now).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
 }
 
 func (r *channelRepository) GetMaxPositionByParent(ctx context.Context, serverID string, parentID *string) (int, error) {

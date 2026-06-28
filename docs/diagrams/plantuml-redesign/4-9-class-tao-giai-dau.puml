@@ -1,0 +1,130 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ClassBorderColor Black
+skinparam linetype ortho
+
+left to right direction
+
+package "Presentation" {
+  class TournamentCreateEditDialog <<boundary>> {
+    -serverId
+    -form
+    -step
+    -error
+    -isSubmitting
+    +canGoNext()
+    +submit()
+    +onSuccess(tournament)
+  }
+}
+
+package "API Layer" {
+  class TournamentController <<control>> {
+    +Create(context)
+    +ListByServer(context)
+    +GetByID(context)
+    +Update(context)
+    +UpdateStatus(context)
+  }
+}
+
+package "Business Services" {
+  interface TournamentService {
+    +CreateTournament(ctx, actorID, input)
+    +ListTournaments(ctx, actorID, input)
+    +GetTournamentDetail(ctx, actorID, tournamentID)
+    +UpdateTournament(ctx, actorID, tournamentID, input)
+  }
+
+  class tournamentService <<service>> {
+    -repo
+    -serverRepo
+    -channelRepo
+    -userRepo
+    -publisher
+    +CreateTournament(ctx, actorID, input)
+    -ensureTournamentGeneralChannel(ctx, tournament)
+    -ensureServerPermission(ctx, actorID, serverID)
+    -createChannel(ctx, serverID, parentID, type, name, private)
+    -publishEvent(ctx, topic, payload)
+  }
+}
+
+package "Data Access" {
+  interface TournamentRepository {
+    +CreateTournament(ctx, tournament)
+    +FindTournamentByID(ctx, id)
+    +UpdateTournament(ctx, tournament)
+    +ListTournamentsByServer(ctx, serverID, filter)
+  }
+
+  interface ServerRepository {
+    +FindMember(ctx, serverID, userID)
+    +HasPermission(ctx, serverID, userID, permission)
+  }
+
+  interface ChannelRepository {
+    +ListByServerID(ctx, serverID)
+    +Create(ctx, channel)
+    +Update(ctx, channel)
+  }
+
+  class tournamentRepository <<repository>>
+  class serverRepository <<repository>>
+  class channelRepository <<repository>>
+}
+
+package "Domain" {
+  class Tournament <<entity>> {
+    +ID
+    +ServerID
+    +Game
+    +Name
+    +Format
+    +Status
+    +ParticipantType
+    +TournamentGeneralChannelID
+  }
+
+  class TournamentParticipant <<entity>> {
+    +ID
+    +TournamentID
+    +UserID
+    +Seed
+    +CheckedIn
+  }
+
+  class TournamentTeam <<entity>> {
+    +ID
+    +TournamentID
+    +CaptainID
+    +Name
+  }
+}
+
+package "Infrastructure" {
+  class GormDatabase <<database>>
+  class Watermill <<message-bus>>
+}
+
+TournamentCreateEditDialog ..> TournamentController : call API
+TournamentController ..> TournamentService : use
+tournamentService ..|> TournamentService
+tournamentService ..> TournamentRepository : persist
+tournamentService ..> ServerRepository : check permission
+tournamentService ..> ChannelRepository : create channel
+tournamentService ..> Watermill : publish event
+TournamentRepository <|.. tournamentRepository
+ServerRepository <|.. serverRepository
+ChannelRepository <|.. channelRepository
+tournamentRepository ..> GormDatabase
+serverRepository ..> GormDatabase
+channelRepository ..> GormDatabase
+tournamentService ..> Tournament : create/update
+Tournament "1" o-- "0..*" TournamentParticipant
+Tournament "1" o-- "0..*" TournamentTeam
+@enduml

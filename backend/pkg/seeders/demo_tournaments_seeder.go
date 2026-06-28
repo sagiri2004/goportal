@@ -64,6 +64,10 @@ func SeedDemoTournaments(db *gorm.DB, logger *zap.Logger) {
 		repoimpl.NewUserRepository(db),
 		nil,
 		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 
 	cases := []demoTournamentCase{

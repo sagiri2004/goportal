@@ -1,0 +1,28 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+left to right direction
+actor "Khách" as Guest
+actor "Người dùng" as User
+rectangle "Quản lý tài khoản" {
+  usecase "Đăng ký tài khoản" as UC_Register
+  usecase "Đăng nhập hệ thống" as UC_Login
+  usecase "Xem hồ sơ cá nhân" as UC_ViewProfile
+  usecase "Cập nhật thông tin\ncá nhân" as UC_UpdateProfile
+  usecase "Đổi mật khẩu" as UC_ChangePassword
+  usecase "Đăng xuất" as UC_Logout
+}
+Guest --> UC_Register
+Guest --> UC_Login
+User --> UC_ViewProfile
+User --> UC_UpdateProfile
+User --> UC_ChangePassword
+User --> UC_Logout
+@enduml

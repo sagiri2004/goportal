@@ -33,13 +33,18 @@ import {
   Loader2,
   Pencil,
   Play,
+  ShieldCheck,
+  Square,
   Swords,
+  Trash2,
   Trophy,
+  UserPlus,
 } from 'lucide-react'
 import { useAuthStore } from '@goportal/store'
 import {
   cancelTournamentRegistration,
   checkInTournamentParticipant,
+  deleteTournament,
   getTournamentBracket,
   getTournamentDetail,
   getTournamentStandings,
@@ -53,6 +58,7 @@ import {
   registerTournamentParticipant,
   reportTournamentMatchResult,
   bindTournamentRole,
+  closeTournamentMatchLive,
   unbindTournamentRole,
   updateTournamentStatus,
 } from '../services'
@@ -414,6 +420,7 @@ export const TournamentDetailPage: React.FC = () => {
   const [inlineError, setInlineError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
 
   const [matchModalOpen, setMatchModalOpen] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatchDTO | null>(null)
@@ -423,6 +430,7 @@ export const TournamentDetailPage: React.FC = () => {
   const [overrideReason, setOverrideReason] = useState('')
   const [matchSubmitError, setMatchSubmitError] = useState<string | null>(null)
   const [startMatchNote, setStartMatchNote] = useState<string | null>(null)
+  const [closeLiveNote, setCloseLiveNote] = useState<string | null>(null)
   const [roles, setRoles] = useState<TournamentRoleDTO[]>([])
   const [roleBindings, setRoleBindings] = useState<TournamentRoleBindingDTO[]>([])
   const [workspaces, setWorkspaces] = useState<TournamentMatchWorkspaceDTO[]>([])
@@ -600,6 +608,28 @@ export const TournamentDetailPage: React.FC = () => {
     }
   }
 
+  const handleDeleteTournament = async () => {
+    if (!tournament || !canManage) return
+    if (tournament.status !== 'draft') {
+      setInlineError('Chỉ có thể xóa giải đấu đang ở trạng thái nháp.')
+      setIsDeleteConfirmOpen(false)
+      return
+    }
+    setIsActionLoading(true)
+    setInlineError(null)
+    try {
+      await deleteTournament(tournament.id)
+      pushToast?.('Đã xóa giải đấu.')
+      refreshActiveServerTournaments?.()
+      setIsDeleteConfirmOpen(false)
+      navigate(`/app/servers/${serverId}/tournaments`)
+    } catch (deleteError: any) {
+      setInlineError(deleteError?.message ?? 'Không thể xóa giải đấu.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   const openMatch = (match: TournamentMatchDTO) => {
     setSelectedMatch(match)
     setWinnerId(match.winner?.id ?? '')
@@ -608,6 +638,7 @@ export const TournamentDetailPage: React.FC = () => {
     setOverrideReason('')
     setMatchSubmitError(null)
     setStartMatchNote(null)
+    setCloseLiveNote(null)
     setMatchModalOpen(true)
   }
 
@@ -663,6 +694,28 @@ export const TournamentDetailPage: React.FC = () => {
       pushToast?.('Đã bắt đầu trận và tạo workspace.')
     } catch (err: any) {
       setMatchSubmitError(err?.message ?? 'Không thể bắt đầu trận.')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleCloseMatchLive = async () => {
+    if (!tournament || !selectedMatch || !canManage) return
+    setIsActionLoading(true)
+    setMatchSubmitError(null)
+    setCloseLiveNote(null)
+    try {
+      const result = await closeTournamentMatchLive(tournament.id, selectedMatch.id)
+      const totalStopped = (result.recordings?.length ?? 0) + (result.stopped_streams?.length ?? 0)
+      setCloseLiveNote(
+        totalStopped > 0
+          ? 'Đã đóng live và lưu bản ghi.'
+          : 'Live của trận hiện không có bản ghi hoặc stream đang chạy.',
+      )
+      pushToast?.(totalStopped > 0 ? 'Đã đóng live và lưu bản ghi.' : 'Không có live đang ghi để đóng.')
+      await reload()
+    } catch (err: any) {
+      setMatchSubmitError(err?.message ?? 'Không thể đóng live trận.')
     } finally {
       setIsActionLoading(false)
     }
@@ -827,6 +880,7 @@ export const TournamentDetailPage: React.FC = () => {
         currentUserTournamentRoleCodes.has('referee')
       ),
   )
+  const canDeleteTournament = canManage && tournament.status === 'draft'
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-[radial-gradient(circle_at_top_right,rgba(8,145,178,0.16),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.14),transparent_44%),#06080f]">
@@ -854,6 +908,16 @@ export const TournamentDetailPage: React.FC = () => {
           {canManage && tournament.status === 'draft' && (
             <>
               <Button type="button" size="sm" variant="outline" onClick={() => setIsEditOpen(true)}><Pencil className="mr-2 h-4 w-4" />Chỉnh sửa</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => setIsDeleteConfirmOpen(true)}
+                disabled={isActionLoading}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Xóa
+              </Button>
               <Button type="button" size="sm" onClick={() => void runStatus('registration')} disabled={isActionLoading}>Mở đăng ký</Button>
             </>
           )}
@@ -974,13 +1038,27 @@ export const TournamentDetailPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="mt-3 grid grid-cols-2 gap-4">
-                  <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/70 p-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Role Binding</p>
-                    <div className="grid grid-cols-[160px_1fr_auto] gap-2">
+                  <div className="overflow-hidden rounded-lg border border-white/10 bg-zinc-950/40">
+                    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200">
+                          <ShieldCheck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-zinc-100">Role binding</p>
+                          <p className="text-xs text-zinc-500">{roleBindings.length} bindings • {roles.length} roles</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">
+                        Auto sync
+                      </Badge>
+                    </div>
+                    <div className="space-y-4 p-4">
+                    <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto]">
                       <select
                         value={bindRoleCode}
                         onChange={(e) => setBindRoleCode(e.target.value)}
-                        className="h-10 rounded-md border border-white/10 bg-zinc-900/80 px-3 text-sm"
+                        className="h-10 w-full rounded-md border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-cyan-400/60"
                       >
                         {roles.map((role) => (
                           <option key={role.id} value={role.code}>
@@ -989,6 +1067,7 @@ export const TournamentDetailPage: React.FC = () => {
                         ))}
                       </select>
                       <Input
+                        className="h-10 border-white/10 bg-zinc-950"
                         value={bindUserQuery}
                         onChange={(e) => {
                           setBindUserQuery(e.target.value)
@@ -996,57 +1075,79 @@ export const TournamentDetailPage: React.FC = () => {
                         }}
                         placeholder="Tìm user trong server..."
                       />
-                      <Button type="button" size="sm" onClick={() => void handleBindRole()} disabled={isActionLoading || !bindUserId}>
+                      <Button type="button" className="h-10 gap-2" onClick={() => void handleBindRole()} disabled={isActionLoading || !bindUserId}>
+                        {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                         Bind
                       </Button>
                     </div>
-                    {bindCandidates.length > 0 && (
-                      <div className="max-h-40 overflow-auto rounded border border-white/10 bg-zinc-950/70">
+                    {bindCandidates.length > 0 && bindUserQuery.trim() && (
+                      <div className="max-h-48 overflow-auto rounded-md border border-white/10 bg-zinc-950">
                         {bindCandidates
-                          .slice(0, 12)
+                          .slice(0, 10)
                           .map((m) => (
                             <button
                               key={m.id}
                               type="button"
-                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/5"
+                              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${bindUserId === m.id ? 'bg-cyan-500/10 text-cyan-100' : 'text-zinc-200 hover:bg-white/5'}`}
                               onClick={() => {
                                 setBindUserId(m.id)
                                 setBindUserQuery(m.name)
                               }}
                             >
-                              <span>{m.name}</span>
-                              <span className="text-xs text-zinc-500">{m.id.slice(0, 8)}</span>
+                              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-200">
+                                {(m.name?.[0] ?? '?').toUpperCase()}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">{m.name}</span>
+                                <span className="text-xs text-zinc-500">{m.id.slice(0, 8)}</span>
+                              </span>
+                              {bindUserId === m.id && <Check className="h-4 w-4 text-cyan-300" />}
                             </button>
                           ))}
                       </div>
                     )}
-                    <div className="grid grid-cols-[160px_1fr] gap-2">
+                    <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-100">Assigned users</p>
+                        <p className="text-xs text-zinc-500">Auto sync keeps players and spectators aligned.</p>
+                      </div>
                       <select
                         value={bindingRoleFilter}
                         onChange={(e) => setBindingRoleFilter(e.target.value)}
-                        className="h-9 rounded-md border border-white/10 bg-zinc-900/80 px-3 text-xs"
+                        className="h-9 rounded-md border border-white/10 bg-zinc-950 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60"
                       >
-                        <option value="all">all roles</option>
+                        <option value="all">All roles</option>
                         {roles.map((role) => (
                           <option key={`filter-${role.id}`} value={role.code}>
                             {role.code}
                           </option>
                         ))}
                       </select>
-                      <p className="self-center text-xs text-zinc-400">Filter binding theo role</p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
                       {filteredBindings.map((item) => {
                         const role = roleById.get(item.role_id)
+                        const username = memberNameById.get(item.user_id) ?? item.user_id
                         return (
-                          <div key={item.id} className="flex items-center justify-between rounded border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm">
-                            <span className="text-zinc-200">
+                          <div key={item.id} className="flex items-center gap-3 rounded-md border border-white/10 bg-zinc-950/70 px-3 py-2">
+                            <span className="hidden">
                               {role?.code ?? item.role_id} → {memberNameById.get(item.user_id) ?? item.user_id}
                             </span>
+                            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-200">
+                              {(username[0] ?? '?').toUpperCase()}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-zinc-100">{username}</p>
+                              <p className="text-xs text-zinc-500">{item.user_id.slice(0, 8)}</p>
+                            </div>
+                            <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-100">
+                              {role?.code ?? 'role'}
+                            </Badge>
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
+                              className="h-8 px-3"
                               onClick={() => {
                                 if (!role) return
                                 void handleUnbindRole(role.code, item.user_id)
@@ -1075,6 +1176,7 @@ export const TournamentDetailPage: React.FC = () => {
                   </div>
                 </div>
 
+                  </div>
                   <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/70 p-3">
                     <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Match Workspace</p>
                     <div className="space-y-2">
@@ -1126,6 +1228,36 @@ export const TournamentDetailPage: React.FC = () => {
 
       <TournamentCreateEditDialog open={isEditOpen} onOpenChange={setIsEditOpen} serverId={serverId} tournament={tournament} onSuccess={() => { void reload(); refreshActiveServerTournaments?.() }} />
 
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={(open) => !isActionLoading && setIsDeleteConfirmOpen(open)}>
+        <DialogContent className="max-w-md border-rose-500/25 bg-[linear-gradient(140deg,#10090d,#171018)] text-zinc-100">
+          <DialogHeader>
+            <DialogTitle>Xóa giải đấu</DialogTitle>
+            <DialogDescription>
+              Thao tác này sẽ xóa giải "{tournament.name}" khỏi server. Chỉ các giải đang ở trạng thái nháp mới có thể xóa.
+            </DialogDescription>
+          </DialogHeader>
+          {!canDeleteTournament && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+              Giải đấu này không còn ở trạng thái nháp nên backend sẽ không cho xóa.
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setIsDeleteConfirmOpen(false)} disabled={isActionLoading}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteTournament()}
+              disabled={isActionLoading || !canDeleteTournament}
+            >
+              {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Xóa giải đấu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={matchModalOpen} onOpenChange={setMatchModalOpen}>
         <DialogContent className="max-w-xl border-cyan-500/20 bg-[linear-gradient(140deg,#090c14,#111826)] text-zinc-100">
           <DialogHeader>
@@ -1166,6 +1298,7 @@ export const TournamentDetailPage: React.FC = () => {
                   )}
                   {matchSubmitError && <p className="text-sm text-rose-300">{matchSubmitError}</p>}
                   {startMatchNote && <p className="text-sm text-emerald-300">{startMatchNote}</p>}
+                  {closeLiveNote && <p className="text-sm text-emerald-300">{closeLiveNote}</p>}
                 </div>
               )}
             </div>
@@ -1174,6 +1307,11 @@ export const TournamentDetailPage: React.FC = () => {
             {canManage && selectedMatch && selectedMatch.status !== 'in_progress' && selectedMatch.status !== 'completed' && (
               <Button type="button" variant="outline" onClick={() => void handleStartMatch()} disabled={isActionLoading}>
                 <Play className="mr-2 h-4 w-4" />Start Match
+              </Button>
+            )}
+            {canManage && selectedMatch && selectedMatch.status === 'in_progress' && (
+              <Button type="button" variant="outline" onClick={() => void handleCloseMatchLive()} disabled={isActionLoading}>
+                <Square className="mr-2 h-4 w-4" />Đóng live
               </Button>
             )}
             {canJudgeMatchResult && (

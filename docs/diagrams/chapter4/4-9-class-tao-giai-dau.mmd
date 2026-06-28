@@ -1,0 +1,125 @@
+classDiagram
+direction LR
+
+namespace Presentation {
+  class TournamentCreateEditDialog {
+    -string serverId
+    -FormState form
+    -number step
+    -string error
+    -boolean isSubmitting
+    +canGoNext() boolean
+    +submit() Promise
+    +onSuccess(tournament)
+  }
+}
+
+namespace API_Layer {
+  class TournamentController {
+    +Create(context)
+    +ListByServer(context)
+    +GetByID(context)
+    +Update(context)
+    +UpdateStatus(context)
+  }
+}
+
+namespace Business_Services {
+  class TournamentService {
+    <<interface>>
+    +CreateTournament(ctx, actorID, input) Tournament
+    +ListTournaments(ctx, actorID, input) TournamentListResult
+    +GetTournamentDetail(ctx, actorID, tournamentID) TournamentDetail
+    +UpdateTournament(ctx, actorID, tournamentID, input) Tournament
+  }
+
+  class tournamentService {
+    -TournamentRepository repo
+    -ServerRepository serverRepo
+    -ChannelRepository channelRepo
+    -UserRepository userRepo
+    -Publisher publisher
+    +CreateTournament(ctx, actorID, input) Tournament
+    -ensureTournamentGeneralChannel(ctx, tournament) error
+    -ensureServerPermission(ctx, actorID, serverID) error
+    -createChannel(ctx, serverID, parentID, type, name, private) Channel
+    -publishEvent(ctx, topic, payload)
+  }
+}
+
+namespace Data_Access {
+  class TournamentRepository {
+    <<interface>>
+    +CreateTournament(ctx, tournament) error
+    +FindTournamentByID(ctx, id) Tournament
+    +UpdateTournament(ctx, tournament) error
+    +ListTournamentsByServer(ctx, serverID, filter) Tournament[]
+  }
+
+  class ServerRepository {
+    <<interface>>
+    +FindMember(ctx, serverID, userID) ServerMember
+    +HasPermission(ctx, serverID, userID, permission) boolean
+  }
+
+  class ChannelRepository {
+    <<interface>>
+    +ListByServerID(ctx, serverID) Channel[]
+    +Create(ctx, channel) error
+    +Update(ctx, channel) error
+  }
+
+  class tournamentRepository
+  class serverRepository
+  class channelRepository
+}
+
+namespace Domain {
+  class Tournament {
+    +string ID
+    +string ServerID
+    +string Game
+    +string Name
+    +string Format
+    +string Status
+    +string ParticipantType
+    +string TournamentGeneralChannelID
+  }
+
+  class TournamentParticipant {
+    +string ID
+    +string TournamentID
+    +string UserID
+    +int Seed
+    +boolean CheckedIn
+  }
+
+  class TournamentTeam {
+    +string ID
+    +string TournamentID
+    +string CaptainID
+    +string Name
+  }
+}
+
+namespace Infrastructure {
+  class GormDatabase
+  class Watermill
+}
+
+TournamentCreateEditDialog ..> TournamentController : call API
+TournamentController ..> TournamentService : use
+tournamentService ..|> TournamentService
+tournamentService ..> TournamentRepository : persist
+tournamentService ..> ServerRepository : check permission
+tournamentService ..> ChannelRepository : create channel
+tournamentService ..> Watermill : publish event
+TournamentRepository <|.. tournamentRepository
+ServerRepository <|.. serverRepository
+ChannelRepository <|.. channelRepository
+tournamentRepository ..> GormDatabase
+serverRepository ..> GormDatabase
+channelRepository ..> GormDatabase
+tournamentService ..> Tournament : create/update
+Tournament "1" o-- "0..*" TournamentParticipant
+Tournament "1" o-- "0..*" TournamentTeam

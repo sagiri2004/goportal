@@ -567,9 +567,41 @@ func (r *tournamentRepository) CreateMatchWorkspace(ctx context.Context, workspa
 	return nil
 }
 
+func (r *tournamentRepository) UpdateMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace) error {
+	if err := r.db.WithContext(ctx).Save(workspace).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
 func (r *tournamentRepository) ListMatchWorkspaces(ctx context.Context, tournamentID string) ([]models.TournamentMatchWorkspace, error) {
 	var rows []models.TournamentMatchWorkspace
 	if err := r.db.WithContext(ctx).Where("tournament_id = ?", tournamentID).Order("created_at DESC").Find(&rows).Error; err != nil {
+		return nil, apperr.E("DB_ERROR", err)
+	}
+	return rows, nil
+}
+
+func (r *tournamentRepository) CreateMatchRecording(ctx context.Context, row *models.TournamentMatchRecording) error {
+	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) UpdateMatchRecording(ctx context.Context, row *models.TournamentMatchRecording) error {
+	if err := r.db.WithContext(ctx).Save(row).Error; err != nil {
+		return apperr.E("DB_ERROR", err)
+	}
+	return nil
+}
+
+func (r *tournamentRepository) ListActiveMatchRecordingsByChannel(ctx context.Context, matchID, channelID string) ([]models.TournamentMatchRecording, error) {
+	var rows []models.TournamentMatchRecording
+	if err := r.db.WithContext(ctx).
+		Where("match_id = ? AND channel_id = ? AND status = ?", matchID, channelID, models.RecordingStatusActive).
+		Order("created_at DESC").
+		Find(&rows).Error; err != nil {
 		return nil, apperr.E("DB_ERROR", err)
 	}
 	return rows, nil

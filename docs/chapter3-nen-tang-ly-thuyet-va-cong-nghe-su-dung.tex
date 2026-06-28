@@ -1,0 +1,63 @@
+\chapter{NỀN TẢNG LÝ THUYẾT VÀ CÔNG NGHỆ SỬ DỤNG}
+\label{chapter:3}
+
+Trong các chương trước, đồ án đã trình bày bài toán xây dựng nền tảng cộng đồng game GoPortal và phân tích các nhóm chức năng chính như quản lý tài khoản, quản lý máy chủ, nhắn tin, chơi và đăng tải game, voice/livestream, cũng như tổ chức giải đấu. Chương này trình bày ngắn gọn các nền tảng lý thuyết và nhóm công nghệ được sử dụng để hiện thực các yêu cầu đó. Nội dung chương được tinh giản theo các nhóm chính gồm frontend, backend, cơ sở dữ liệu, giao tiếp thời gian thực và hạ tầng triển khai, tránh liệt kê quá nhiều thư viện phụ không cần thiết.
+
+\section{Tổng quan công nghệ sử dụng}
+\label{section:3.1}
+
+GoPortal được xây dựng theo mô hình ứng dụng client-server. Phía client gồm ứng dụng web và ứng dụng desktop, phục vụ các thao tác của người dùng như đăng nhập, tham gia máy chủ, nhắn tin, chơi game, quản lý giải đấu và tham gia voice/livestream. Phía server cung cấp API, xử lý nghiệp vụ, xác thực, phân quyền, lưu trữ dữ liệu và phát các cập nhật thời gian thực. Cách tổ chức này phù hợp với các yêu cầu ở Chương 2 vì hệ thống cần tách biệt rõ giao diện người dùng, xử lý nghiệp vụ và dữ liệu.
+
+Các nhóm công nghệ chính được sử dụng trong đồ án gồm: React và TypeScript cho frontend; Go và Gin cho backend; MySQL, GORM và Redis cho lưu trữ dữ liệu; WebSocket và LiveKit cho giao tiếp thời gian thực; Cloudinary cho lưu trữ tài nguyên media; Docker Compose cho môi trường chạy cục bộ. Những công nghệ này không được lựa chọn riêng lẻ, mà được kết hợp để giải quyết các yêu cầu cụ thể của hệ thống GoPortal.
+
+\section{Frontend}
+\label{section:3.2}
+
+Frontend của GoPortal được xây dựng bằng React kết hợp TypeScript. React hỗ trợ phát triển giao diện theo mô hình component, cho phép chia các màn hình lớn như danh sách máy chủ, kênh chat, trang game, trang giải đấu và voice channel thành nhiều thành phần nhỏ, có thể tái sử dụng và bảo trì. TypeScript bổ sung kiểu tĩnh cho mã nguồn frontend, giúp giảm lỗi khi xử lý các dữ liệu phức tạp như thông tin máy chủ, kênh, vai trò, tin nhắn, game, giải đấu và trận đấu \cite{react-docs,typescript-docs}.
+
+Để phục vụ phát triển và đóng gói ứng dụng, dự án sử dụng Vite cho phiên bản web và Electron cho phiên bản desktop. Vite giúp quá trình phát triển frontend nhanh hơn nhờ dev server nhẹ và khả năng build ứng dụng React hiệu quả. Electron cho phép tái sử dụng phần lớn giao diện web để đóng gói thành ứng dụng desktop, phù hợp với định hướng của GoPortal là một nền tảng cộng đồng game có trải nghiệm gần với các ứng dụng như Discord \cite{vite-docs,electron-docs}.
+
+Một lựa chọn thay thế phổ biến cho React là Vue.js. Vue.js có cú pháp thân thiện và dễ tiếp cận, tuy nhiên React có hệ sinh thái lớn hơn và phù hợp hơn với các thư viện giao diện, quản lý trạng thái và LiveKit mà dự án đang sử dụng. Đối với ứng dụng desktop, Tauri là một lựa chọn nhẹ hơn Electron, nhưng Electron thuận lợi hơn trong việc tái sử dụng giao diện React và tích hợp nhanh trong phạm vi đồ án. Vì vậy, React, TypeScript, Vite và Electron được chọn để cân bằng giữa tốc độ phát triển, khả năng bảo trì và khả năng mở rộng.
+
+\section{Backend}
+\label{section:3.3}
+
+Backend của GoPortal được phát triển bằng Go và Gin. Go là ngôn ngữ biên dịch, có kiểu tĩnh, hiệu năng tốt và hỗ trợ lập trình đồng thời thuận tiện. Trong đồ án, Go được sử dụng để xử lý các nghiệp vụ chính như xác thực người dùng, quản lý máy chủ, quản lý vai trò, quản lý kênh, tin nhắn, game, giải đấu và các kết nối thời gian thực. Gin là web framework dùng để xây dựng các REST API, tổ chức route, middleware, xử lý JSON request/response và tích hợp với các cơ chế xác thực, phân quyền \cite{go-docs,gin-docs}.
+
+Về mặt thiết kế API, hệ thống sử dụng RESTful API cho phần lớn chức năng. Các tài nguyên như người dùng, máy chủ, kênh, tin nhắn, game và giải đấu được thao tác thông qua các phương thức HTTP quen thuộc như GET, POST, PATCH và DELETE. Cách tiếp cận này giúp frontend web, frontend desktop và các công cụ kiểm thử có thể sử dụng cùng một giao diện API.
+
+Đối với xác thực và phân quyền, hệ thống sử dụng JWT và RBAC. JWT giúp truyền thông tin xác thực giữa client và server thông qua token, phù hợp với mô hình frontend-backend tách rời. RBAC cho phép gán quyền theo vai trò trong máy chủ, ví dụ quyền xem kênh, gửi tin nhắn, quản lý kênh, quản lý vai trò hoặc duyệt thành viên. Cơ chế này trực tiếp phục vụ nhóm chức năng quản lý máy chủ, quản lý kênh và phân quyền đã nêu ở Chương 2 \cite{jwt-rfc7519}.
+
+Một lựa chọn thay thế phổ biến cho backend là Node.js với Express hoặc NestJS. Node.js có hệ sinh thái lớn và thuận tiện khi dùng chung ngôn ngữ với frontend, tuy nhiên Go phù hợp hơn với định hướng dịch vụ mạng, xử lý đồng thời và triển khai gọn của đồ án. Vì vậy, Go và Gin được chọn làm nền tảng backend chính.
+
+\section{Cơ sở dữ liệu và lưu trữ}
+\label{section:3.4}
+
+MySQL được sử dụng làm hệ quản trị cơ sở dữ liệu chính của GoPortal. Các dữ liệu như tài khoản, quan hệ bạn bè, máy chủ, vai trò, kênh, tin nhắn, game, bản build game, giải đấu, đội thi đấu, trận đấu và kết quả đều có quan hệ rõ ràng và cần lưu trữ bền vững. MySQL phù hợp với yêu cầu này nhờ mô hình cơ sở dữ liệu quan hệ, khả năng truy vấn bằng SQL, hỗ trợ ràng buộc dữ liệu và transaction \cite{mysql-84}.
+
+Backend sử dụng GORM để thao tác với cơ sở dữ liệu. GORM giúp ánh xạ model trong Go với bảng dữ liệu, hỗ trợ truy vấn, transaction và giảm lượng mã SQL thủ công. Với phạm vi đồ án, GORM giúp tăng tốc độ phát triển mà vẫn đủ linh hoạt cho các nghiệp vụ như quản lý server, game và tournament \cite{gorm-docs}.
+
+Ngoài MySQL, hệ thống sử dụng Redis cho một số dữ liệu tạm thời và tác vụ cần truy cập nhanh, chẳng hạn rate limit hoặc các thành phần phụ trợ liên quan tới realtime. Đối với tài nguyên media như avatar, ảnh máy chủ, ảnh game và một số file upload, hệ thống sử dụng Cloudinary để lưu trữ và trả về URL truy cập công khai \cite{redis-docs,cloudinary-go}.
+
+Một lựa chọn thay thế cho MySQL là PostgreSQL. PostgreSQL mạnh và linh hoạt, nhưng dữ liệu của GoPortal chủ yếu là dữ liệu quan hệ phổ biến, không yêu cầu các đặc thù nâng cao nên MySQL đáp ứng tốt nhu cầu lưu trữ và truy vấn. Đối với lưu trữ media, hệ thống có thể dùng Amazon S3 thay cho Cloudinary. Tuy nhiên, Cloudinary dễ tích hợp hơn trong phạm vi đồ án và giảm công sức tự xây dựng hạ tầng lưu trữ file.
+
+\section{Giao tiếp thời gian thực và truyền thông media}
+\label{section:3.5}
+
+GoPortal có nhiều chức năng cần cập nhật gần thời gian thực như tin nhắn mới, thông báo, trạng thái phòng game, trạng thái voice channel và một số sự kiện trong giải đấu. Để đáp ứng yêu cầu này, hệ thống sử dụng WebSocket. WebSocket duy trì kết nối hai chiều giữa client và server, cho phép server chủ động gửi dữ liệu đến client khi có sự kiện mới, thay vì client phải liên tục gửi request kiểm tra như polling \cite{mdn-websocket}.
+
+Đối với voice channel, livestream và chia sẻ màn hình, hệ thống sử dụng LiveKit. LiveKit là nền tảng realtime audio/video dựa trên WebRTC, hỗ trợ tạo phòng, cấp token truy cập, quản lý người tham gia và hỗ trợ egress để ghi hình hoặc phát luồng ra ngoài. Trong GoPortal, LiveKit phục vụ các yêu cầu như tham gia kênh thoại, theo dõi trận đấu, hỗ trợ trọng tài hoặc bình luận viên trong giải đấu \cite{livekit-docs}.
+
+Một lựa chọn thay thế cho WebSocket là polling. Polling dễ triển khai nhưng không hiệu quả với hệ thống chat, thông báo và phòng game vì client phải liên tục gửi request kiểm tra dữ liệu mới. Đối với truyền thông media, Jitsi là một lựa chọn phổ biến thay cho LiveKit, nhưng LiveKit thuận lợi hơn khi tích hợp với backend Go, cấp token theo quyền và tùy biến theo nghiệp vụ voice/livestream của GoPortal.
+
+\section{Hạ tầng phát triển và triển khai}
+\label{section:3.6}
+
+Docker Compose được sử dụng để cấu hình môi trường phát triển cục bộ cho các dịch vụ phụ trợ như MySQL, Redis, LiveKit và LiveKit Egress. Việc mô tả các dịch vụ bằng file cấu hình giúp môi trường chạy có tính lặp lại, giảm lỗi do cài đặt thủ công khác nhau giữa các máy phát triển \cite{docker-compose-docs}.
+
+Một lựa chọn thay thế là cài đặt thủ công từng dịch vụ trên máy phát triển. Cách này đơn giản lúc đầu nhưng khó tái lập khi chuyển sang máy khác. Docker Compose được chọn vì đủ đơn giản cho phát triển và demo, đồng thời vẫn mô phỏng được hệ thống gồm nhiều dịch vụ phụ trợ.
+
+\section{Kết luận chương}
+\label{section:3.7}
+
+Chương này đã trình bày các nhóm công nghệ chính được sử dụng trong GoPortal theo hướng tinh gọn: frontend, backend, cơ sở dữ liệu, giao tiếp thời gian thực và hạ tầng triển khai. Các công nghệ được lựa chọn đều gắn với yêu cầu đã phân tích ở Chương 2, từ quản lý máy chủ và phân quyền, nhắn tin realtime, voice/livestream, đăng tải game cho đến tổ chức giải đấu. Trong chương tiếp theo, đồ án sẽ trình bày thiết kế và cài đặt hệ thống dựa trên các nền tảng công nghệ đã lựa chọn.

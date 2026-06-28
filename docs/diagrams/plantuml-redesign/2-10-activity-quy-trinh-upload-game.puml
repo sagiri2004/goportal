@@ -1,0 +1,42 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+title Quy trình nghiệp vụ Đăng tải game
+|Nhà phát triển|
+start
+:Tạo thông tin game;
+:Nhập metadata và hình ảnh;
+|Hệ thống|
+:Chuẩn hóa slug;
+:Tạo game ở trạng thái nháp;
+|Nhà phát triển|
+:Tải lên file build ZIP;
+|Hệ thống|
+:Kiểm tra quyền sở hữu;
+:Kiểm tra định dạng và index.html;
+if (Build hợp lệ?) then (Có)
+  :Lưu build và tạo đường dẫn chơi;
+  |Nhà phát triển|
+  :Gửi kiểm duyệt;
+  |Quản trị viên|
+  :Kiểm tra nội dung game;
+  if (Duyệt phát hành?) then (Có)
+    |Hệ thống|
+    :Cập nhật trạng thái published;
+    :Hiển thị trên chợ game;
+  else (Không)
+    |Hệ thống|
+    :Cập nhật trạng thái cần chỉnh sửa;
+  endif
+else (Không)
+  :Trả lỗi để tải lại build;
+endif
+stop
+@enduml

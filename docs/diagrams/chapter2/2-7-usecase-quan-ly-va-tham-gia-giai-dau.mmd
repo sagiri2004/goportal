@@ -1,0 +1,74 @@
+flowchart LR
+  Organizer["Người tổ chức"]
+  Participant["Người tham gia"]
+  Captain["Đội trưởng"]
+  Referee["Trọng tài"]
+  Caster["Bình luận viên"]
+  Spectator["Khán giả"]
+  TournamentAdmin["Quản trị giải đấu"]
+
+  subgraph System["Hệ thống - Quản lý và Tham gia giải đấu"]
+    CreateTournament(("Tạo giải đấu"))
+    UpdateTournament(("Cập nhật giải đấu"))
+    ChangeStatus(("Chuyển trạng thái giải đấu"))
+    GenerateBracket(("Tạo bracket"))
+    ManageParticipants(("Quản lý người tham gia"))
+
+    ViewTournament(("Xem giải đấu"))
+    Register(("Đăng ký tham gia"))
+    CancelRegister(("Hủy đăng ký"))
+    CheckIn(("Check-in"))
+    ViewBracket(("Xem bracket"))
+    ReportResult(("Báo cáo kết quả"))
+    DisputeResult(("Khiếu nại kết quả"))
+
+    CreateTeam(("Tạo đội"))
+    AddTeamMember(("Thêm thành viên đội"))
+    RemoveTeamMember(("Xóa thành viên đội"))
+    DeleteTeam(("Xóa đội"))
+
+    WatchMatch(("Theo dõi trận đấu"))
+    VerifyResult(("Xác minh kết quả"))
+    ResolveDispute(("Xử lý khiếu nại"))
+    AccessCasterChannel(("Truy cập kênh caster"))
+    ViewStandings(("Xem bảng xếp hạng"))
+    AccessSpectatorChannel(("Theo dõi kênh spectator"))
+
+    AssignRole(("Gán vai trò giải đấu"))
+    ProvisionWorkspace(("Tạo workspace trận"))
+    OverrideResult(("Ghi đè kết quả trận"))
+  end
+
+  Organizer --> CreateTournament
+  Organizer --> UpdateTournament
+  Organizer --> ChangeStatus
+  Organizer --> GenerateBracket
+  Organizer --> ManageParticipants
+
+  Participant --> ViewTournament
+  Participant --> Register
+  Participant --> CancelRegister
+  Participant --> CheckIn
+  Participant --> ViewBracket
+  Participant --> ReportResult
+  Participant --> DisputeResult
+
+  Captain --> CreateTeam
+  Captain --> AddTeamMember
+  Captain --> RemoveTeamMember
+  Captain --> DeleteTeam
+
+  Referee --> WatchMatch
+  Referee --> VerifyResult
+  Referee --> ResolveDispute
+
+  Caster --> WatchMatch
+  Caster --> AccessCasterChannel
+
+  Spectator --> ViewBracket
+  Spectator --> ViewStandings
+  Spectator --> AccessSpectatorChannel
+
+  TournamentAdmin --> AssignRole
+  TournamentAdmin --> ProvisionWorkspace
+  TournamentAdmin --> OverrideResult

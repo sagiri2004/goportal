@@ -55,26 +55,32 @@ const (
 )
 
 type Tournament struct {
-	ID                         string  `gorm:"type:char(36);primaryKey" json:"id"`
-	ServerID                   string  `gorm:"type:char(36);not null;index" json:"server_id"`
-	Name                       string  `gorm:"type:varchar(255);not null" json:"name"`
-	Description                *string `gorm:"type:text" json:"description,omitempty"`
-	Game                       string  `gorm:"type:varchar(255);not null" json:"game"`
-	Format                     string  `gorm:"type:varchar(32);not null" json:"format"`
-	Status                     string  `gorm:"type:varchar(32);not null;default:'draft';index" json:"status"`
-	MaxParticipants            int     `gorm:"not null" json:"max_participants"`
-	ParticipantType            string  `gorm:"type:varchar(16);not null" json:"participant_type"`
-	TeamSize                   *int    `gorm:"type:int" json:"team_size,omitempty"`
-	RegistrationDeadline       *int64  `gorm:"type:bigint" json:"registration_deadline,omitempty"`
-	CheckInDurationMinutes     int     `gorm:"not null;default:15" json:"check_in_duration_minutes"`
-	PrizePool                  *string `gorm:"type:text" json:"prize_pool,omitempty"`
-	Rules                      *string `gorm:"type:text" json:"rules,omitempty"`
-	CreatedBy                  string  `gorm:"type:char(36);not null;index" json:"created_by"`
-	StartedAt                  *int64  `gorm:"type:bigint" json:"started_at,omitempty"`
-	CompletedAt                *int64  `gorm:"type:bigint" json:"completed_at,omitempty"`
-	TournamentGeneralChannelID *string `gorm:"type:char(36);index" json:"tournament_general_channel_id,omitempty"`
-	CreatedAt                  int64   `gorm:"not null;autoCreateTime" json:"created_at"`
-	UpdatedAt                  int64   `gorm:"not null;autoUpdateTime" json:"updated_at"`
+	ID                             string  `gorm:"type:char(36);primaryKey" json:"id"`
+	ServerID                       string  `gorm:"type:char(36);not null;index" json:"server_id"`
+	Name                           string  `gorm:"type:varchar(255);not null" json:"name"`
+	Description                    *string `gorm:"type:text" json:"description,omitempty"`
+	Game                           string  `gorm:"type:varchar(255);not null" json:"game"`
+	Format                         string  `gorm:"type:varchar(32);not null" json:"format"`
+	Status                         string  `gorm:"type:varchar(32);not null;default:'draft';index" json:"status"`
+	MaxParticipants                int     `gorm:"not null" json:"max_participants"`
+	ParticipantType                string  `gorm:"type:varchar(16);not null" json:"participant_type"`
+	TeamSize                       *int    `gorm:"type:int" json:"team_size,omitempty"`
+	RegistrationDeadline           *int64  `gorm:"type:bigint" json:"registration_deadline,omitempty"`
+	CheckInDurationMinutes         int     `gorm:"not null;default:15" json:"check_in_duration_minutes"`
+	PrizePool                      *string `gorm:"type:text" json:"prize_pool,omitempty"`
+	Rules                          *string `gorm:"type:text" json:"rules,omitempty"`
+	CreatedBy                      string  `gorm:"type:char(36);not null;index" json:"created_by"`
+	StartedAt                      *int64  `gorm:"type:bigint" json:"started_at,omitempty"`
+	CompletedAt                    *int64  `gorm:"type:bigint" json:"completed_at,omitempty"`
+	TournamentGeneralChannelID     *string `gorm:"type:char(36);index" json:"tournament_general_channel_id,omitempty"`
+	RecordingEnabled               bool    `gorm:"not null;default:false" json:"recording_enabled"`
+	RecordTeamA                    bool    `gorm:"not null;default:true" json:"record_team_a"`
+	RecordTeamB                    bool    `gorm:"not null;default:true" json:"record_team_b"`
+	RecordReferee                  bool    `gorm:"not null;default:false" json:"record_referee"`
+	RecordLivestream               bool    `gorm:"not null;default:false" json:"record_livestream"`
+	AutoStartRecordingOnMatchStart bool    `gorm:"not null;default:true" json:"auto_start_recording_on_match_start"`
+	CreatedAt                      int64   `gorm:"not null;autoCreateTime" json:"created_at"`
+	UpdatedAt                      int64   `gorm:"not null;autoUpdateTime" json:"updated_at"`
 }
 
 func (Tournament) TableName() string {
@@ -273,6 +279,8 @@ type TournamentMatchWorkspace struct {
 	LivestreamChannelID *string `gorm:"type:char(36)" json:"livestream_channel_id,omitempty"`
 	CreatedBy           string  `gorm:"type:char(36);not null;index" json:"created_by"`
 	CreatedAt           int64   `gorm:"not null;autoCreateTime" json:"created_at"`
+	ArchivedAt          *int64  `gorm:"type:bigint" json:"archived_at,omitempty"`
+	ClosedBy            *string `gorm:"type:char(36)" json:"closed_by,omitempty"`
 }
 
 func (TournamentMatchWorkspace) TableName() string {
@@ -282,6 +290,34 @@ func (TournamentMatchWorkspace) TableName() string {
 func (w *TournamentMatchWorkspace) BeforeCreate(_ *gorm.DB) error {
 	if w.ID == "" {
 		w.ID = uuid.NewString()
+	}
+	return nil
+}
+
+type TournamentMatchRecording struct {
+	ID           string  `gorm:"type:char(36);primaryKey" json:"id"`
+	TournamentID string  `gorm:"type:char(36);not null;index" json:"tournament_id"`
+	MatchID      string  `gorm:"type:char(36);not null;index" json:"match_id"`
+	ChannelID    string  `gorm:"type:char(36);not null;index" json:"channel_id"`
+	SourceRole   string  `gorm:"type:varchar(32);not null" json:"source_role"`
+	RecordingID  *string `gorm:"type:char(36);index" json:"recording_id,omitempty"`
+	Status       string  `gorm:"type:varchar(32);not null;default:'active';index" json:"status"`
+	StartedBy    string  `gorm:"type:char(36);not null" json:"started_by"`
+	StartedAt    int64   `gorm:"not null;default:0" json:"started_at"`
+	StoppedAt    *int64  `gorm:"type:bigint" json:"stopped_at,omitempty"`
+	Error        *string `gorm:"type:text" json:"error,omitempty"`
+	RetryCount   int     `gorm:"not null;default:0" json:"retry_count"`
+	CreatedAt    int64   `gorm:"not null;autoCreateTime" json:"created_at"`
+	UpdatedAt    int64   `gorm:"not null;autoUpdateTime" json:"updated_at"`
+}
+
+func (TournamentMatchRecording) TableName() string {
+	return "tournament_match_recordings"
+}
+
+func (r *TournamentMatchRecording) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.NewString()
 	}
 	return nil
 }

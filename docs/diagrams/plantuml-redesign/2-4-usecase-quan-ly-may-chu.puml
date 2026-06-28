@@ -1,0 +1,58 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam linetype ortho
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+
+left to right direction
+actor "Người dùng" as User
+actor "Thành viên có\nquyền quản trị" as Manager
+actor "Chủ máy chủ" as Owner
+rectangle "Quản lý máy chủ" {
+  usecase "Xem danh sách\nmáy chủ" as UC_View
+  usecase "Tham gia\nmáy chủ" as UC_Join
+  usecase "Gửi yêu cầu\ntham gia" as UC_Request
+  usecase "Rời máy chủ" as UC_Leave
+  usecase "Tạo lời mời" as UC_Invite
+  usecase "Duyệt yêu cầu\ntham gia" as UC_Review
+  usecase "Quản lý\nthành viên" as UC_Member
+  usecase "Quản lý\nvai trò" as UC_Role
+  usecase "Quản lý kênh" as UC_Channel
+  usecase "Phân quyền kênh" as UC_Perm
+  usecase "Cập nhật\nmáy chủ" as UC_Update
+  usecase "Xóa máy chủ" as UC_Delete
+
+  UC_View -[hidden]down- UC_Join
+  UC_Join -[hidden]down- UC_Request
+  UC_Request -[hidden]down- UC_Leave
+  UC_Invite -[hidden]down- UC_Review
+  UC_Review -[hidden]down- UC_Member
+  UC_Member -[hidden]down- UC_Role
+  UC_Role -[hidden]down- UC_Channel
+  UC_Channel -[hidden]down- UC_Perm
+  UC_Update -[hidden]down- UC_Delete
+}
+User -- UC_View
+User -- UC_Join
+User -- UC_Leave
+Manager -- UC_Invite
+Manager -- UC_Review
+Manager -- UC_Member
+Manager -- UC_Role
+Manager -- UC_Channel
+Manager -- UC_Perm
+Owner -- UC_Update
+Owner -- UC_Delete
+UC_Join ..> UC_Request : <<extend>>
+UC_Channel ..> UC_Perm : <<include>>
+note bottom of Manager
+  Chủ máy chủ cũng có toàn bộ
+  quyền quản trị theo RBAC.
+end note
+@enduml

@@ -1,0 +1,74 @@
+\section{Đặc tả chức năng}
+\label{section:2.3}
+
+Như đã trình bày ở phần \ref{section:2.2}, hệ thống GoPortal gồm nhiều nhóm chức năng phục vụ hoạt động cộng đồng game, quản lý máy chủ, đăng tải game và tổ chức giải đấu. Trong phần này, đồ án lựa chọn một số use case quan trọng và có luồng xử lý phức tạp để đặc tả chi tiết. Các bảng đặc tả được biên soạn trong file Markdown để thuận tiện chỉnh sửa, sau đó được xuất thành hình ảnh và chèn vào tài liệu.
+
+\subsection{Đặc tả use case Tham gia máy chủ}
+\label{subsection:2.3.1}
+
+Use case Tham gia máy chủ mô tả quá trình Người dùng gia nhập một máy chủ trong hệ thống. Tùy theo cấu hình của máy chủ, Người dùng có thể tham gia trực tiếp nếu máy chủ công khai hoặc phải gửi yêu cầu chờ người có quyền xét duyệt.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/UsecaseSpec/UC001-Tham-gia-may-chu.png}
+    \caption{Đặc tả use case Tham gia máy chủ}
+    \label{fig:2-11-uc-tham-gia-may-chu}
+\end{figure}
+
+Bảng đặc tả ở Hình \ref{fig:2-11-uc-tham-gia-may-chu} làm rõ hai nhánh chính của nghiệp vụ tham gia máy chủ. Với máy chủ công khai, hệ thống thêm Người dùng vào danh sách thành viên và gán vai trò mặc định. Với máy chủ cần xét duyệt, hệ thống tạo yêu cầu tham gia để người có quyền duyệt chấp nhận hoặc từ chối.
+
+\subsection{Đặc tả use case Quản lý kênh và phân quyền}
+\label{subsection:2.3.2}
+
+Use case Quản lý kênh và phân quyền mô tả cách Chủ máy chủ hoặc thành viên có quyền quản lý cấu hình các kênh trong máy chủ. Đây là use case quan trọng vì ảnh hưởng trực tiếp đến khả năng xem kênh, gửi tin nhắn và truy cập các khu vực riêng tư của cộng đồng.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/UsecaseSpec/UC002-Quan-ly-kenh-va-phan-quyen.png}
+    \caption{Đặc tả use case Quản lý kênh và phân quyền}
+    \label{fig:2-12-uc-quan-ly-kenh-phan-quyen}
+\end{figure}
+
+Hình \ref{fig:2-12-uc-quan-ly-kenh-phan-quyen} đặc tả các thao tác tạo kênh, cấu hình kênh riêng tư, thêm thành viên vào kênh và thiết lập quyền ghi đè theo vai trò hoặc người dùng. Hệ thống luôn kiểm tra quyền quản lý kênh trước khi cho phép thay đổi cấu hình.
+
+\subsection{Đặc tả use case Đăng tải và kiểm duyệt game}
+\label{subsection:2.3.3}
+
+Use case Đăng tải và kiểm duyệt game mô tả quy trình Nhà phát triển đưa một game cộng đồng lên GoPortal. Quy trình này bao gồm tạo thông tin game, tải lên bản build, gửi kiểm duyệt và chờ Quản trị viên duyệt phát hành.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/UsecaseSpec/UC003-Dang-tai-va-kiem-duyet-game.png}
+    \caption{Đặc tả use case Đăng tải và kiểm duyệt game}
+    \label{fig:2-13-uc-dang-tai-kiem-duyet-game}
+\end{figure}
+
+Hình \ref{fig:2-13-uc-dang-tai-kiem-duyet-game} thể hiện các bước từ tạo metadata game, tải lên file build dạng \texttt{zip}, kiểm tra bundle có \texttt{index.html}, đến khi gửi game vào hàng đợi kiểm duyệt. Game chỉ được hiển thị trên chợ game sau khi Quản trị viên cập nhật trạng thái phát hành.
+
+\subsection{Đặc tả use case Tổ chức giải đấu}
+\label{subsection:2.3.4}
+
+Use case Tổ chức giải đấu mô tả quy trình Người tổ chức tạo và đưa một giải đấu từ trạng thái nháp sang đăng ký, check-in và bắt đầu thi đấu. Đây là use case trung tâm của phân hệ giải đấu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/UsecaseSpec/UC004-To-chuc-giai-dau.png}
+    \caption{Đặc tả use case Tổ chức giải đấu}
+    \label{fig:2-14-uc-to-chuc-giai-dau}
+\end{figure}
+
+Hình \ref{fig:2-14-uc-to-chuc-giai-dau} đặc tả quá trình tạo giải đấu trong máy chủ, mở đăng ký, xử lý đăng ký cá nhân hoặc đăng ký theo đội, chuyển sang giai đoạn check-in và bắt đầu giải đấu. Khi giải đấu bắt đầu, hệ thống sinh bracket và danh sách trận đấu.
+
+\subsection{Đặc tả use case Vận hành trận đấu và xử lý kết quả}
+\label{subsection:2.3.5}
+
+Use case Vận hành trận đấu và xử lý kết quả mô tả quá trình bắt đầu một trận đấu, tạo workspace phục vụ thi đấu, ghi nhận kết quả và xử lý các trường hợp khiếu nại hoặc ghi đè kết quả.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/UsecaseSpec/UC005-Van-hanh-tran-dau-va-xu-ly-ket-qua.png}
+    \caption{Đặc tả use case Vận hành trận đấu và xử lý kết quả}
+    \label{fig:2-15-uc-van-hanh-tran-dau}
+\end{figure}
+
+Hình \ref{fig:2-15-uc-van-hanh-tran-dau} trình bày luồng vận hành trận đấu từ lúc bắt đầu trận, tạo workspace, phân quyền kênh cho người chơi và trọng tài, đến báo cáo kết quả. Nếu có khiếu nại hoặc cần can thiệp, Trọng tài hoặc Quản trị giải đấu xử lý và hệ thống cập nhật lại bracket theo kết quả cuối cùng.

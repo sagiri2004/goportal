@@ -1,0 +1,70 @@
+@startuml
+title Quy trình nghiệp vụ Tổ chức và Vận hành giải đấu
+
+|Người tổ chức|
+start
+:Tạo giải đấu trong máy chủ;
+
+|Hệ thống|
+:Tạo giải đấu ở trạng thái nháp;
+:Tạo kênh chung của giải đấu;
+
+|Người tổ chức|
+:Cập nhật thông tin và luật thi đấu;
+:Mở đăng ký;
+
+|Người tham gia|
+if (Giải đấu cá nhân?) then (Có)
+  :Đăng ký tham gia;
+else (Không)
+  |Đội trưởng|
+  :Tạo đội;
+  :Thêm thành viên đội;
+endif
+
+|Hệ thống|
+:Ghi nhận danh sách người tham gia;
+
+|Người tổ chức|
+:Chuyển sang giai đoạn check-in;
+
+|Người tham gia|
+:Thực hiện check-in;
+
+|Người tổ chức|
+:Bắt đầu giải đấu;
+
+|Hệ thống|
+:Sinh bracket và danh sách trận;
+
+repeat
+  |Người tổ chức|
+  :Bắt đầu trận đấu;
+
+  |Hệ thống|
+  :Tạo workspace trận;
+  :Phân quyền kênh cho người chơi và trọng tài;
+
+  |Người tham gia|
+  :Thi đấu và báo cáo kết quả;
+
+  if (Có khiếu nại?) then (Có)
+    |Trọng tài / Quản trị giải đấu|
+    :Xem xét khiếu nại;
+    :Ghi đè kết quả nếu cần;
+  else (Không)
+    |Hệ thống|
+    :Xác nhận kết quả;
+  endif
+
+  |Hệ thống|
+  :Cập nhật bracket và bảng xếp hạng;
+repeat while (Còn trận đấu?) is (Có)
+
+|Người tổ chức|
+:Hoàn thành giải đấu;
+
+|Hệ thống|
+:Cập nhật trạng thái completed;
+stop
+@enduml

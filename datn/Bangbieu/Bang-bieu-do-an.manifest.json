@@ -1,0 +1,100 @@
+[
+  {
+    "file": "datn/Chuong/0_5_Danh_muc_viet_tat.tex",
+    "sheet": "Viet tat",
+    "caption": "Danh mục từ viết tắt",
+    "label": "",
+    "image": "Hinhve/Bangbieu/danh-muc-viet-tat.png"
+  },
+  {
+    "file": "datn/Chuong/0_6_Thuat_ngu.tex",
+    "sheet": "Thuat ngu",
+    "caption": "Danh mục thuật ngữ",
+    "label": "",
+    "image": "Hinhve/Bangbieu/danh-muc-thuat-ngu.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.1 Tournament",
+    "caption": "Thiết kế chi tiết lớp Tournament",
+    "label": "tab:4-1-thiet-ke-lop-tournament",
+    "image": "Hinhve/Bangbieu/4-1-thiet-ke-lop-tournament.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.2 Dialog",
+    "caption": "Thiết kế chi tiết lớp TournamentCreateEditDialog",
+    "label": "tab:4-2-thiet-ke-lop-tournament-dialog",
+    "image": "Hinhve/Bangbieu/4-2-thiet-ke-lop-tournament-dialog.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.3 Service",
+    "caption": "Thiết kế chi tiết lớp TournamentService",
+    "label": "tab:4-3-thiet-ke-lop-tournament-service",
+    "image": "Hinhve/Bangbieu/4-3-thiet-ke-lop-tournament-service.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.4 Repository",
+    "caption": "Thiết kế chi tiết interface TournamentRepository",
+    "label": "tab:4-4-thiet-ke-lop-tournament-repository",
+    "image": "Hinhve/Bangbieu/4-4-thiet-ke-lop-tournament-repository.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.5 Cum du lieu",
+    "caption": "Tổng hợp các cụm dữ liệu chính của hệ thống",
+    "label": "tab:4-5-tong-hop-cum-du-lieu",
+    "image": "Hinhve/Bangbieu/4-5-tong-hop-cum-du-lieu.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.6 Cong cu",
+    "caption": "Danh sách thư viện và công cụ sử dụng",
+    "label": "tab:4-6-danh-sach-cong-cu-thu-vien",
+    "image": "Hinhve/Bangbieu/4-6-danh-sach-cong-cu-thu-vien.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.7 San pham",
+    "caption": "Các sản phẩm xây dựng và đóng gói",
+    "label": "tab:4-7-san-pham-dong-goi",
+    "image": "Hinhve/Bangbieu/4-7-san-pham-dong-goi.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.8 Ma nguon",
+    "caption": "Thống kê tổng quan mã nguồn",
+    "label": "tab:4-8-thong-ke-ma-nguon",
+    "image": "Hinhve/Bangbieu/4-8-thong-ke-ma-nguon.png"
+  },
+  {
+    "file": "docs/chapter4-phan-tich-thiet-ke-trien-khai-danh-gia.tex",
+    "sheet": "4.9 Thu muc",
+    "caption": "Thống kê theo nhóm thư mục chính",
+    "label": "tab:4-9-thong-ke-thu-muc",
+    "image": "Hinhve/Bangbieu/4-9-thong-ke-thu-muc.png"
+  },
+  {
+    "file": "docs/chapter5-cac-giai-phap-va-dong-gop-noi-bat.tex",
+    "sheet": "5.1 Dong gop",
+    "caption": "Tổng hợp các giải pháp và đóng góp nổi bật",
+    "label": "tab:5-1-tong-hop-dong-gop",
+    "image": "Hinhve/Bangbieu/5-1-tong-hop-dong-gop.png"
+  },
+  {
+    "file": "datn/Chuong/Phu_luc_A.tex",
+    "sheet": "PL Usecase",
+    "caption": "Danh sách use case đặc tả tiêu biểu",
+    "label": "tab:appendix-usecase-list",
+    "image": "Hinhve/Bangbieu/phu-luc-danh-sach-usecase.png"
+  },
+  {
+    "file": "datn/Chuong/Phu_luc_A.tex",
+    "sheet": "PL Truong du lieu",
+    "caption": "Các trường dữ liệu tham khảo trong đặc tả use case",
+    "label": "tab:appendix-usecase-fields",
+    "image": "Hinhve/Bangbieu/phu-luc-truong-du-lieu-usecase.png"
+  }
+]

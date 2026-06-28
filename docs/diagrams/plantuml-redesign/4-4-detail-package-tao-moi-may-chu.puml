@@ -1,0 +1,62 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam linetype ortho
+
+left to right direction
+
+package "Presentation" as Presentation {
+  class AppShell
+  class ServerRail
+  class CreateServerModal
+}
+
+package "API Layer" as API {
+  class ServerController
+}
+
+package "Business Services" as Business {
+  interface ServerService
+  class serverService
+  interface StorageService
+}
+
+package "Data Access" as Data {
+  interface UserRepository
+  interface ServerRepository
+  interface MessageRepository
+  class userRepository
+  class serverRepository
+  class messageRepository
+}
+
+package "Domain" as Domain {
+  class User
+  class Server
+  class ServerMember
+}
+
+package "Infrastructure" as Infra {
+  class GormDatabase
+  class LocalStorage
+}
+
+ServerRail ..> AppShell
+AppShell ..> CreateServerModal
+CreateServerModal ..> ServerController
+ServerController ..> ServerService
+serverService ..|> ServerService
+serverService ..> UserRepository
+serverService ..> ServerRepository
+serverService ..> MessageRepository
+serverService ..> StorageService
+serverService ..> LocalStorage
+userRepository ..|> UserRepository
+serverRepository ..|> ServerRepository
+messageRepository ..|> MessageRepository
+Data ..> GormDatabase
+Data ..> Domain
+@enduml

@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Room, RoomEvent, Track } from 'livekit-client'
-import { WS_URL } from '@goportal/config'
+import { API_URL, WS_URL } from '@goportal/config'
 import {
   Group as PanelGroup,
   Panel,
@@ -49,6 +49,7 @@ import {
   createChannel,
   createServerInvite,
   createServer,
+  deleteTournament,
   getChannels,
   getMembers,
   getServerById,
@@ -59,10 +60,13 @@ import {
   getTournamentMatchObserverTokens,
   joinByInviteCode,
   getVoiceToken,
+  listChannelRecordings,
   listTournamentMatchWorkspaces,
   listTournamentMatches,
   listTournamentsByServer,
   listVoiceParticipants,
+  startChannelRecording,
+  stopChannelRecording,
   updateServerProfile,
   uploadServerMedia,
   updateMyProfile,
@@ -177,6 +181,7 @@ type TournamentSidebarChannelNode = {
   activeMembers?: ChannelMember[]
   liveLabel?: string
   isLive?: boolean
+  isArchived?: boolean
 }
 
 type ChannelMember = {
@@ -297,24 +302,27 @@ const resolveNotificationEventType = (event: any): string => {
   return payloadType || topLevelType
 }
 
-const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: string | null): string[] => {
-  let parsed: URL
+const toWebSocketURL = (rawUrl: string, fallbackPath = '/ws'): URL | null => {
   try {
-    parsed = new URL(rawUrl)
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'ws:'
+    } else if (parsed.protocol === 'https:') {
+      parsed.protocol = 'wss:'
+    }
+    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+      return null
+    }
+    if (!parsed.pathname || parsed.pathname === '/') {
+      parsed.pathname = fallbackPath
+    }
+    return parsed
   } catch {
-    return []
+    return null
   }
+}
 
-  if (parsed.protocol === 'http:') {
-    parsed.protocol = 'ws:'
-  } else if (parsed.protocol === 'https:') {
-    parsed.protocol = 'wss:'
-  }
-
-  if (!parsed.pathname || parsed.pathname === '/') {
-    parsed.pathname = '/ws'
-  }
-
+const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: string | null): string[] => {
   const setCommonParams = (url: URL) => {
     url.searchParams.set('user_id', userId)
     if (token) {
@@ -323,13 +331,66 @@ const buildNotificationSocketTargets = (rawUrl: string, userId: string, token?: 
   }
 
   const targets: URL[] = []
-  const addTarget = (url: URL) => {
+  const addTarget = (url: URL | null) => {
+    if (!url) {
+      return
+    }
     setCommonParams(url)
     targets.push(url)
   }
 
-  addTarget(parsed)
+  const primary = toWebSocketURL(rawUrl)
+  addTarget(primary)
+  addTarget(toWebSocketURL(API_URL))
+
+  if (typeof window !== 'undefined') {
+    addTarget(toWebSocketURL(window.location.origin))
+  }
+
+  const withHost = (source: URL | null, host: string): URL | null => {
+    if (!source) {
+      return null
+    }
+    const clone = new URL(source.toString())
+    clone.hostname = host
+    return clone
+  }
+
+  for (const source of [primary, toWebSocketURL(API_URL)]) {
+    if (!source) {
+      continue
+    }
+    if (source.hostname === 'localhost') {
+      addTarget(withHost(source, '127.0.0.1'))
+    }
+    if (source.hostname === '127.0.0.1') {
+      addTarget(withHost(source, 'localhost'))
+    }
+  }
+
   return Array.from(new Set(targets.map((target) => target.toString())))
+}
+
+const hiddenSidebarTournamentsStorageKey = (serverId: string): string =>
+  `goportal:hidden-sidebar-tournaments:${serverId}`
+
+const readHiddenSidebarTournamentIds = (serverId: string): string[] => {
+  if (typeof window === 'undefined' || !serverId) {
+    return []
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(hiddenSidebarTournamentsStorageKey(serverId)) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+const writeHiddenSidebarTournamentIds = (serverId: string, ids: string[]) => {
+  if (typeof window === 'undefined' || !serverId) {
+    return
+  }
+  window.localStorage.setItem(hiddenSidebarTournamentsStorageKey(serverId), JSON.stringify(Array.from(new Set(ids))))
 }
 
 const InviteMemberDialog: React.FC<{
@@ -638,6 +699,7 @@ export const AppShell: React.FC = () => {
   const [tournamentsByServer, setTournamentsByServer] = useState<
     Record<string, Array<{ id: string; name: string; status: 'draft' | 'registration' | 'check_in' | 'in_progress' | 'completed' | 'cancelled'; tournament_general_channel_id?: string | null }>>
   >({})
+  const [hiddenSidebarTournamentIdsByServer, setHiddenSidebarTournamentIdsByServer] = useState<Record<string, string[]>>({})
   const [tournamentMatchesById, setTournamentMatchesById] = useState<
     Record<string, Array<{ id: string; round: number; match_number: number }>>
   >({})
@@ -651,6 +713,8 @@ export const AppShell: React.FC = () => {
       referee_channel_id?: string
       spectator_channel_id: string
       livestream_channel_id?: string | null
+      archived_at?: number | null
+      closed_by?: string | null
     }>>
   >({})
   const [loadedTournamentTreeById, setLoadedTournamentTreeById] = useState<Record<string, boolean>>({})
@@ -883,6 +947,21 @@ export const AppShell: React.FC = () => {
       if (!eventType || eventType === 'CONNECTED') {
         return
       }
+      if (eventType.startsWith('TOURNAMENT_')) {
+        const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {}
+        const title = typeof payload.title === 'string' && payload.title.trim() ? payload.title : 'Cập nhật giải đấu'
+        const body = typeof payload.body === 'string' && payload.body.trim() ? payload.body : ''
+        pushToast(body ? `${title}: ${body}` : title)
+        if (
+          typeof window !== 'undefined' &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted' &&
+          document.hidden
+        ) {
+          new Notification(title, body ? { body } : undefined)
+        }
+        return
+      }
       if (
         eventType !== 'VOICE_CHANNEL_ACTIVITY_UPDATED' &&
         eventType !== 'VOICE_ACTIVITY_UPDATED' &&
@@ -982,7 +1061,7 @@ export const AppShell: React.FC = () => {
       socket = null
       notificationSocketRef.current = null
     }
-  }, [currentUser?.id, token])
+  }, [currentUser?.id, pushToast, token])
 
   const refreshVoiceSidebarActivity = useCallback(async (serverId: string) => {
     if (!serverId) {
@@ -1373,6 +1452,65 @@ export const AppShell: React.FC = () => {
     }
   }, [])
 
+  const handleDeleteTournamentFromSidebar = useCallback(async (tournamentId: string, tournamentName: string, tournamentStatus: string) => {
+    if (!activeServerId) {
+      return
+    }
+    if (tournamentStatus !== 'draft') {
+      const confirmed = window.confirm(`Ẩn giải đấu "${tournamentName}" khỏi sidebar? Dữ liệu giải đấu vẫn được giữ lại.`)
+      if (!confirmed) {
+        return
+      }
+      setHiddenSidebarTournamentIdsByServer((prev) => {
+        const current = prev[activeServerId] ?? readHiddenSidebarTournamentIds(activeServerId)
+        const nextIds = Array.from(new Set([...current, tournamentId]))
+        writeHiddenSidebarTournamentIds(activeServerId, nextIds)
+        return {
+          ...prev,
+          [activeServerId]: nextIds,
+        }
+      })
+      if (params.tournamentId === tournamentId) {
+        navigate(`/app/servers/${activeServerId}/tournaments`)
+      }
+      pushToast('Đã ẩn giải đấu khỏi sidebar.')
+      return
+    }
+    const confirmed = window.confirm(`Xóa giải đấu "${tournamentName}"? Thao tác này không thể hoàn tác.`)
+    if (!confirmed) {
+      return
+    }
+    try {
+      await deleteTournament(tournamentId)
+      setTournamentsByServer((prev) => ({
+        ...prev,
+        [activeServerId]: (prev[activeServerId] ?? []).filter((item) => item.id !== tournamentId),
+      }))
+      setTournamentMatchesById((prev) => {
+        const next = { ...prev }
+        delete next[tournamentId]
+        return next
+      })
+      setTournamentWorkspacesById((prev) => {
+        const next = { ...prev }
+        delete next[tournamentId]
+        return next
+      })
+      setLoadedTournamentTreeById((prev) => {
+        const next = { ...prev }
+        delete next[tournamentId]
+        return next
+      })
+      pushToast('Đã xóa giải đấu.')
+      if (params.tournamentId === tournamentId) {
+        navigate(`/app/servers/${activeServerId}/tournaments`)
+      }
+      void refreshTournaments(activeServerId)
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : 'Không thể xóa giải đấu.')
+    }
+  }, [activeServerId, navigate, params.tournamentId, pushToast, refreshTournaments])
+
   const loadTournamentTreeData = useCallback(async (tournamentId: string) => {
     if (!tournamentId) {
       return
@@ -1408,6 +1546,16 @@ export const AppShell: React.FC = () => {
     }
     void refreshTournaments(activeServerId)
   }, [activeServerId, refreshTournaments])
+
+  useEffect(() => {
+    if (!activeServerId || hiddenSidebarTournamentIdsByServer[activeServerId]) {
+      return
+    }
+    setHiddenSidebarTournamentIdsByServer((prev) => ({
+      ...prev,
+      [activeServerId]: readHiddenSidebarTournamentIds(activeServerId),
+    }))
+  }, [activeServerId, hiddenSidebarTournamentIdsByServer])
 
   useEffect(() => {
     if (!params.tournamentId) {
@@ -2031,35 +2179,74 @@ export const AppShell: React.FC = () => {
       servers[0],
     [activeServerId, serverDetails, servers]
   )
+  const serverUnreadCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    Object.entries(channelsByServer).forEach(([serverId, categories]) => {
+      counts[serverId] = categories.reduce((serverTotal, category) => (
+        serverTotal + category.channels.reduce((categoryTotal, channel) => (
+          categoryTotal + (channel.type === 'text' ? Math.max(0, channel.unread ?? 0) : 0)
+        ), 0)
+      ), 0)
+    })
+    return counts
+  }, [channelsByServer])
   const activeCategories = useMemo(
     () => channelsByServer[activeServerId] ?? [],
     [activeServerId, channelsByServer]
   )
+  const archivedLivestreamChannelIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const tournament of tournamentsByServer[activeServerId] ?? []) {
+      for (const workspace of tournamentWorkspacesById[tournament.id] ?? []) {
+        if (workspace.archived_at && workspace.livestream_channel_id) {
+          ids.add(workspace.livestream_channel_id)
+        }
+      }
+    }
+    return ids
+  }, [activeServerId, tournamentsByServer, tournamentWorkspacesById])
   const categoriesWithVoiceActivity = useMemo(
     () =>
       activeCategories.map((category) => ({
         ...category,
         channels: category.channels.map((channel) => {
+          const isArchivedLivestream = channel.type === 'livestream' && archivedLivestreamChannelIds.has(channel.id)
           if (channel.type !== 'voice' && channel.type !== 'livestream') {
             return channel
           }
           const activity = voiceActivityByChannel[channel.id]
           if (!activity) {
-            return channel
+            return isArchivedLivestream
+              ? {
+                  ...channel,
+                  activeMembers: [],
+                  liveLabel: 'Đã lưu trữ',
+                  isLive: false,
+                  isArchived: true,
+                }
+              : channel
           }
           return {
             ...channel,
-            activeMembers: activity.activeMembers,
-            liveLabel: activity.liveLabel,
-            isLive: activity.isLive,
+            activeMembers: isArchivedLivestream ? [] : activity.activeMembers,
+            liveLabel: isArchivedLivestream ? 'Đã lưu trữ' : activity.liveLabel,
+            isLive: isArchivedLivestream ? false : activity.isLive,
+            isArchived: isArchivedLivestream,
           }
         }),
       })),
-    [activeCategories, voiceActivityByChannel]
+    [activeCategories, archivedLivestreamChannelIds, voiceActivityByChannel]
   )
   const activeTournaments = useMemo(
     () => tournamentsByServer[activeServerId] ?? [],
     [activeServerId, tournamentsByServer],
+  )
+  const visibleSidebarTournaments = useMemo(
+    () => {
+      const hiddenIds = new Set(hiddenSidebarTournamentIdsByServer[activeServerId] ?? [])
+      return (tournamentsByServer[activeServerId] ?? []).filter((tournament) => !hiddenIds.has(tournament.id))
+    },
+    [activeServerId, hiddenSidebarTournamentIdsByServer, tournamentsByServer],
   )
   const tournamentChannelMap = useMemo(() => {
     const map = new Map<string, (typeof categoriesWithVoiceActivity)[number]['channels'][number]>()
@@ -2098,7 +2285,7 @@ export const AppShell: React.FC = () => {
       }
     }
 
-    return activeTournaments.map((tournament) => {
+    return visibleSidebarTournaments.map((tournament) => {
       const matches = (tournamentMatchesById[tournament.id] ?? []).slice().sort((a, b) => {
         if (a.round !== b.round) {
           return a.round - b.round
@@ -2106,17 +2293,17 @@ export const AppShell: React.FC = () => {
         return a.match_number - b.match_number
       })
       const workspaces = tournamentWorkspacesById[tournament.id] ?? []
+      const activeWorkspaceByMatch = new Map(workspaces.filter((workspace) => !workspace.archived_at).map((workspace) => [workspace.match_id, workspace]))
       const workspaceByMatch = new Map(workspaces.map((workspace) => [workspace.match_id, workspace]))
 
       const matchNodes: TournamentSidebarMatchNode[] = matches.map((match) => {
+        const activeWorkspace = activeWorkspaceByMatch.get(match.id)
         const workspace = workspaceByMatch.get(match.id)
         const channels: TournamentSidebarChannelNode[] = []
         const roleNodes = [
-          buildNode(workspace?.team_a_channel_id, 'team-a', `team-a-r${match.round}-m${match.match_number}`, 'voice'),
-          buildNode(workspace?.team_b_channel_id, 'team-b', `team-b-r${match.round}-m${match.match_number}`, 'voice'),
-          buildNode(workspace?.caster_channel_id, 'caster', `caster-r${match.round}-m${match.match_number}`, 'voice'),
-          buildNode(workspace?.referee_channel_id ?? workspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
-          buildNode(workspace?.spectator_channel_id, 'spectator', `spectator-r${match.round}-m${match.match_number}`, 'voice'),
+          buildNode(activeWorkspace?.team_a_channel_id, 'team-a', `team-a-r${match.round}-m${match.match_number}`, 'voice'),
+          buildNode(activeWorkspace?.team_b_channel_id, 'team-b', `team-b-r${match.round}-m${match.match_number}`, 'voice'),
+          buildNode(activeWorkspace?.referee_channel_id ?? activeWorkspace?.admin_channel_id, 'referee', `referee-r${match.round}-m${match.match_number}`, 'voice'),
           buildNode(workspace?.livestream_channel_id ?? undefined, 'livestream', `live-r${match.round}-m${match.match_number}`, 'livestream'),
         ]
         for (const node of roleNodes) {
@@ -2145,7 +2332,7 @@ export const AppShell: React.FC = () => {
         matches: matchNodes,
       }
     })
-  }, [activeTournaments, tournamentChannelMap, tournamentMatchesById, tournamentWorkspacesById])
+  }, [visibleSidebarTournaments, tournamentChannelMap, tournamentMatchesById, tournamentWorkspacesById])
   const categoriesForSidebar = useMemo(
     () => {
       const tournamentGeneralIds = new Set(
@@ -2153,8 +2340,11 @@ export const AppShell: React.FC = () => {
           .map((tournament) => tournament.tournament_general_channel_id)
           .filter((id): id is string => Boolean(id)),
       )
+      const tournamentWorkspaceRows = activeTournaments.flatMap((tournament) =>
+        (tournamentWorkspacesById[tournament.id] ?? []).filter((workspace) => !workspace.archived_at),
+      )
       const tournamentLivestreamIds = new Set(
-        (tournamentWorkspacesById[activeServerId] ?? [])
+        tournamentWorkspaceRows
           .map((workspace) => workspace.livestream_channel_id)
           .filter((id): id is string => Boolean(id)),
       )
@@ -2170,7 +2360,7 @@ export const AppShell: React.FC = () => {
       }))
       )
     },
-    [activeServerId, activeTournaments, categoriesWithVoiceActivity, tournamentWorkspacesById],
+    [activeTournaments, categoriesWithVoiceActivity, tournamentWorkspacesById],
   )
   const activeMembers = useMemo(
     () => membersByServer[activeServerId] ?? [],
@@ -2192,6 +2382,8 @@ export const AppShell: React.FC = () => {
           referee_channel_id?: string
           spectator_channel_id: string
           livestream_channel_id?: string | null
+          archived_at?: number | null
+          closed_by?: string | null
         }>
         try {
           workspaces = await listTournamentMatchWorkspaces(tournament.id)
@@ -2200,6 +2392,7 @@ export const AppShell: React.FC = () => {
         }
 
         const workspace = workspaces.find((item) =>
+          !item.archived_at &&
           [
             item.team_a_channel_id,
             item.team_b_channel_id,
@@ -2246,6 +2439,19 @@ export const AppShell: React.FC = () => {
   )
   const requestLivestreamState = useCallback(
     async (channelId: string) => getLivestreamState(channelId),
+    [],
+  )
+  const requestChannelRecordings = useCallback(
+    async (channelId: string, opts: { limit?: number; offset?: number } = {}) =>
+      listChannelRecordings(channelId, opts),
+    [],
+  )
+  const requestStartChannelRecording = useCallback(
+    async (channelId: string) => startChannelRecording(channelId),
+    [],
+  )
+  const requestStopChannelRecording = useCallback(
+    async (channelId: string) => stopChannelRecording(channelId),
     [],
   )
   const hasManageVoicePermission = useMemo(() => {
@@ -2305,6 +2511,9 @@ export const AppShell: React.FC = () => {
       requestTournamentObserverTokens,
       requestLivestreamToken,
       requestLivestreamState,
+      requestChannelRecordings,
+      requestStartChannelRecording,
+      requestStopChannelRecording,
       pushToast,
       incrementChannelUnread,
       resetChannelUnread,
@@ -2338,8 +2547,11 @@ export const AppShell: React.FC = () => {
       subscribeNotificationEvents,
       sendNotificationSocketMessage,
       pushToast,
+      requestChannelRecordings,
       requestLivestreamState,
       requestLivestreamToken,
+      requestStartChannelRecording,
+      requestStopChannelRecording,
       incrementChannelUnread,
       resetChannelUnread,
       setChannelUnread,
@@ -2360,6 +2572,7 @@ export const AppShell: React.FC = () => {
           <ServerRail
             servers={servers}
             activeServerId={activeServerId}
+            unreadCountsByServer={serverUnreadCounts}
             onSelectServer={async (serverId) => {
               try {
                 await navigateToServerFirstChannel(serverId)
@@ -2479,10 +2692,12 @@ export const AppShell: React.FC = () => {
                     setIsServerSettingsOpen(true)
                   }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  currentUsername={currentUser?.username}
+                  currentAvatarUrl={currentUser?.avatar_url ?? null}
                   onLogout={handleLogout}
                   voiceState={voiceState}
                   onLeaveVoiceChannel={() => void handleLeaveVoiceChannel()}
-                  tournaments={activeTournaments}
+                  tournaments={visibleSidebarTournaments}
                   onSelectTournament={(tournamentId) => {
                     if (!activeServerId) {
                       return
@@ -2501,6 +2716,7 @@ export const AppShell: React.FC = () => {
                     navigate(`/app/servers/${activeServerId}/tournaments/${tournamentId}`)
                   }}
                   onCreateTournament={() => setIsCreateTournamentModalOpen(true)}
+                  onDeleteTournament={handleDeleteTournamentFromSidebar}
                   canCreateTournament={hasManageTournamentsPermission}
                 />
               )}

@@ -1,0 +1,49 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam dpi 170
+skinparam ArrowColor Black
+skinparam ActorBorderColor Black
+skinparam UsecaseBorderColor Black
+skinparam RectangleBorderColor Black
+skinparam ClassBorderColor Black
+title Quy trình nghiệp vụ Tổ chức và Vận hành giải đấu
+|Người tổ chức|
+start
+:Tạo giải đấu;
+:Cập nhật thông tin, luật và giải thưởng;
+:Mở đăng ký;
+|Người tham gia / Đội trưởng|
+if (Giải đấu đội?) then (Có)
+  :Tạo đội và thêm thành viên;
+else (Không)
+  :Đăng ký cá nhân;
+endif
+|Người tổ chức|
+:Chuyển sang check-in;
+|Người tham gia / Đội trưởng|
+:Check-in;
+|Người tổ chức|
+:Bắt đầu giải đấu;
+|Hệ thống|
+:Sinh bracket và danh sách trận;
+repeat
+  |Người tổ chức|
+  :Bắt đầu trận;
+  |Hệ thống|
+  :Tạo workspace trận và phân quyền kênh;
+  |Người tham gia|
+  :Thi đấu và báo cáo kết quả;
+  if (Có khiếu nại?) then (Có)
+    |Trọng tài / Quản trị giải đấu|
+    :Xử lý khiếu nại;
+    :Ghi đè kết quả nếu cần;
+  endif
+  |Hệ thống|
+  :Cập nhật bracket và bảng xếp hạng;
+repeat while (Còn trận tiếp theo?) is (Có)
+|Hệ thống|
+:Hoàn thành giải đấu;
+stop
+@enduml

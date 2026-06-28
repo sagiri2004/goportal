@@ -1,0 +1,23 @@
+digraph G {
+  graph [rankdir=TB, charset="UTF-8", labelloc=t, label="Cầu nối Game SDK và ứng dụng chủ", fontsize=22, fontname="Arial", nodesep=0.45, ranksep=0.65, splines=ortho];
+  node [shape=box, style="rounded,filled", fillcolor="#F7F7F7", fontname="Arial", fontsize=14, color="#333333"];
+  edge [fontname="Arial", fontsize=12, color="#333333", arrowsize=0.7];
+
+  Game [label="Game HTML/React\ntrong iframe"];
+  SDK [label="Game SDK v2"];
+  Bridge [label="Host App Bridge"];
+  API [label="Backend API"];
+  DB [shape=cylinder, label="Database"];
+  WS [label="WebSocket Hub"];
+  Commands [shape=record, label="{Command chính|shareScore|unlockAchievement|createRoom|joinRoom|syncState}"];
+
+  Game -> SDK [label="command"];
+  SDK -> Game [label="callback"];
+  SDK -> Bridge [label="postMessage"];
+  Bridge -> SDK [label="response/event"];
+  Bridge -> API [label="REST API"];
+  API -> DB [label="lưu dữ liệu"];
+  API -> WS [label="phát sự kiện"];
+  WS -> Bridge [label="realtime event"];
+  SDK -> Commands [style=dashed, label="đóng gói command"];
+}

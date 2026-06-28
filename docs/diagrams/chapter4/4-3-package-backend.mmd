@@ -1,0 +1,59 @@
+flowchart TB
+    subgraph PkgBackend["pkgbackend"]
+        subgraph ApiLayer["API Layer"]
+            Routers["Routers"]
+            Controllers["Controllers"]
+            Middlewares["Middlewares"]
+            Serializers["Serializers"]
+        end
+
+        subgraph BusinessLayer["Business Layer"]
+            Services["Services"]
+            AuthRbac["Authentication and RBAC"]
+            DomainRules["Business Rules"]
+            RealtimeEvents["Realtime Events"]
+        end
+
+        subgraph DataAccessLayer["Data Access Layer"]
+            Repositories["Repositories"]
+            DataTransactions["Data Transactions"]
+        end
+
+        subgraph DomainLayer["Domain Layer"]
+            Models["Models"]
+            EnumsStates["Enums and States"]
+            Errors["Errors"]
+        end
+
+        subgraph InfrastructureLayer["Infrastructure Layer"]
+            Database["Database ORM"]
+            Cache["Cache"]
+            Storage["Media Storage"]
+            MediaService["Voice and Livestream"]
+            EventBus["Event Bus"]
+        end
+    end
+
+    Routers -.-> Middlewares
+    Routers -.-> Controllers
+    Controllers -.-> Serializers
+    Controllers -.-> Services
+
+    Middlewares -.-> AuthRbac
+    Services -.-> AuthRbac
+    Services -.-> DomainRules
+    Services -.-> RealtimeEvents
+    Services -.-> Repositories
+    Services -.-> Storage
+    Services -.-> MediaService
+    RealtimeEvents -.-> EventBus
+
+    Repositories -.-> DataTransactions
+    Repositories -.-> Database
+    Repositories -.-> Models
+
+    DomainRules -.-> Models
+    DomainRules -.-> EnumsStates
+    DomainRules -.-> Errors
+    AuthRbac -.-> Models
+    Serializers -.-> Models

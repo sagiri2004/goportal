@@ -1,0 +1,295 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+Trong Chương 1, đồ án đã trình bày tổng quan về bài toán xây dựng một nền tảng cộng đồng game trực tuyến, trong đó người dùng có thể giao tiếp, tham gia các không gian cộng đồng, chơi game được đăng tải trên hệ thống và tổ chức các hoạt động thi đấu. Chương này tiếp tục làm rõ cơ sở hình thành các yêu cầu của hệ thống thông qua việc khảo sát hiện trạng, phân tích một số nền tảng tương tự và xác định những chức năng cần phát triển cho nền tảng của đồ án. Nội dung chương được chia thành bốn phần chính. Phần 2.1 trình bày khảo sát hiện trạng, phân tích cách các cộng đồng game hiện nay đang sử dụng những công cụ như Discord, Challonge, itch.io và Steam để phục vụ nhu cầu giao tiếp, phát hành game và tổ chức giải đấu. Phần 2.2 trình bày tổng quan chức năng của hệ thống thông qua các tác nhân và các use case chính. Phần 2.3 đặc tả chi tiết một số use case quan trọng của đồ án. Cuối cùng, phần 2.4 trình bày các yêu cầu phi chức năng liên quan đến hiệu năng, độ tin cậy, bảo mật, khả năng mở rộng và khả năng bảo trì của hệ thống.
+
+\section{Khảo sát hiện trạng}
+\label{section:2.1}
+
+Trong thực tế, một cộng đồng game trực tuyến thường có nhiều nhu cầu diễn ra song song. Người dùng cần một nơi để trao đổi thông tin, trò chuyện bằng văn bản hoặc giọng nói, chia sẻ nội dung, chơi thử các trò chơi mới, ghi nhận điểm số hoặc thành tích, đồng thời tổ chức các sự kiện thi đấu giữa các thành viên. Nếu không có một nền tảng tích hợp, các hoạt động này thường được thực hiện bằng nhiều công cụ rời rạc. Ví dụ, nhóm người chơi có thể dùng một ứng dụng nhắn tin để trao đổi, dùng bảng tính để ghi danh sách người tham gia, dùng một trang web khác để tạo bảng đấu, dùng liên kết ngoài để chia sẻ game và dùng thêm các kênh riêng để thông báo kết quả. Cách tổ chức này có thể đáp ứng nhu cầu ở quy mô nhỏ, nhưng khi số lượng thành viên, số lượng game hoặc số lượng sự kiện tăng lên thì việc quản lý trở nên khó khăn, dữ liệu bị phân tán và trải nghiệm của người dùng không còn liền mạch.
+
+Đối với nhu cầu giao tiếp cộng đồng, Discord là một trong những nền tảng phổ biến nhất hiện nay \cite{discord-developer-docs}. Discord cho phép người dùng tạo server, tổ chức các kênh văn bản và kênh thoại, phân quyền thành viên, gọi thoại, gọi video và chia sẻ màn hình. Mô hình server và channel của Discord phù hợp với các cộng đồng game vì mỗi nhóm có thể tự tổ chức không gian sinh hoạt riêng, chia nhỏ nội dung thảo luận theo từng chủ đề và duy trì kết nối thời gian thực giữa các thành viên. Tuy nhiên, Discord chủ yếu tập trung vào giao tiếp và quản lý cộng đồng. Nền tảng này không được thiết kế như một hệ thống quản lý vòng đời game do người dùng đăng tải, không cung cấp sẵn cơ chế upload và chạy game HTML như một marketplace độc lập, cũng như không tập trung vào các luồng nghiệp vụ như quản lý phiên chơi, đồng bộ trạng thái phòng chơi, chia sẻ điểm số từ game nhúng hoặc tổ chức giải đấu theo cấu trúc nghiệp vụ riêng của từng cộng đồng.
+
+Đối với nhu cầu tổ chức thi đấu, Challonge là một nền tảng tiêu biểu hỗ trợ tạo giải đấu, quản lý người tham gia, chia bảng, cập nhật kết quả và hiển thị bracket \cite{challonge-api}. Các chức năng này giúp ban tổ chức giảm bớt thao tác thủ công khi vận hành một giải đấu, đặc biệt là trong các thể thức như loại trực tiếp hoặc vòng bảng. Challonge phù hợp với các cộng đồng cần một công cụ chuyên về tournament management. Tuy nhiên, nền tảng này lại không đóng vai trò là không gian sinh hoạt chính của cộng đồng. Người dùng vẫn cần sử dụng một công cụ khác để trao đổi, gọi thoại, chia sẻ thông báo, chơi game hoặc lưu lại các tương tác liên quan đến game. Do đó, nếu chỉ sử dụng Challonge, dữ liệu giải đấu và dữ liệu cộng đồng vẫn bị tách rời khỏi nhau.
+
+Đối với nhu cầu phát hành và chơi thử game độc lập, itch.io là một nền tảng phổ biến cho phép nhà phát triển đăng tải trò chơi, trong đó có các game HTML5 có thể chơi trực tiếp trên trình duyệt \cite{itchio-html5}. Cách tiếp cận này rất phù hợp với các nhóm phát triển game nhỏ vì người dùng không cần cài đặt phần mềm phức tạp để trải nghiệm sản phẩm. Tuy nhiên, itch.io tập trung chủ yếu vào việc phân phối, giới thiệu và lưu trữ game. Các chức năng giao tiếp theo mô hình server, kênh thoại, phân quyền cộng đồng, tổ chức giải đấu nội bộ hoặc đồng bộ trạng thái phòng chơi thời gian thực không phải là trọng tâm chính của nền tảng này. Vì vậy, khi một cộng đồng muốn vừa phát hành game, vừa trao đổi và tổ chức các hoạt động thi đấu xung quanh game đó, itch.io thường cần được kết hợp với các công cụ khác.
+
+Steam và Steamworks cung cấp một hệ sinh thái hoàn chỉnh hơn cho việc phát hành game, quản lý người chơi, thành tích, bảng xếp hạng và một số dịch vụ liên quan đến cộng đồng \cite{steamworks-docs}. Đây là hướng tiếp cận mạnh đối với các sản phẩm game thương mại hoặc các trò chơi đã đạt mức hoàn thiện nhất định. Tuy nhiên, Steam không phù hợp cho mọi ngữ cảnh, đặc biệt là các nhóm phát triển nhỏ, các dự án thử nghiệm, các game HTML đơn giản hoặc các cộng đồng muốn tự kiểm soát toàn bộ luồng đăng tải, chơi thử và tương tác nội bộ. Việc tích hợp Steamworks cũng đòi hỏi trò chơi phải tuân theo hệ sinh thái và quy trình phát hành của Steam, trong khi nhiều nhóm chỉ cần một môi trường nhẹ hơn để thử nghiệm ý tưởng, chia sẻ bản build và tổ chức hoạt động trong phạm vi cộng đồng.
+
+Từ việc khảo sát các nền tảng trên có thể thấy rằng mỗi hệ thống đều giải quyết tốt một phần của bài toán. Discord mạnh về giao tiếp cộng đồng và thời gian thực; Challonge mạnh về tổ chức giải đấu; itch.io mạnh về đăng tải và chơi game HTML trên trình duyệt; Steam mạnh về phát hành game, thành tích và bảng xếp hạng trong một hệ sinh thái lớn. Tuy nhiên, điểm hạn chế chung là các nền tảng này thường tách rời nhau về mặt dữ liệu và trải nghiệm. Người dùng phải chuyển đổi qua lại giữa nhiều ứng dụng, còn người quản trị cộng đồng phải tự đồng bộ thông tin thủ công giữa các công cụ. Điều này làm giảm tính liên tục của trải nghiệm, gây khó khăn trong việc theo dõi hoạt động của thành viên và làm tăng chi phí quản lý đối với các cộng đồng game quy mô nhỏ và vừa.
+
+Dựa trên những phân tích trên, một nền tảng phù hợp cho cộng đồng game cần kết hợp được các nhóm chức năng chính trong cùng một hệ thống. Trước hết, hệ thống cần có chức năng quản lý tài khoản, hồ sơ người dùng, quan hệ bạn bè và chặn người dùng để tạo nền tảng cho tương tác xã hội. Tiếp theo, hệ thống cần hỗ trợ mô hình server và channel để cộng đồng có thể tổ chức không gian trao đổi theo từng nhóm, từng chủ đề hoặc từng sự kiện. Bên cạnh đó, các chức năng nhắn tin, phản hồi, gửi tệp đính kèm, thông báo thời gian thực, kênh thoại, ghi hình và phát trực tiếp là cần thiết để phục vụ hoạt động giao tiếp thường xuyên của cộng đồng.
+
+Ngoài nhóm chức năng giao tiếp, hệ thống cũng cần có khả năng quản lý game do người dùng đăng tải. Người phát triển game cần tạo thông tin game, tải lên bản build HTML, công bố game, cho phép người khác tìm kiếm, xem chi tiết và khởi chạy game trực tiếp trên trình duyệt. Để game có thể gắn kết với cộng đồng thay vì chỉ là một nội dung tĩnh, hệ thống cần có SDK cho phép game nhúng trao đổi với nền tảng chủ, chẳng hạn như khởi tạo phiên chơi, chia sẻ điểm số, chia sẻ thành tích, tạo phòng chơi, tham gia phòng chơi và đồng bộ trạng thái phòng theo thời gian thực. Đây là điểm khác biệt quan trọng so với cách chỉ đăng tải game lên một kho lưu trữ thông thường.
+
+Cuối cùng, đối với các cộng đồng game có nhu cầu tổ chức thi đấu, hệ thống cần hỗ trợ quản lý giải đấu ngay trong phạm vi server. Các chức năng cần thiết bao gồm tạo giải đấu, cập nhật thông tin, quản lý người tham gia, đội thi đấu, trạng thái đăng ký, check-in, trận đấu, bracket, bảng xếp hạng và lịch sử kết quả. Khi các chức năng này được tích hợp cùng với hệ thống giao tiếp và kho game, người dùng có thể thực hiện phần lớn hoạt động cộng đồng trong một nền tảng thống nhất. Đây cũng chính là cơ sở để đồ án lựa chọn phát triển một nguyên mẫu nền tảng cộng đồng game tích hợp, kết hợp các chức năng giao tiếp, marketplace game, SDK realtime và quản lý giải đấu trong cùng một hệ sinh thái.
+
+\section{Tổng quan chức năng}
+\label{section:2.2}
+
+Dựa trên phạm vi đã xác định, hệ thống được xây dựng như một nền tảng cộng đồng game trực tuyến, hỗ trợ người dùng quản lý tài khoản, kết nối bạn bè, tham gia máy chủ, trao đổi tin nhắn, chơi game, đồng bộ trạng thái và tham gia giải đấu. Hệ thống có nhiều nhóm tác nhân khác nhau như khách, người dùng, chủ máy chủ, nhà phát triển và quản trị viên. Mỗi tác nhân được gắn với những nhóm chức năng phù hợp với vai trò của mình trong hệ thống.
+
+Phần này trình bày tổng quan các chức năng thông qua biểu đồ use case tổng quát và hai biểu đồ use case phân rã đầu tiên. Các nội dung ở đây chỉ mô tả chức năng mức cao, chưa đi vào luồng xử lý chi tiết. Phần đặc tả chi tiết cho từng use case quan trọng sẽ được trình bày ở phần \ref{section:2.3}.
+
+\subsection{Biểu đồ use case tổng quát}
+\label{subsection:2.2.1}
+
+Biểu đồ use case tổng quát dưới đây thể hiện các tác nhân chính và các nhóm chức năng lớn của hệ thống.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Tong-quan.png}
+    \caption{Biểu đồ use case tổng quát}
+    \label{fig:2-1-usecase-tong-quat}
+\end{figure}
+
+Hình \ref{fig:2-1-usecase-tong-quat} xác định năm tác nhân chính gồm Khách, Người dùng, Chủ máy chủ, Nhà phát triển và Quản trị viên. Trong đó, Người dùng là tác nhân trung tâm của hệ thống. Chủ máy chủ và Nhà phát triển là hai vai trò được mở rộng từ Người dùng, nghĩa là ngoài các chức năng cơ bản của Người dùng, các tác nhân này còn có thêm những chức năng chuyên biệt.
+
+Khách là người chưa đăng nhập hoặc chưa có tài khoản, chỉ có thể sử dụng một số chức năng công khai như Chơi game và Đồng bộ trong phạm vi được hệ thống cho phép. Người dùng sau khi đăng nhập có thể Quản lý thông tin cá nhân, Quản lý bạn bè, Tham gia máy chủ, Quản lý tin nhắn, Tham gia giải đấu và Chơi game, Đồng bộ. Đây là các chức năng cơ bản phục vụ nhu cầu tương tác, giao tiếp và tham gia hoạt động game trong cộng đồng.
+
+Chủ máy chủ có thêm các chức năng Quản lý máy chủ và Thành viên, Quản lý kênh và Phân quyền, đồng thời có thể Quản lý giải đấu trong phạm vi máy chủ. Nhà phát triển thực hiện chức năng Phát triển và Đăng tải game, phục vụ nhu cầu đưa game lên hệ thống để người dùng khác trải nghiệm. Quản trị viên đảm nhiệm nhóm chức năng Quản trị người dùng và Chợ game, nhằm kiểm soát người dùng, nội dung game và các hoạt động quản trị ở cấp toàn hệ thống.
+
+Nhìn chung, biểu đồ tổng quát cho thấy hệ thống có bốn nhóm nghiệp vụ chính: quản lý tài khoản và quan hệ xã hội, quản lý cộng đồng máy chủ, chơi và đăng tải game, quản lý giải đấu và chợ game. Các nhóm chức năng này là cơ sở để tiếp tục phân rã và đặc tả trong các mục sau.
+
+\subsection{Biểu đồ use case phân rã Quản lý tài khoản}
+\label{subsection:2.2.2}
+
+Use case Quản lý tài khoản mô tả các chức năng liên quan đến việc tạo tài khoản, đăng nhập, đăng xuất và quản lý hồ sơ cá nhân.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Quan-ly-tai-khoan.png}
+    \caption{Biểu đồ use case phân rã Quản lý tài khoản}
+    \label{fig:2-2-usecase-quan-ly-tai-khoan}
+\end{figure}
+
+Hình \ref{fig:2-2-usecase-quan-ly-tai-khoan} gồm hai tác nhân là Khách và Người dùng. Khách có thể Đăng ký tài khoản để tạo tài khoản mới hoặc Đăng nhập hệ thống để xác thực và chuyển sang vai trò Người dùng. Đây là hai chức năng đầu vào giúp người dùng bắt đầu sử dụng các chức năng cần xác thực của hệ thống.
+
+Sau khi đăng nhập, Người dùng có thể Xem hồ sơ cá nhân, Cập nhật thông tin cá nhân, Đăng xuất và Đổi mật khẩu. Các chức năng này giúp người dùng kiểm tra thông tin hiển thị, cập nhật hồ sơ, kết thúc phiên làm việc khi cần và đảm bảo an toàn cho tài khoản. Nhóm chức năng Quản lý tài khoản là nền tảng cho các chức năng khác như tham gia máy chủ, gửi tin nhắn, kết bạn, đăng tải game và tham gia giải đấu.
+
+\subsection{Biểu đồ use case phân rã Quản lý bạn bè}
+\label{subsection:2.2.3}
+
+Use case Quản lý bạn bè mô tả các chức năng giúp Người dùng thiết lập và kiểm soát quan hệ xã hội với các tài khoản khác trong hệ thống.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Hinhve/Chuong2/Usecase/Quan-ly-ban-be.png}
+    \caption{Biểu đồ use case phân rã Quản lý bạn bè}
+    \label{fig:2-3-usecase-quan-ly-ban-be}
+\end{figure}
+
+Hình \ref{fig:2-3-usecase-quan-ly-ban-be} cho thấy Người dùng là tác nhân thực hiện toàn bộ các chức năng trong nhóm Quản lý bạn bè. Người dùng có thể Xem danh sách bạn bè để theo dõi các tài khoản đã kết nối, Gửi yêu cầu kết bạn để thiết lập quan hệ mới, Chấp nhận kết bạn hoặc Từ chối kết bạn khi nhận được yêu cầu từ người khác.
+
+Ngoài ra, Người dùng có thể Hủy kết bạn khi không muốn duy trì quan hệ đã có. Trong trường hợp muốn giới hạn tương tác với một tài khoản, Người dùng có thể Chặn người dùng và sau đó Bỏ chặn nếu muốn khôi phục khả năng tương tác. Nhóm chức năng này giúp người dùng chủ động quản lý mạng lưới quan hệ xã hội, tạo nền tảng cho các hoạt động cộng đồng như nhắn tin, tham gia máy chủ, chơi game cùng nhau và tham gia giải đấu.
+
+
+\subsection{Biểu đồ use case phân rã Quản lý máy chủ}
+\label{subsection:2.2.4}
+
+Use case Quản lý máy chủ mô tả các chức năng liên quan đến việc người dùng tham gia máy chủ và chủ máy chủ quản lý không gian cộng đồng của mình.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Quan-ly-may-chu.png}
+    \caption{Biểu đồ use case phân rã Quản lý máy chủ}
+    \label{fig:2-4-usecase-quan-ly-may-chu}
+\end{figure}
+
+Hình \ref{fig:2-4-usecase-quan-ly-may-chu} cho thấy Người dùng có thể Xem danh sách máy chủ, Tham gia máy chủ, Gửi yêu cầu tham gia và Rời máy chủ. Các chức năng này giúp người dùng tìm kiếm, gia nhập hoặc rời khỏi các cộng đồng game phù hợp với nhu cầu của mình.
+
+Đối với Chủ máy chủ, hệ thống cung cấp các chức năng Tạo máy chủ, Cập nhật máy chủ, Duyệt yêu cầu tham gia, Quản lý thành viên, Quản lý vai trò, Tạo kênh, Cập nhật kênh và Phân quyền kênh. Nhóm chức năng này giúp chủ máy chủ tổ chức cộng đồng, kiểm soát thành viên và thiết lập phạm vi truy cập cho từng kênh trong máy chủ.
+
+\subsection{Biểu đồ use case phân rã Quản lý tin nhắn}
+\label{subsection:2.2.5}
+
+Use case Quản lý tin nhắn mô tả các chức năng phục vụ hoạt động trao đổi thông tin giữa người dùng trong các kênh của máy chủ.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Quan-ly-tin-nhan.png}
+    \caption{Biểu đồ use case phân rã Quản lý tin nhắn}
+    \label{fig:2-5-usecase-quan-ly-tin-nhan}
+\end{figure}
+
+Hình \ref{fig:2-5-usecase-quan-ly-tin-nhan} thể hiện tác nhân Người dùng với các chức năng Xem tin nhắn và Gửi tin nhắn. Đây là hai chức năng cơ bản nhất để người dùng theo dõi nội dung trao đổi và tham gia thảo luận trong cộng đồng.
+
+Bên cạnh đó, Người dùng có thể Chỉnh sửa tin nhắn, Xóa tin nhắn, Trả lời tin nhắn, Thả phản ứng và Đánh dấu đã đọc. Các chức năng bổ sung này giúp quá trình giao tiếp linh hoạt hơn, đồng thời hỗ trợ người dùng quản lý trạng thái đọc và tương tác với nội dung trong kênh.
+
+\subsection{Biểu đồ use case phân rã Chơi game và Đăng tải game}
+\label{subsection:2.2.6}
+
+Use case Chơi game và Đăng tải game mô tả nhóm chức năng liên quan đến việc khám phá, trải nghiệm game và đăng tải game lên hệ thống.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Choi-game-va-dang-tai-game.png}
+    \caption{Biểu đồ use case phân rã Chơi game và Đăng tải game}
+    \label{fig:2-6-usecase-choi-game-va-dang-tai-game}
+\end{figure}
+
+Hình \ref{fig:2-6-usecase-choi-game-va-dang-tai-game} cho thấy Khách có thể Xem danh sách game, Xem chi tiết game và Chơi game công khai trong phạm vi được phép. Người dùng sau khi đăng nhập có thể Chơi game, Tạo phiên chơi, Đồng bộ trạng thái, Chia sẻ điểm số và Chia sẻ thành tích. Các chức năng này giúp hoạt động chơi game gắn với tài khoản và tương tác cộng đồng.
+
+Đối với Nhà phát triển, hệ thống hỗ trợ Tạo thông tin game, Cập nhật thông tin game, Tải lên bản build, Gửi kiểm duyệt và Quản lý game đã đăng. Nhóm chức năng này cho phép nhà phát triển đưa game lên nền tảng, cập nhật nội dung và chuẩn bị game để người dùng khác có thể trải nghiệm.
+
+\subsection{Biểu đồ use case phân rã Quản lý và Tham gia giải đấu}
+\label{subsection:2.2.7}
+
+Use case Quản lý và Tham gia giải đấu được tách thành hai biểu đồ để giảm độ phức tạp: nhóm chức năng thiết lập, tham gia giải đấu và nhóm chức năng vận hành trận đấu trong giải đấu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Thiet-lap-va-tham-gia-giai-dau.png}
+    \caption{Biểu đồ use case phân rã Thiết lập và Tham gia giải đấu}
+    \label{fig:2-7a-usecase-thiet-lap-va-tham-gia-giai-dau}
+\end{figure}
+
+Hình \ref{fig:2-7a-usecase-thiet-lap-va-tham-gia-giai-dau} mô tả giai đoạn thiết lập và tham gia giải đấu. Người tổ chức có thể tạo giải đấu, cập nhật thông tin, mở đăng ký, chuyển sang check-in, bắt đầu giải đấu, tạo bracket và kết thúc hoặc hủy giải đấu. Quản trị giải đấu hỗ trợ gán vai trò và quản lý người tham gia trong phạm vi giải đấu.
+
+Người tham gia có thể xem giải đấu, đăng ký cá nhân, hủy đăng ký và check-in khi giải đấu bước vào giai đoạn tương ứng. Với giải đấu theo đội, Đội trưởng có thêm các chức năng tạo đội, quản lý thành viên đội và check-in cho đội.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Usecase/Van-hanh-tran-dau-giai-dau.png}
+    \caption{Biểu đồ use case phân rã Vận hành trận đấu trong giải đấu}
+    \label{fig:2-7b-usecase-van-hanh-tran-dau-giai-dau}
+\end{figure}
+
+Hình \ref{fig:2-7b-usecase-van-hanh-tran-dau-giai-dau} mô tả các chức năng sau khi giải đấu đã bắt đầu. Người tổ chức hoặc Quản trị giải đấu có thể bắt đầu trận đấu, cập nhật trạng thái trận, tạo workspace trận và ghi đè kết quả khi cần. Người tham gia và Đội trưởng có thể xem bracket, xem lịch trận, báo cáo kết quả và khiếu nại kết quả.
+
+Các vai trò hỗ trợ gồm Trọng tài, Bình luận viên và Khán giả. Trọng tài theo dõi trận đấu và xử lý khiếu nại; Bình luận viên có thể nhận quyền theo dõi trận để phục vụ bình luận; Khán giả xem bracket, bảng xếp hạng và theo dõi kênh livestream của trận đấu.
+
+
+\subsection{Quy trình nghiệp vụ}
+\label{subsection:2.2.8}
+
+Bên cạnh các biểu đồ use case, hệ thống còn có một số quy trình nghiệp vụ quan trọng kết hợp nhiều chức năng khác nhau. Trong phạm vi đồ án, ba quy trình tiêu biểu được lựa chọn để mô tả bằng biểu đồ hoạt động gồm quy trình quản lý và tham gia máy chủ, quy trình tổ chức và vận hành giải đấu, và quy trình đăng tải game.
+
+\subsubsection{Quy trình nghiệp vụ Quản lý và Tham gia máy chủ}
+\label{subsubsection:2.2.8.1}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Activity/Quy-trinh-may-chu.png}
+    \caption{Quy trình nghiệp vụ Quản lý và Tham gia máy chủ}
+    \label{fig:2-8-activity-quy-trinh-may-chu}
+\end{figure}
+
+Hình \ref{fig:2-8-activity-quy-trinh-may-chu} mô tả quy trình từ khi Chủ máy chủ tạo máy chủ đến khi Người dùng có thể tham gia và truy cập các kênh được phép. Sau khi máy chủ được tạo, hệ thống khởi tạo các vai trò và kênh mặc định. Chủ máy chủ tiếp tục cấu hình thông tin, tạo kênh và thiết lập phân quyền cho máy chủ.
+
+Người dùng có thể xem danh sách máy chủ và tham gia trực tiếp nếu máy chủ công khai. Với máy chủ yêu cầu xét duyệt, Người dùng gửi yêu cầu tham gia, hệ thống lưu yêu cầu ở trạng thái chờ và người có quyền duyệt sẽ chấp nhận hoặc từ chối. Khi được chấp nhận, hệ thống thêm Người dùng vào danh sách thành viên, gán vai trò mặc định và áp dụng quyền truy cập theo cơ chế phân quyền của máy chủ.
+
+\subsubsection{Quy trình nghiệp vụ Tổ chức và Vận hành giải đấu}
+\label{subsubsection:2.2.8.2}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Activity/Quy-trinh-giai-dau.png}
+    \caption{Quy trình nghiệp vụ Tổ chức và Vận hành giải đấu}
+    \label{fig:2-9-activity-quy-trinh-giai-dau}
+\end{figure}
+
+Hình \ref{fig:2-9-activity-quy-trinh-giai-dau} thể hiện quy trình tổ chức một giải đấu trong máy chủ. Người tổ chức tạo giải đấu, cập nhật thông tin và mở đăng ký. Người tham gia đăng ký trực tiếp nếu là giải đấu cá nhân; với giải đấu theo đội, Đội trưởng tạo đội và thêm các thành viên cần thiết. Sau giai đoạn đăng ký, Người tổ chức chuyển giải đấu sang check-in để xác nhận các người chơi hoặc đội tham gia.
+
+Khi giải đấu bắt đầu, hệ thống sinh bracket và danh sách trận đấu. Với mỗi trận, Người tổ chức bắt đầu trận đấu, hệ thống tạo workspace trận và phân quyền kênh cho người chơi, trọng tài hoặc các vai trò liên quan. Sau khi trận kết thúc, người tham gia báo cáo kết quả; nếu có khiếu nại, Trọng tài hoặc Quản trị giải đấu xem xét và ghi đè kết quả khi cần. Hệ thống cập nhật bracket, bảng xếp hạng và lặp lại quy trình cho đến khi toàn bộ trận đấu hoàn thành.
+
+\subsubsection{Quy trình nghiệp vụ Đăng tải game}
+\label{subsubsection:2.2.8.3}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Hinhve/Chuong2/Activity/Quy-trinh-upload-game.png}
+    \caption{Quy trình nghiệp vụ Đăng tải game}
+    \label{fig:2-10-activity-quy-trinh-upload-game}
+\end{figure}
+
+Hình \ref{fig:2-10-activity-quy-trinh-upload-game} mô tả quy trình Nhà phát triển đưa game lên hệ thống. Trước hết, Nhà phát triển tạo thông tin game, nhập mô tả, hình ảnh và các metadata cần thiết. Hệ thống chuẩn hóa slug và tạo bản ghi game ở trạng thái nháp để Nhà phát triển tiếp tục tải lên bản build.
+
+Sau khi Nhà phát triển tải lên file build dạng zip, hệ thống kiểm tra quyền sở hữu game, định dạng file, cấu trúc bundle và file \texttt{index.html}. Nếu build không hợp lệ, hệ thống trả lỗi để Nhà phát triển chỉnh sửa và tải lại. Nếu build hợp lệ, hệ thống lưu bundle, tạo đường dẫn chơi game, đánh dấu build sẵn sàng và cho phép gửi game vào hàng đợi kiểm duyệt. Quản trị viên kiểm tra nội dung game; nếu được duyệt, hệ thống cập nhật trạng thái phát hành và hiển thị game trên chợ game, ngược lại game được đưa về trạng thái cần chỉnh sửa.
+
+
+
+\section{Đặc tả chức năng}
+\label{section:2.3}
+
+Từ các nhóm use case đã trình bày ở phần \ref{section:2.2}, đồ án lựa chọn các use case có luồng xử lý quan trọng để đặc tả chi tiết, bao gồm Tham gia máy chủ, Quản lý kênh và phân quyền, Đăng tải và kiểm duyệt game, Tổ chức giải đấu, và Vận hành trận đấu. Các use case này đại diện cho ba miền nghiệp vụ chính của hệ thống là cộng đồng máy chủ, game marketplace và giải đấu.
+
+Mỗi bản đặc tả use case bao gồm tên use case, tác nhân tham gia, mô tả, tiền điều kiện, luồng sự kiện chính, luồng sự kiện thay thế và hậu điều kiện. Nội dung đặc tả chi tiết được biên soạn thành các bảng riêng để thuận tiện chỉnh sửa và xuất thành hình ảnh trong quá trình hoàn thiện quyển đồ án.
+
+\subsection{Đặc tả use case Tham gia máy chủ}
+\label{subsection:2.3.1}
+
+Use case Tham gia máy chủ mô tả quá trình Người dùng gia nhập một máy chủ trong hệ thống. Tùy theo cấu hình của máy chủ, Người dùng có thể tham gia trực tiếp nếu máy chủ công khai hoặc phải gửi yêu cầu chờ người có quyền xét duyệt.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong2/UsecaseSpec/UC001-Tham-gia-may-chu.png}
+    \caption{Đặc tả use case Tham gia máy chủ}
+    \label{fig:2-11-uc-tham-gia-may-chu}
+\end{figure}
+
+Bảng đặc tả ở Hình \ref{fig:2-11-uc-tham-gia-may-chu} làm rõ hai nhánh chính của nghiệp vụ tham gia máy chủ. Với máy chủ công khai, hệ thống thêm Người dùng vào danh sách thành viên và gán vai trò mặc định. Với máy chủ cần xét duyệt, hệ thống tạo yêu cầu tham gia để người có quyền duyệt chấp nhận hoặc từ chối.
+
+\subsection{Đặc tả use case Quản lý kênh và phân quyền}
+\label{subsection:2.3.2}
+
+Use case Quản lý kênh và phân quyền mô tả cách Chủ máy chủ hoặc thành viên có quyền quản lý cấu hình các kênh trong máy chủ. Đây là use case quan trọng vì ảnh hưởng trực tiếp đến khả năng xem kênh, gửi tin nhắn và truy cập các khu vực riêng tư của cộng đồng.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong2/UsecaseSpec/UC002-Quan-ly-kenh-va-phan-quyen.png}
+    \caption{Đặc tả use case Quản lý kênh và phân quyền}
+    \label{fig:2-12-uc-quan-ly-kenh-phan-quyen}
+\end{figure}
+
+Hình \ref{fig:2-12-uc-quan-ly-kenh-phan-quyen} đặc tả các thao tác tạo kênh, cấu hình kênh riêng tư, thêm thành viên vào kênh và thiết lập quyền ghi đè theo vai trò hoặc người dùng. Hệ thống luôn kiểm tra quyền quản lý kênh trước khi cho phép thay đổi cấu hình.
+
+\subsection{Đặc tả use case Đăng tải và kiểm duyệt game}
+\label{subsection:2.3.3}
+
+Use case Đăng tải và kiểm duyệt game mô tả quy trình Nhà phát triển đưa một game cộng đồng lên hệ thống. Quy trình này bao gồm tạo thông tin game, tải lên bản build, gửi kiểm duyệt và chờ Quản trị viên duyệt phát hành.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong2/UsecaseSpec/UC003-Dang-tai-va-kiem-duyet-game.png}
+    \caption{Đặc tả use case Đăng tải và kiểm duyệt game}
+    \label{fig:2-13-uc-dang-tai-kiem-duyet-game}
+\end{figure}
+
+Hình \ref{fig:2-13-uc-dang-tai-kiem-duyet-game} thể hiện các bước từ tạo metadata game, tải lên file build dạng \texttt{zip}, kiểm tra bundle có \texttt{index.html}, đến khi gửi game vào hàng đợi kiểm duyệt. Game chỉ được hiển thị trên chợ game sau khi Quản trị viên cập nhật trạng thái phát hành.
+
+\subsection{Đặc tả use case Tổ chức giải đấu}
+\label{subsection:2.3.4}
+
+Use case Tổ chức giải đấu mô tả quy trình Người tổ chức tạo và đưa một giải đấu từ trạng thái nháp sang đăng ký, check-in và bắt đầu thi đấu. Đây là use case trung tâm của phân hệ giải đấu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong2/UsecaseSpec/UC004-To-chuc-giai-dau.png}
+    \caption{Đặc tả use case Tổ chức giải đấu}
+    \label{fig:2-14-uc-to-chuc-giai-dau}
+\end{figure}
+
+Hình \ref{fig:2-14-uc-to-chuc-giai-dau} đặc tả quá trình tạo giải đấu trong máy chủ, mở đăng ký, xử lý đăng ký cá nhân hoặc đăng ký theo đội, chuyển sang giai đoạn check-in và bắt đầu giải đấu. Khi giải đấu bắt đầu, hệ thống sinh bracket và danh sách trận đấu.
+
+\subsection{Đặc tả use case Vận hành trận đấu và xử lý kết quả}
+\label{subsection:2.3.5}
+
+Use case Vận hành trận đấu và xử lý kết quả mô tả quá trình bắt đầu một trận đấu, tạo workspace phục vụ thi đấu, ghi nhận kết quả và xử lý các trường hợp khiếu nại hoặc ghi đè kết quả.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{Hinhve/Chuong2/UsecaseSpec/UC005-Van-hanh-tran-dau-va-xu-ly-ket-qua.png}
+    \caption{Đặc tả use case Vận hành trận đấu và xử lý kết quả}
+    \label{fig:2-15-uc-van-hanh-tran-dau}
+\end{figure}
+
+Hình \ref{fig:2-15-uc-van-hanh-tran-dau} trình bày luồng vận hành trận đấu từ lúc bắt đầu trận, tạo workspace, phân quyền kênh cho người chơi và trọng tài, đến báo cáo kết quả. Nếu có khiếu nại hoặc cần can thiệp, Trọng tài hoặc Quản trị giải đấu xử lý và hệ thống cập nhật lại bracket theo kết quả cuối cùng.
+
+\section{Yêu cầu phi chức năng}
+\label{section:2.4}
+
+Bên cạnh các yêu cầu chức năng, hệ thống cần đáp ứng một số yêu cầu phi chức năng cơ bản. Về hiệu năng, các thao tác thường xuyên như xem máy chủ, tải tin nhắn, gửi tin nhắn và xem danh sách game cần có thời gian phản hồi ngắn. Về độ tin cậy, dữ liệu người dùng, máy chủ, game và giải đấu phải được lưu trữ bền vững, hạn chế mất mát khi có lỗi xử lý.
+
+Về bảo mật, hệ thống cần xác thực người dùng, kiểm tra quyền truy cập theo vai trò, giới hạn quyền thao tác với máy chủ, kênh, game và giải đấu. Về khả năng mở rộng và bảo trì, mã nguồn cần được tổ chức theo các tầng rõ ràng, tách biệt giao diện, xử lý nghiệp vụ, truy cập dữ liệu và hạ tầng thời gian thực để thuận tiện phát triển thêm chức năng sau này.
+
+\end{document}

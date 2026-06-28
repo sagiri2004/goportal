@@ -14,6 +14,7 @@ type ServerRailProps = {
   onSelectServer?: (serverId: string) => void
   onCreateServer?: () => void
   onOpenGames?: () => void
+  unreadCountsByServer?: Record<string, number>
   servers?: Array<{ id: string; name: string; initials?: string; color?: string; iconUrl?: string }>
 }
 
@@ -30,6 +31,7 @@ export const ServerRail: React.FC<ServerRailProps> = ({
   onSelectServer = () => {},
   onCreateServer = () => {},
   onOpenGames = () => {},
+  unreadCountsByServer = {},
   servers: serversProp,
 }) => {
   const servers = serversProp ?? []
@@ -60,6 +62,8 @@ export const ServerRail: React.FC<ServerRailProps> = ({
         <div className="flex flex-col items-center gap-2">
           {servers.map((server) => {
             const isActive = server.id === activeServerId
+            const unreadCount = Math.max(0, Math.floor(unreadCountsByServer[server.id] ?? 0))
+            const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount)
 
             return (
               <div
@@ -97,6 +101,11 @@ export const ServerRail: React.FC<ServerRailProps> = ({
                   </TooltipTrigger>
                   <TooltipContent>{server.name}</TooltipContent>
                 </Tooltip>
+                {unreadCount > 0 && (
+                  <span className="absolute -bottom-0.5 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-[hsl(240,10%,6%)] bg-red-500 px-1 text-[10px] font-bold leading-none text-white shadow-sm">
+                    {unreadLabel}
+                  </span>
+                )}
               </div>
             )
           })}

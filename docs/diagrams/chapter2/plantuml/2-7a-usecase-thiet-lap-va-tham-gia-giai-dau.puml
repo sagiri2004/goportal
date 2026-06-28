@@ -1,0 +1,69 @@
+@startuml
+left to right direction
+
+actor "Người tổ chức" as Organizer
+actor "Quản trị giải đấu" as TournamentAdmin
+actor "Người tham gia" as Participant
+actor "Đội trưởng" as Captain
+
+rectangle "GoPortal - Thiết lập và Tham gia giải đấu" {
+  usecase "Tạo giải đấu" as UC_CreateTournament
+  usecase "Tạo kênh chung giải đấu" as UC_CreateGeneralChannel
+  usecase "Cập nhật giải đấu" as UC_UpdateTournament
+  usecase "Gán vai trò giải đấu" as UC_AssignRole
+
+  usecase "Chuyển trạng thái giải đấu" as UC_ChangeStatus
+  usecase "Mở đăng ký" as UC_OpenRegistration
+  usecase "Chuyển sang check-in" as UC_OpenCheckIn
+  usecase "Bắt đầu giải đấu" as UC_StartTournament
+  usecase "Tạo bracket" as UC_GenerateBracket
+  usecase "Hoàn thành hoặc hủy giải đấu" as UC_EndTournament
+
+  usecase "Xem giải đấu" as UC_ViewTournament
+  usecase "Đăng ký cá nhân" as UC_RegisterSolo
+  usecase "Hủy đăng ký" as UC_CancelRegistration
+  usecase "Check-in" as UC_CheckIn
+  usecase "Quản lý người tham gia" as UC_ManageParticipants
+
+  usecase "Tạo đội" as UC_CreateTeam
+  usecase "Quản lý thành viên đội" as UC_ManageTeamMembers
+  usecase "Check-in đội" as UC_CheckInTeam
+}
+
+Organizer -- UC_CreateTournament
+Organizer -- UC_UpdateTournament
+Organizer -- UC_OpenRegistration
+Organizer -- UC_OpenCheckIn
+Organizer -- UC_StartTournament
+Organizer -- UC_EndTournament
+Organizer -- UC_ManageParticipants
+
+TournamentAdmin -- UC_AssignRole
+TournamentAdmin -- UC_ManageParticipants
+
+Participant -- UC_ViewTournament
+Participant -- UC_RegisterSolo
+Participant -- UC_CancelRegistration
+Participant -- UC_CheckIn
+
+Captain -- UC_CreateTeam
+Captain -- UC_ManageTeamMembers
+Captain -- UC_CheckInTeam
+
+UC_CreateTournament ..> UC_CreateGeneralChannel : <<include>>
+UC_OpenRegistration ..> UC_ChangeStatus : <<include>>
+UC_OpenCheckIn ..> UC_ChangeStatus : <<include>>
+UC_StartTournament ..> UC_ChangeStatus : <<include>>
+UC_StartTournament ..> UC_GenerateBracket : <<include>>
+UC_EndTournament ..> UC_ChangeStatus : <<include>>
+
+UC_CreateTeam ..> UC_RegisterSolo : <<extend>>
+UC_CheckInTeam ..> UC_CheckIn : <<extend>>
+
+note bottom of UC_ChangeStatus
+  draft -> registration -> check_in
+  -> in_progress -> completed
+  hoặc cancelled trước khi completed.
+end note
+
+@enduml

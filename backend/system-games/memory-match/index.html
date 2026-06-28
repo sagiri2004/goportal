@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memory Match</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #111018; color: #faf5ff; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 20% 15%, #7c3aed 0, transparent 30%), #111018; }
+    main { width: min(92vw, 540px); }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; color: #ddd6fe; }
+    button { border: 1px solid #6d28d9; background: #2e1065; color: #faf5ff; border-radius: 8px; cursor: pointer; }
+    .reset { padding: 8px 12px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .card { aspect-ratio: 1; font-size: clamp(28px, 9vw, 52px); background: #1f1b2e; }
+    .card.open, .card.done { background: #4c1d95; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Memory Match</h1>
+    <div class="bar"><strong id="status">Moves 0</strong><button class="reset" id="reset">Shuffle</button></div>
+    <section class="grid" id="grid" aria-label="Memory cards"></section>
+  </main>
+  <script>
+    const icons = ['★','◆','●','▲','☀','☂','☕','♫'];
+    const grid = document.querySelector('#grid');
+    const statusEl = document.querySelector('#status');
+    let cards, first, lock, moves;
+
+    function shuffle(list) {
+      return list.map(v => ({v, r: Math.random()})).sort((a,b) => a.r - b.r).map(x => x.v);
+    }
+
+    function reset() {
+      cards = shuffle([...icons, ...icons]).map((value, index) => ({id: index, value, open: false, done: false}));
+      first = null; lock = false; moves = 0; render();
+    }
+
+    function flip(card) {
+      if (lock || card.open || card.done) return;
+      card.open = true;
+      if (!first) { first = card; render(); return; }
+      moves += 1;
+      if (first.value === card.value) {
+        first.done = card.done = true; first = null; render(); return;
+      }
+      lock = true; render();
+      setTimeout(() => { first.open = false; card.open = false; first = null; lock = false; render(); }, 650);
+    }
+
+    function render() {
+      grid.innerHTML = '';
+      cards.forEach(card => {
+        const button = document.createElement('button');
+        button.className = `card ${card.open ? 'open' : ''} ${card.done ? 'done' : ''}`;
+        button.textContent = card.open || card.done ? card.value : '';
+        button.addEventListener('click', () => flip(card));
+        grid.appendChild(button);
+      });
+      const complete = cards.every(card => card.done);
+      statusEl.textContent = complete ? `Cleared in ${moves} moves` : `Moves ${moves}`;
+    }
+
+    document.querySelector('#reset').addEventListener('click', reset);
+    reset();
+  </script>
+</body>
+</html>

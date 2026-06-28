@@ -1,0 +1,78 @@
+@startuml
+left to right direction
+
+actor "Người tổ chức" as Organizer
+actor "Quản trị giải đấu" as TournamentAdmin
+actor "Người tham gia" as Participant
+actor "Đội trưởng" as Captain
+actor "Trọng tài" as Referee
+actor "Bình luận viên" as Caster
+actor "Khán giả" as Spectator
+
+rectangle "GoPortal - Vận hành trận đấu trong giải đấu" {
+  usecase "Xem bracket" as UC_ViewBracket
+  usecase "Xem lịch trận" as UC_ViewMatches
+  usecase "Xem bảng xếp hạng" as UC_ViewStandings
+
+  usecase "Bắt đầu trận đấu" as UC_StartMatch
+  usecase "Cập nhật trạng thái trận" as UC_UpdateMatchStatus
+  usecase "Tạo workspace trận" as UC_ProvisionWorkspace
+
+  usecase "Báo cáo kết quả" as UC_ReportResult
+  usecase "Tự xác nhận kết quả" as UC_AutoConfirmResult
+  usecase "Khiếu nại kết quả" as UC_DisputeResult
+  usecase "Xử lý khiếu nại" as UC_ResolveDispute
+  usecase "Ghi đè kết quả trận" as UC_OverrideResult
+  usecase "Áp dụng kết quả vào bracket" as UC_ApplyResult
+
+  usecase "Theo dõi trận đấu" as UC_WatchMatch
+  usecase "Cấp observer token" as UC_GenerateObserverToken
+  usecase "Truy cập kênh bình luận" as UC_AccessCasterChannel
+  usecase "Theo dõi kênh livestream" as UC_AccessSpectatorChannel
+}
+
+Organizer -- UC_StartMatch
+Organizer -- UC_UpdateMatchStatus
+Organizer -- UC_ReportResult
+
+TournamentAdmin -- UC_StartMatch
+TournamentAdmin -- UC_UpdateMatchStatus
+TournamentAdmin -- UC_ProvisionWorkspace
+TournamentAdmin -- UC_OverrideResult
+TournamentAdmin -- UC_GenerateObserverToken
+
+Participant -- UC_ViewBracket
+Participant -- UC_ViewMatches
+Participant -- UC_ViewStandings
+Participant -- UC_ReportResult
+Participant -- UC_DisputeResult
+
+Captain -- UC_ReportResult
+Captain -- UC_DisputeResult
+
+Referee -- UC_WatchMatch
+Referee -- UC_GenerateObserverToken
+Referee -- UC_ResolveDispute
+
+Caster -- UC_WatchMatch
+Caster -- UC_GenerateObserverToken
+Caster -- UC_AccessCasterChannel
+
+Spectator -- UC_ViewBracket
+Spectator -- UC_ViewStandings
+Spectator -- UC_AccessSpectatorChannel
+
+UC_StartMatch ..> UC_UpdateMatchStatus : <<include>>
+UC_StartMatch ..> UC_ProvisionWorkspace : <<include>>
+
+UC_AutoConfirmResult ..> UC_ReportResult : <<extend>>
+UC_AutoConfirmResult ..> UC_ApplyResult : <<include>>
+UC_OverrideResult ..> UC_ApplyResult : <<include>>
+UC_ResolveDispute ..> UC_DisputeResult : <<extend>>
+UC_ResolveDispute ..> UC_OverrideResult : <<include>>
+
+UC_WatchMatch ..> UC_GenerateObserverToken : <<include>>
+UC_AccessCasterChannel ..> UC_WatchMatch : <<extend>>
+UC_AccessSpectatorChannel ..> UC_WatchMatch : <<extend>>
+
+@enduml

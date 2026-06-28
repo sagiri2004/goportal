@@ -20,12 +20,18 @@ type CreateTournamentRequest struct {
 }
 
 type UpdateTournamentRequest struct {
-	Name                 *string `json:"name"`
-	Description          *string `json:"description"`
-	Rules                *string `json:"rules"`
-	PrizePool            *string `json:"prize_pool"`
-	MaxParticipants      *int    `json:"max_participants"`
-	RegistrationDeadline *int64  `json:"registration_deadline"`
+	Name                           *string `json:"name"`
+	Description                    *string `json:"description"`
+	Rules                          *string `json:"rules"`
+	PrizePool                      *string `json:"prize_pool"`
+	MaxParticipants                *int    `json:"max_participants"`
+	RegistrationDeadline           *int64  `json:"registration_deadline"`
+	RecordingEnabled               *bool   `json:"recording_enabled"`
+	RecordTeamA                    *bool   `json:"record_team_a"`
+	RecordTeamB                    *bool   `json:"record_team_b"`
+	RecordReferee                  *bool   `json:"record_referee"`
+	RecordLivestream               *bool   `json:"record_livestream"`
+	AutoStartRecordingOnMatchStart *bool   `json:"auto_start_recording_on_match_start"`
 }
 
 type UpdateTournamentStatusRequest struct {
@@ -33,50 +39,62 @@ type UpdateTournamentStatusRequest struct {
 }
 
 type TournamentResponse struct {
-	ID                         string  `json:"id"`
-	ServerID                   string  `json:"server_id"`
-	Name                       string  `json:"name"`
-	Description                *string `json:"description,omitempty"`
-	Game                       string  `json:"game"`
-	Format                     string  `json:"format"`
-	Status                     string  `json:"status"`
-	MaxParticipants            int     `json:"max_participants"`
-	ParticipantType            string  `json:"participant_type"`
-	TeamSize                   *int    `json:"team_size,omitempty"`
-	RegistrationDeadline       *int64  `json:"registration_deadline,omitempty"`
-	CheckInDurationMinutes     int     `json:"check_in_duration_minutes"`
-	PrizePool                  *string `json:"prize_pool,omitempty"`
-	Rules                      *string `json:"rules,omitempty"`
-	CreatedBy                  string  `json:"created_by"`
-	StartedAt                  *int64  `json:"started_at,omitempty"`
-	CompletedAt                *int64  `json:"completed_at,omitempty"`
-	TournamentGeneralChannelID *string `json:"tournament_general_channel_id,omitempty"`
-	CreatedAt                  int64   `json:"created_at"`
-	UpdatedAt                  int64   `json:"updated_at"`
+	ID                             string  `json:"id"`
+	ServerID                       string  `json:"server_id"`
+	Name                           string  `json:"name"`
+	Description                    *string `json:"description,omitempty"`
+	Game                           string  `json:"game"`
+	Format                         string  `json:"format"`
+	Status                         string  `json:"status"`
+	MaxParticipants                int     `json:"max_participants"`
+	ParticipantType                string  `json:"participant_type"`
+	TeamSize                       *int    `json:"team_size,omitempty"`
+	RegistrationDeadline           *int64  `json:"registration_deadline,omitempty"`
+	CheckInDurationMinutes         int     `json:"check_in_duration_minutes"`
+	PrizePool                      *string `json:"prize_pool,omitempty"`
+	Rules                          *string `json:"rules,omitempty"`
+	CreatedBy                      string  `json:"created_by"`
+	StartedAt                      *int64  `json:"started_at,omitempty"`
+	CompletedAt                    *int64  `json:"completed_at,omitempty"`
+	TournamentGeneralChannelID     *string `json:"tournament_general_channel_id,omitempty"`
+	RecordingEnabled               bool    `json:"recording_enabled"`
+	RecordTeamA                    bool    `json:"record_team_a"`
+	RecordTeamB                    bool    `json:"record_team_b"`
+	RecordReferee                  bool    `json:"record_referee"`
+	RecordLivestream               bool    `json:"record_livestream"`
+	AutoStartRecordingOnMatchStart bool    `json:"auto_start_recording_on_match_start"`
+	CreatedAt                      int64   `json:"created_at"`
+	UpdatedAt                      int64   `json:"updated_at"`
 }
 
 func NewTournamentResponse(t *models.Tournament) TournamentResponse {
 	return TournamentResponse{
-		ID:                         t.ID,
-		ServerID:                   t.ServerID,
-		Name:                       t.Name,
-		Description:                t.Description,
-		Game:                       t.Game,
-		Format:                     t.Format,
-		Status:                     t.Status,
-		MaxParticipants:            t.MaxParticipants,
-		ParticipantType:            t.ParticipantType,
-		TeamSize:                   t.TeamSize,
-		RegistrationDeadline:       t.RegistrationDeadline,
-		CheckInDurationMinutes:     t.CheckInDurationMinutes,
-		PrizePool:                  t.PrizePool,
-		Rules:                      t.Rules,
-		CreatedBy:                  t.CreatedBy,
-		StartedAt:                  t.StartedAt,
-		CompletedAt:                t.CompletedAt,
-		TournamentGeneralChannelID: t.TournamentGeneralChannelID,
-		CreatedAt:                  t.CreatedAt,
-		UpdatedAt:                  t.UpdatedAt,
+		ID:                             t.ID,
+		ServerID:                       t.ServerID,
+		Name:                           t.Name,
+		Description:                    t.Description,
+		Game:                           t.Game,
+		Format:                         t.Format,
+		Status:                         t.Status,
+		MaxParticipants:                t.MaxParticipants,
+		ParticipantType:                t.ParticipantType,
+		TeamSize:                       t.TeamSize,
+		RegistrationDeadline:           t.RegistrationDeadline,
+		CheckInDurationMinutes:         t.CheckInDurationMinutes,
+		PrizePool:                      t.PrizePool,
+		Rules:                          t.Rules,
+		CreatedBy:                      t.CreatedBy,
+		StartedAt:                      t.StartedAt,
+		CompletedAt:                    t.CompletedAt,
+		TournamentGeneralChannelID:     t.TournamentGeneralChannelID,
+		RecordingEnabled:               t.RecordingEnabled,
+		RecordTeamA:                    t.RecordTeamA,
+		RecordTeamB:                    t.RecordTeamB,
+		RecordReferee:                  t.RecordReferee,
+		RecordLivestream:               t.RecordLivestream,
+		AutoStartRecordingOnMatchStart: t.AutoStartRecordingOnMatchStart,
+		CreatedAt:                      t.CreatedAt,
+		UpdatedAt:                      t.UpdatedAt,
 	}
 }
 

@@ -1,0 +1,20 @@
+flowchart LR
+  User["Người dùng"]
+
+  subgraph System["Hệ thống - Quản lý tin nhắn"]
+    ViewMessages(("Xem tin nhắn"))
+    SendMessage(("Gửi tin nhắn"))
+    EditMessage(("Chỉnh sửa tin nhắn"))
+    DeleteMessage(("Xóa tin nhắn"))
+    ReplyMessage(("Trả lời tin nhắn"))
+    ReactMessage(("Thả phản ứng"))
+    MarkRead(("Đánh dấu đã đọc"))
+  end
+
+  User --> ViewMessages
+  User --> SendMessage
+  User --> EditMessage
+  User --> DeleteMessage
+  User --> ReplyMessage
+  User --> ReactMessage
+  User --> MarkRead

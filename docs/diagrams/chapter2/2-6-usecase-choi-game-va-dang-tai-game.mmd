@@ -1,0 +1,40 @@
+flowchart LR
+  Guest["Khách"]
+  User["Người dùng"]
+  Developer["Nhà phát triển"]
+
+  subgraph System["Hệ thống - Chơi game và Đăng tải game"]
+    ListGames(("Xem danh sách game"))
+    ViewGame(("Xem chi tiết game"))
+    PlayPublic(("Chơi game công khai"))
+
+    PlayGame(("Chơi game"))
+    CreateSession(("Tạo phiên chơi"))
+    SyncState(("Đồng bộ trạng thái"))
+    ShareScore(("Chia sẻ điểm số"))
+    ShareAchievement(("Chia sẻ thành tích"))
+
+    CreateGame(("Tạo thông tin game"))
+    UpdateGame(("Cập nhật thông tin game"))
+    UploadBuild(("Tải lên bản build"))
+    SubmitReview(("Gửi kiểm duyệt"))
+    ManageGames(("Quản lý game đã đăng"))
+  end
+
+  Guest --> ListGames
+  Guest --> ViewGame
+  Guest --> PlayPublic
+
+  User --> ListGames
+  User --> ViewGame
+  User --> PlayGame
+  User --> CreateSession
+  User --> SyncState
+  User --> ShareScore
+  User --> ShareAchievement
+
+  Developer --> CreateGame
+  Developer --> UpdateGame
+  Developer --> UploadBuild
+  Developer --> SubmitReview
+  Developer --> ManageGames

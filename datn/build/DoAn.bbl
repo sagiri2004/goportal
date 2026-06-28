@@ -1,0 +1,433 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{none/global//global/global/global}
+  \entry{discord-developer-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=D}{%
+         family={{Discord}},
+         familyi={D\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{D1}
+    \strng{fullhash}{D1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Discord Developer Documentation}
+    \verb{url}
+    \verb https://discord.com/developers/docs/intro
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{challonge-api}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=C}{%
+         family={{Challonge}},
+         familyi={C\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{C1}
+    \strng{fullhash}{C1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Challonge API Documentation}
+    \verb{url}
+    \verb https://api.challonge.com/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{itchio-html5}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=i}{%
+         family={{itch.io}},
+         familyi={i\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{i1}
+    \strng{fullhash}{i1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{HTML5 Games on itch.io}
+    \verb{url}
+    \verb https://itch.io/docs/creators/html5
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{steamworks-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=V}{%
+         family={{Valve Corporation}},
+         familyi={V\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{V1}
+    \strng{fullhash}{V1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Steamworks Documentation}
+    \verb{url}
+    \verb https://partner.steamgames.com/doc/home
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{react-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=M}{%
+         family={{Meta Open Source}},
+         familyi={M\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{M1}
+    \strng{fullhash}{M1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{React Documentation}
+    \verb{url}
+    \verb https://react.dev/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{typescript-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=M}{%
+         family={{Microsoft}},
+         familyi={M\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{M2}
+    \strng{fullhash}{M2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{TypeScript Documentation}
+    \verb{url}
+    \verb https://www.typescriptlang.org/docs/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{vite-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=V}{%
+         family={{Vite}},
+         familyi={V\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{V2}
+    \strng{fullhash}{V2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Vite Documentation}
+    \verb{url}
+    \verb https://vite.dev/guide/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{electron-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=O}{%
+         family={{OpenJS Foundation}},
+         familyi={O\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{O1}
+    \strng{fullhash}{O1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Electron Documentation}
+    \verb{url}
+    \verb https://www.electronjs.org/docs/latest/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{go-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=T}{%
+         family={{The Go Authors}},
+         familyi={T\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{T1}
+    \strng{fullhash}{T1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{The Go Programming Language Documentation}
+    \verb{url}
+    \verb https://go.dev/doc/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{gin-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=G}{%
+         family={{Gin Web Framework}},
+         familyi={G\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{G1}
+    \strng{fullhash}{G1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Gin Web Framework Documentation}
+    \verb{url}
+    \verb https://gin-gonic.com/docs/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{jwt-rfc7519}{misc}{}{}
+    \name{author}{3}{}{%
+      {{hash=JM}{%
+         family={Jones},
+         familyi={J\bibinitperiod},
+         given={Michael},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=BJ}{%
+         family={Bradley},
+         familyi={B\bibinitperiod},
+         given={John},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=SN}{%
+         family={Sakimura},
+         familyi={S\bibinitperiod},
+         given={Nat},
+         giveni={N\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{JM+1}
+    \strng{fullhash}{JMBJSN1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{JSON Web Token (JWT)}
+    \verb{url}
+    \verb https://www.rfc-editor.org/rfc/rfc7519
+    \endverb
+    \field{year}{2015}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{mysql-84}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=O}{%
+         family={{Oracle}},
+         familyi={O\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{O2}
+    \strng{fullhash}{O2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{MySQL 8.4 Reference Manual}
+    \verb{url}
+    \verb https://dev.mysql.com/doc/refman/8.4/en/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{gorm-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=G}{%
+         family={{GORM}},
+         familyi={G\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{G2}
+    \strng{fullhash}{G2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{GORM Guides}
+    \verb{url}
+    \verb https://gorm.io/docs/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{redis-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=R}{%
+         family={{Redis}},
+         familyi={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{R1}
+    \strng{fullhash}{R1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Redis Documentation}
+    \verb{url}
+    \verb https://redis.io/docs/latest/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{cloudinary-go}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=C}{%
+         family={{Cloudinary}},
+         familyi={C\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{C2}
+    \strng{fullhash}{C2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Cloudinary Go SDK Documentation}
+    \verb{url}
+    \verb https://cloudinary.com/documentation/go_integration
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{mdn-websocket}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=M}{%
+         family={{Mozilla Developer Network}},
+         familyi={M\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{M3}
+    \strng{fullhash}{M3}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{The WebSocket API}
+    \verb{url}
+    \verb https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{webrtc-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=W}{%
+         family={{WebRTC}},
+         familyi={W\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{W1}
+    \strng{fullhash}{W1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{WebRTC Documentation}
+    \verb{url}
+    \verb https://webrtc.org/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{livekit-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=L}{%
+         family={{LiveKit}},
+         familyi={L\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{L1}
+    \strng{fullhash}{L1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{LiveKit Documentation}
+    \verb{url}
+    \verb https://docs.livekit.io/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{docker-compose-docs}{online}{}{}
+    \name{author}{1}{}{%
+      {{hash=D}{%
+         family={{Docker}},
+         familyi={D\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{D2}
+    \strng{fullhash}{D2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{Docker Compose Documentation}
+    \verb{url}
+    \verb https://docs.docker.com/compose/
+    \endverb
+    \field{year}{2026}
+    \field{urlday}{11}
+    \field{urlmonth}{06}
+    \field{urlyear}{2026}
+  \endentry
+\enddatalist
+\endinput

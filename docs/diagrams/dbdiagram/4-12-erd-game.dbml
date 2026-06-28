@@ -1,0 +1,277 @@
+Project "Hinh 4.12 - ERD game" {
+  database_type: "MySQL"
+}
+
+Table users {
+  id char(36) [pk]
+  username varchar(255) [not null]
+  avatar_url varchar(512)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table channels {
+  id char(36) [pk]
+  server_id char(36)
+  name varchar(120)
+  type varchar(32)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table user_games {
+  id char(36) [pk]
+  owner_user_id char(36) [not null]
+  title varchar(255) [not null]
+  slug varchar(255) [not null, unique]
+  description text
+  visibility varchar(32)
+  status varchar(32)
+  publish_state varchar(32)
+  category varchar(100)
+  tags json
+  age_rating varchar(32)
+  featured_score double
+  avg_rating double
+  rating_count int
+  launch_count bigint
+  trending_score double
+  thumbnail_url varchar(1024)
+  icon_url varchar(1024)
+  capsule_image_url varchar(1024)
+  hero_image_url varchar(1024)
+  screenshot_urls json
+  trailer_url varchar(1024)
+  created_by char(36)
+  approved_by char(36)
+  approved_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table user_game_builds {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  version varchar(64) [not null]
+  storage_zip_url varchar(1024) [not null]
+  play_base_path varchar(1024)
+  entry_file varchar(255)
+  file_size bigint
+  checksum varchar(128)
+  status varchar(32)
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (game_id, version) [unique, name: "uq_user_game_builds_game_version"]
+  }
+}
+
+Table game_ratings {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  user_id char(36) [not null]
+  score tinyint [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (game_id, user_id) [unique, name: "uq_game_ratings_game_user"]
+  }
+}
+
+Table game_reviews {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  user_id char(36) [not null]
+  title varchar(255)
+  content text
+  rating_score tinyint
+  status varchar(32)
+  moderated_by char(36)
+  moderated_at bigint
+  moderation_note text
+  helpful_count int
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table game_review_votes {
+  id char(36) [pk]
+  review_id char(36) [not null]
+  user_id char(36) [not null]
+  vote_type varchar(16) [not null]
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (review_id, user_id) [unique, name: "uq_game_review_votes_review_user"]
+  }
+}
+
+Table game_reports {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  reporter_user_id char(36) [not null]
+  reason varchar(100) [not null]
+  detail text
+  status varchar(32)
+  resolved_by char(36)
+  resolved_at bigint
+  resolution_note text
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table game_curations {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  curated_by char(36) [not null]
+  collection_key varchar(64) [not null]
+  priority int
+  note text
+  starts_at bigint
+  ends_at bigint
+  is_active boolean
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table game_metrics_daily {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  metric_date date [not null]
+  view_count bigint
+  launch_count bigint
+  install_count bigint
+  bookmark_count bigint
+  unique_user_count bigint
+  created_at bigint
+  updated_at bigint
+
+  Indexes {
+    (game_id, metric_date) [unique, name: "uq_game_metrics_daily"]
+  }
+}
+
+Table game_audit_logs {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  actor_user_id char(36)
+  action varchar(64) [not null]
+  payload json
+  created_at bigint
+}
+
+Table game_rooms {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  channel_id char(36)
+  host_user_id char(36) [not null]
+  room_code varchar(32) [not null, unique]
+  room_name varchar(255)
+  status varchar(32)
+  max_players int
+  current_state json
+  state_version bigint
+  expires_at bigint
+  last_active_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table game_room_members {
+  id char(36) [pk]
+  room_id char(36) [not null]
+  user_id char(36) [not null]
+  role varchar(32)
+  status varchar(32)
+  joined_at bigint
+  left_at bigint
+  last_seen_at bigint
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+
+  Indexes {
+    (room_id, user_id, deleted_at) [unique, name: "uq_game_room_members_room_user_deleted"]
+  }
+}
+
+Table game_sessions {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  user_id char(36) [not null]
+  channel_id char(36)
+  room_id char(36)
+  status varchar(32)
+  started_at bigint
+  last_seen_at bigint
+  ended_at bigint
+  metadata json
+  created_at bigint
+  updated_at bigint
+  deleted_at bigint
+}
+
+Table game_events {
+  id char(36) [pk]
+  game_id char(36) [not null]
+  session_id char(36) [not null]
+  user_id char(36) [not null]
+  event_type varchar(64) [not null]
+  idempotency_key varchar(128)
+  score bigint
+  achievement_code varchar(128)
+  achievement_title varchar(255)
+  payload json
+  created_at bigint
+
+  Indexes {
+    (session_id, idempotency_key) [unique, name: "uq_game_events_session_idempotency"]
+  }
+}
+
+Ref: user_games.owner_user_id > users.id
+Ref: user_games.created_by > users.id
+Ref: user_games.approved_by > users.id
+Ref: user_game_builds.game_id > user_games.id
+
+Ref: game_ratings.game_id > user_games.id
+Ref: game_ratings.user_id > users.id
+Ref: game_reviews.game_id > user_games.id
+Ref: game_reviews.user_id > users.id
+Ref: game_reviews.moderated_by > users.id
+Ref: game_review_votes.review_id > game_reviews.id
+Ref: game_review_votes.user_id > users.id
+Ref: game_reports.game_id > user_games.id
+Ref: game_reports.reporter_user_id > users.id
+Ref: game_reports.resolved_by > users.id
+Ref: game_curations.game_id > user_games.id
+Ref: game_curations.curated_by > users.id
+Ref: game_metrics_daily.game_id > user_games.id
+Ref: game_audit_logs.game_id > user_games.id
+Ref: game_audit_logs.actor_user_id > users.id
+
+Ref: game_rooms.game_id > user_games.id
+Ref: game_rooms.channel_id > channels.id
+Ref: game_rooms.host_user_id > users.id
+Ref: game_room_members.room_id > game_rooms.id
+Ref: game_room_members.user_id > users.id
+Ref: game_sessions.game_id > user_games.id
+Ref: game_sessions.user_id > users.id
+Ref: game_sessions.channel_id > channels.id
+Ref: game_sessions.room_id > game_rooms.id
+Ref: game_events.game_id > user_games.id
+Ref: game_events.session_id > game_sessions.id
+Ref: game_events.user_id > users.id

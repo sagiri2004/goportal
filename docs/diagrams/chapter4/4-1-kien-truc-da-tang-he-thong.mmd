@@ -1,0 +1,48 @@
+flowchart TB
+    subgraph Presentation["Tầng trình diễn"]
+        Web["Ứng dụng web"]
+        Desktop["Ứng dụng desktop"]
+    end
+
+    subgraph Communication["Giao tiếp giữa client và server"]
+        Rest["RESTful API"]
+        WS["WebSocket"]
+        MediaToken["Token truy cập media"]
+    end
+
+    subgraph Business["Tầng logic nghiệp vụ"]
+        RequestLayer["Tầng điều phối yêu cầu"]
+        ServiceLayer["Tầng xử lý nghiệp vụ"]
+        Auth["Xác thực và phân quyền"]
+        EventLayer["Xử lý sự kiện thời gian thực"]
+    end
+
+    subgraph Data["Tầng dữ liệu và hạ tầng phụ trợ"]
+        Database["Cơ sở dữ liệu quan hệ"]
+        Cache["Bộ nhớ đệm"]
+        Storage["Lưu trữ tài nguyên media"]
+        MediaServer["Dịch vụ voice và livestream"]
+    end
+
+    Web --> Rest
+    Desktop --> Rest
+    Web --> WS
+    Desktop --> WS
+    Web --> MediaToken
+    Desktop --> MediaToken
+
+    Rest --> RequestLayer
+    WS --> EventLayer
+    MediaToken --> Auth
+
+    RequestLayer --> ServiceLayer
+    ServiceLayer --> Auth
+    ServiceLayer --> EventLayer
+    ServiceLayer --> Database
+    ServiceLayer --> Cache
+    ServiceLayer --> Storage
+    Auth --> Database
+    EventLayer --> WS
+    Auth --> MediaServer
+    MediaServer --> Web
+    MediaServer --> Desktop
