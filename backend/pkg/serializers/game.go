@@ -1,6 +1,8 @@
 package serializers
 
 import (
+	"encoding/json"
+
 	"github.com/sagiri2004/goportal/pkg/models"
 	"github.com/sagiri2004/goportal/pkg/services"
 )
@@ -72,6 +74,13 @@ type CreateGameEventRequest struct {
 	AchievementCode  *string `json:"achievement_code,omitempty"`
 	AchievementTitle *string `json:"achievement_title,omitempty"`
 	Payload          any     `json:"payload,omitempty"`
+}
+
+type SubmitGameScoreRequest struct {
+	SessionID     *string `json:"session_id,omitempty"`
+	LeaderboardID string  `json:"leaderboard_id,omitempty"`
+	Score         *int64  `json:"score,omitempty"`
+	Metadata      any     `json:"metadata,omitempty"`
 }
 
 type ShareGameRequest struct {
@@ -215,6 +224,48 @@ type GameEventResponse struct {
 	AchievementTitle *string `json:"achievement_title,omitempty"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
+}
+
+type GameScoreEntryResponse struct {
+	ID            string  `json:"id"`
+	GameID        string  `json:"game_id"`
+	LeaderboardID string  `json:"leaderboard_id"`
+	UserID        string  `json:"user_id"`
+	SessionID     *string `json:"session_id,omitempty"`
+	EventID       *string `json:"event_id,omitempty"`
+	ServerID      *string `json:"server_id,omitempty"`
+	ChannelID     *string `json:"channel_id,omitempty"`
+	Score         int64   `json:"score"`
+	Metadata      any     `json:"metadata,omitempty"`
+	CreatedAt     int64   `json:"created_at"`
+	UpdatedAt     int64   `json:"updated_at"`
+}
+
+type GameLeaderboardEntryResponse struct {
+	Rank             int64   `json:"rank"`
+	UserID           string  `json:"user_id"`
+	Username         string  `json:"username"`
+	AvatarURL        *string `json:"avatar_url,omitempty"`
+	Score            int64   `json:"score"`
+	Metadata         any     `json:"metadata,omitempty"`
+	AchievedAt       int64   `json:"achieved_at"`
+	CurrentUserEntry bool    `json:"current_user_entry"`
+}
+
+type GameLeaderboardResponse struct {
+	GameID        string                         `json:"game_id"`
+	LeaderboardID string                         `json:"leaderboard_id"`
+	Scope         string                         `json:"scope"`
+	ServerID      *string                        `json:"server_id,omitempty"`
+	Entries       []GameLeaderboardEntryResponse `json:"entries"`
+	Me            *GameLeaderboardEntryResponse  `json:"me,omitempty"`
+}
+
+type GameScoreSubmitResponse struct {
+	Accepted bool                          `json:"accepted"`
+	Entry    GameScoreEntryResponse        `json:"entry"`
+	Global   *GameLeaderboardEntryResponse `json:"global,omitempty"`
+	Server   *GameLeaderboardEntryResponse `json:"server,omitempty"`
 }
 
 type GameRoomMemberResponse struct {
@@ -380,6 +431,70 @@ func NewGameEventResponse(event *models.GameEvent) GameEventResponse {
 		CreatedAt:        event.CreatedAt,
 		UpdatedAt:        event.UpdatedAt,
 	}
+}
+
+func NewGameScoreSubmitResponse(result *services.GameScoreSubmitResult) GameScoreSubmitResponse {
+	return GameScoreSubmitResponse{
+		Accepted: result.Accepted,
+		Entry:    newGameScoreEntryResponse(&result.Entry),
+		Global:   newGameLeaderboardEntryResponse(result.Global),
+		Server:   newGameLeaderboardEntryResponse(result.Server),
+	}
+}
+
+func NewGameLeaderboardResponse(result *services.GameLeaderboardResult) GameLeaderboardResponse {
+	entries := make([]GameLeaderboardEntryResponse, 0, len(result.Entries))
+	for i := range result.Entries {
+		entries = append(entries, *newGameLeaderboardEntryResponse(&result.Entries[i]))
+	}
+	return GameLeaderboardResponse{
+		GameID:        result.GameID,
+		LeaderboardID: result.LeaderboardID,
+		Scope:         result.Scope,
+		ServerID:      result.ServerID,
+		Entries:       entries,
+		Me:            newGameLeaderboardEntryResponse(result.Me),
+	}
+}
+
+func newGameScoreEntryResponse(entry *models.GameScoreEntry) GameScoreEntryResponse {
+	return GameScoreEntryResponse{
+		ID:            entry.ID,
+		GameID:        entry.GameID,
+		LeaderboardID: entry.LeaderboardID,
+		UserID:        entry.UserID,
+		SessionID:     entry.SessionID,
+		EventID:       entry.EventID,
+		ServerID:      entry.ServerID,
+		ChannelID:     entry.ChannelID,
+		Score:         entry.Score,
+		Metadata:      rawJSONOrNil(entry.Metadata),
+		CreatedAt:     entry.CreatedAt,
+		UpdatedAt:     entry.UpdatedAt,
+	}
+}
+
+func newGameLeaderboardEntryResponse(entry *services.GameLeaderboardEntry) *GameLeaderboardEntryResponse {
+	if entry == nil {
+		return nil
+	}
+	return &GameLeaderboardEntryResponse{
+		Rank:             entry.Rank,
+		UserID:           entry.UserID,
+		Username:         entry.Username,
+		AvatarURL:        entry.AvatarURL,
+		Score:            entry.Score,
+		Metadata:         rawJSONOrNil(entry.Metadata),
+		AchievedAt:       entry.AchievedAt,
+		CurrentUserEntry: entry.CurrentUserEntry,
+	}
+}
+
+func rawJSONOrNil(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.RawMessage(raw)
 }
 
 func NewGameRoomStateResponse(state *services.GameRoomResponse) GameRoomStateResponse {

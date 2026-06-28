@@ -373,6 +373,12 @@ export type TournamentDTO = {
   started_at?: number | null
   completed_at?: number | null
   tournament_general_channel_id?: string | null
+  recording_enabled: boolean
+  record_team_a: boolean
+  record_team_b: boolean
+  record_referee: boolean
+  record_livestream: boolean
+  auto_start_recording_on_match_start: boolean
   created_at: number
   updated_at: number
 }
@@ -431,6 +437,12 @@ export type UpdateTournamentRequest = {
   prize_pool?: string | null
   max_participants?: number
   registration_deadline?: number | null
+  recording_enabled?: boolean
+  record_team_a?: boolean
+  record_team_b?: boolean
+  record_referee?: boolean
+  record_livestream?: boolean
+  auto_start_recording_on_match_start?: boolean
 }
 
 export type TournamentMatchDTO = {
@@ -508,6 +520,8 @@ export type TournamentMatchWorkspaceDTO = {
   livestream_channel_id?: string | null
   created_by: string
   created_at: number
+  archived_at?: number | null
+  closed_by?: string | null
 }
 
 export type TournamentObserverTokenDTO = {

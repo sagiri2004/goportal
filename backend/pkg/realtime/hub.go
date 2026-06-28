@@ -14,8 +14,13 @@ import (
 
 type Hub struct {
 	mu          sync.RWMutex
-	connections map[string]map[*websocket.Conn]struct{}
+	connections map[string]map[*clientConnection]struct{}
 	upgrader    websocket.Upgrader
+}
+
+type clientConnection struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
 }
 
 type outboundEnvelope struct {
@@ -29,7 +34,7 @@ type outboundEnvelope struct {
 
 func NewHub() *Hub {
 	return &Hub{
-		connections: make(map[string]map[*websocket.Conn]struct{}),
+		connections: make(map[string]map[*clientConnection]struct{}),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -48,8 +53,16 @@ func (h *Hub) HandleWS(c *gin.Context) {
 		return
 	}
 
-	h.register(userID, conn)
-	defer h.unregister(userID, conn)
+	client := &clientConnection{conn: conn}
+	h.register(userID, client)
+	defer h.unregister(userID, client)
+
+	_ = client.writeJSON(outboundEnvelope{
+		Type:      "CONNECTED",
+		EventID:   uuid.NewString(),
+		EventType: "CONNECTED",
+		At:        time.Now().Unix(),
+	})
 
 	_ = conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	conn.SetPongHandler(func(string) error {
@@ -74,7 +87,7 @@ func (h *Hub) HandleWS(c *gin.Context) {
 		case <-done:
 			return
 		case <-ticker.C:
-			_ = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
+			_ = client.writeControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
 		}
 	}
 }
@@ -104,44 +117,64 @@ func (h *Hub) SendToUser(userID, eventType, eventID string, payload, metadata js
 		h.mu.RUnlock()
 		return false
 	}
-	targets := make([]*websocket.Conn, 0, len(conns))
-	for conn := range conns {
-		targets = append(targets, conn)
+	targets := make([]*clientConnection, 0, len(conns))
+	for client := range conns {
+		targets = append(targets, client)
 	}
 	h.mu.RUnlock()
 
 	delivered := false
-	for _, conn := range targets {
-		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := conn.WriteMessage(websocket.TextMessage, raw); err == nil {
+	for _, client := range targets {
+		if err := client.writeMessage(websocket.TextMessage, raw, time.Now().Add(5*time.Second)); err == nil {
 			delivered = true
 			continue
 		}
-		h.unregister(userID, conn)
-		_ = conn.Close()
+		h.unregister(userID, client)
+		_ = client.conn.Close()
 	}
 	return delivered
 }
 
-func (h *Hub) register(userID string, conn *websocket.Conn) {
+func (h *Hub) register(userID string, client *clientConnection) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.connections[userID] == nil {
-		h.connections[userID] = make(map[*websocket.Conn]struct{})
+		h.connections[userID] = make(map[*clientConnection]struct{})
 	}
-	h.connections[userID][conn] = struct{}{}
+	h.connections[userID][client] = struct{}{}
 }
 
-func (h *Hub) unregister(userID string, conn *websocket.Conn) {
+func (h *Hub) unregister(userID string, client *clientConnection) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.connections[userID] == nil {
 		return
 	}
-	delete(h.connections[userID], conn)
+	delete(h.connections[userID], client)
 	if len(h.connections[userID]) == 0 {
 		delete(h.connections, userID)
 	}
+}
+
+func (c *clientConnection) writeJSON(value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return c.writeMessage(websocket.TextMessage, raw, time.Now().Add(5*time.Second))
+}
+
+func (c *clientConnection) writeMessage(messageType int, data []byte, deadline time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(deadline)
+	return c.conn.WriteMessage(messageType, data)
+}
+
+func (c *clientConnection) writeControl(messageType int, data []byte, deadline time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.conn.WriteControl(messageType, data, deadline)
 }
 
 func nonEmpty(value, fallback string) string {

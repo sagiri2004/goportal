@@ -34,6 +34,7 @@ import {
   Sparkles,
   Wifi,
   Radio,
+  Trash2,
 } from 'lucide-react'
 
 type ChannelSidebarProps = {
@@ -55,6 +56,7 @@ type ChannelSidebarProps = {
       activeMembers?: ChannelMember[]
       liveLabel?: string
       isLive?: boolean
+      isArchived?: boolean
     }>
   }>
   activeChannelId?: string
@@ -65,6 +67,8 @@ type ChannelSidebarProps = {
   onOpenServerSettings?: () => void
   onOpenServerMembers?: () => void
   onOpenUserSettings?: () => void
+  currentUsername?: string
+  currentAvatarUrl?: string | null
   voiceState?: {
     channelId: string
     channelName: string
@@ -80,6 +84,7 @@ type ChannelSidebarProps = {
   }>
   onSelectTournament?: (tournamentId: string) => void
   onCreateTournament?: () => void
+  onDeleteTournament?: (tournamentId: string, tournamentName: string, tournamentStatus: string) => void
   canCreateTournament?: boolean
   tournamentChannelTree?: Array<{
     id: string
@@ -95,6 +100,7 @@ type ChannelSidebarProps = {
       activeMembers?: ChannelMember[]
       liveLabel?: string
       isLive?: boolean
+      isArchived?: boolean
     } | null
     matches: Array<{
       matchId: string
@@ -110,6 +116,7 @@ type ChannelSidebarProps = {
         activeMembers?: ChannelMember[]
         liveLabel?: string
         isLive?: boolean
+        isArchived?: boolean
       }>
     }>
   }>
@@ -132,6 +139,7 @@ type SidebarChannel = {
   activeMembers?: ChannelMember[]
   liveLabel?: string
   isLive?: boolean
+  isArchived?: boolean
 }
 
 const sectionLabelClassName =
@@ -236,7 +244,13 @@ const ChannelRow: React.FC<{
         </div>
 
         <div className="relative flex h-[18px] w-[46px] flex-shrink-0 items-center justify-end">
-          {!isVoice && hasUnread && (
+          {isLivestream && channel.isArchived && (
+            <span className="inline-flex h-[18px] min-w-[42px] items-center justify-center rounded-[9px] border border-emerald-400/30 bg-emerald-500/10 px-1.5 text-[10px] font-semibold leading-none text-emerald-200">
+              Lưu
+            </span>
+          )}
+
+          {!isVoice && !channel.isArchived && hasUnread && (
             <span className="inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[9px] bg-[#f23f43] px-1.5 text-[11px] font-semibold leading-none text-white transition-opacity group-hover:opacity-0">
               {unreadCount}
             </span>
@@ -536,28 +550,31 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   tournaments = [],
   onSelectTournament = () => {},
   onCreateTournament = () => {},
+  onDeleteTournament = () => {},
   canCreateTournament = false,
   tournamentChannelTree = [],
 }) => {
   const { data: channels = [] } = useChannels(serverId)
   const [expandedText, setExpandedText] = useState(true)
   const [expandedVoice, setExpandedVoice] = useState(true)
-  const [expandedLivestream, setExpandedLivestream] = useState(true)
   const [expandedTournaments, setExpandedTournaments] = useState(true)
   const [expandedTournamentIds, setExpandedTournamentIds] = useState<Record<string, boolean>>({})
   const [expandedMatchIds, setExpandedMatchIds] = useState<Record<string, boolean>>({})
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
 
   const fromCategories = Array.isArray(categories) && categories.length > 0
+  const visibleCategories = fromCategories
+    ? categories.map((category) => ({
+        ...category,
+        channels: category.channels.filter((channel) => channel.type !== 'livestream'),
+      }))
+    : []
   const textChannels = fromCategories
     ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'text'))
     : channels.filter((c) => c.type === 'TEXT')
   const voiceChannels = fromCategories
     ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'voice'))
     : channels.filter((c) => c.type === 'VOICE')
-  const livestreamChannels = fromCategories
-    ? categories.flatMap((c) => c.channels.filter((ch) => ch.type === 'livestream'))
-    : channels.filter((c) => c.type === 'LIVESTREAM')
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
@@ -699,7 +716,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
       <div className="flex-1 overflow-y-auto px-2 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         {fromCategories && (
           <div className="space-y-0.5">
-            {categories!.map((cat, index) => {
+            {visibleCategories.map((cat, index) => {
               const isExpanded = expandedCategories[cat.id] ?? true
 
               return (
@@ -809,51 +826,6 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
           </div>
         )}
 
-        {!fromCategories && livestreamChannels.length > 0 && (
-          <div>
-            <SectionHeader
-              name="Livestream Channels"
-              expanded={expandedLivestream}
-              onToggle={() => setExpandedLivestream(!expandedLivestream)}
-              onCreateChannel={onCreateChannel}
-            />
-
-            {expandedLivestream && (
-              <div className="space-y-0.5">
-                {livestreamChannels.map((channel) => (
-                  <React.Fragment key={channel.id}>
-                    <ChannelRow
-                      channel={{
-                        id: channel.id,
-                        name: channel.name,
-                        type: 'livestream',
-                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
-                        activeMembers: (channel as any)?.activeMembers,
-                        liveLabel: (channel as any)?.liveLabel,
-                        isLive: (channel as any)?.isLive,
-                      }}
-                      active={channel.id === activeChannelId}
-                      onSelect={() => onSelectChannel(channel.id, 'livestream', channel.name)}
-                      onInviteMember={onInviteMember}
-                    />
-                    <VoiceActivityRow
-                      channel={{
-                        id: channel.id,
-                        name: channel.name,
-                        type: 'livestream',
-                        unread: (channel as any)?.unreadCount ?? (channel as any)?.unread_count,
-                        activeMembers: (channel as any)?.activeMembers,
-                        liveLabel: (channel as any)?.liveLabel,
-                        isLive: (channel as any)?.isLive,
-                      }}
-                    />
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         <div>
             <div className="mt-4 mb-0.5 flex items-center gap-2 px-2 group">
               <button
@@ -893,29 +865,62 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                   </p>
                 ) : (
                   tournaments.map((item) => (
-                    <div key={item.id} className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectTournament(item.id)
-                          setExpandedTournamentIds((prev) => ({ ...prev, [item.id]: !(prev[item.id] ?? false) }))
-                        }}
-                        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-[hsl(0,0%,75%)] hover:bg-[hsl(240,5%,17%)] hover:text-[hsl(0,0%,92%)]"
-                      >
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <ChevronDown
-                            className={`h-3 w-3 flex-shrink-0 text-muted-foreground/70 transition-transform ${
-                              !(expandedTournamentIds[item.id] ?? false) ? '-rotate-90' : ''
-                            }`}
-                          />
-                          <span className="truncate">{item.name}</span>
-                        </span>
-                        <span
-                          className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] ${tournamentStatusBadgeClass(item.status)}`}
+                    <div key={item.id} className="group/tournament space-y-1">
+                      <div className="flex items-center gap-1 rounded-md hover:bg-[hsl(240,5%,17%)]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectTournament(item.id)
+                            setExpandedTournamentIds((prev) => ({ ...prev, [item.id]: !(prev[item.id] ?? false) }))
+                          }}
+                          className="flex min-w-0 flex-1 items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-[hsl(0,0%,75%)] hover:text-[hsl(0,0%,92%)]"
                         >
-                          {tournamentStatusLabel(item.status)}
-                        </span>
-                      </button>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <ChevronDown
+                              className={`h-3 w-3 flex-shrink-0 text-muted-foreground/70 transition-transform ${
+                                !(expandedTournamentIds[item.id] ?? false) ? '-rotate-90' : ''
+                              }`}
+                            />
+                            <span className="truncate">{item.name}</span>
+                          </span>
+                          <span
+                            className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] ${tournamentStatusBadgeClass(item.status)}`}
+                          >
+                            {tournamentStatusLabel(item.status)}
+                          </span>
+                        </button>
+                        {canCreateTournament && (
+                          <DropdownMenu>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => event.stopPropagation()}
+                                    className="mr-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition hover:bg-white/5 hover:text-foreground group-hover/tournament:opacity-100 data-[state=open]:opacity-100"
+                                    aria-label={`Cai dat giai dau ${item.name}`}
+                                  >
+                                    <Settings className="h-3.5 w-3.5" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                              </TooltipTrigger>
+                              <TooltipContent>Cai dat giai dau</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem
+                                className="text-red-400 focus:bg-red-500/10 focus:text-red-300"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  onDeleteTournament(item.id, item.name, item.status)
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {item.status === 'draft' ? 'Xoa giai dau' : 'An khoi sidebar'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                       {(expandedTournamentIds[item.id] ?? false) && (
                         <div className="space-y-1 pl-3">
                           {(() => {

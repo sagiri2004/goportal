@@ -15,6 +15,7 @@ import type {
   UpdateTournamentRequest,
 } from '@goportal/types'
 import { apiClient } from '../lib/api-client'
+import type { RecordingItem } from './voice'
 
 type ListTournamentsParams = {
   status?: TournamentStatusDTO
@@ -246,6 +247,16 @@ export const startTournamentMatch = async (
 ): Promise<{ match: TournamentMatchDTO; workspace: TournamentMatchWorkspaceDTO; screen_share_required: boolean }> => {
   return apiClient.post<{ match: TournamentMatchDTO; workspace: TournamentMatchWorkspaceDTO; screen_share_required: boolean }>(
     `/api/v1/tournaments/${tournamentId}/matches/${matchId}/start`,
+    {},
+  )
+}
+
+export const closeTournamentMatchLive = async (
+  tournamentId: string,
+  matchId: string,
+): Promise<{ recordings: RecordingItem[]; stopped_streams: RecordingItem[] }> => {
+  return apiClient.post<{ recordings: RecordingItem[]; stopped_streams: RecordingItem[] }>(
+    `/api/v1/tournaments/${tournamentId}/matches/${matchId}/live/close`,
     {},
   )
 }

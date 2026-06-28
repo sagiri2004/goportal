@@ -129,11 +129,13 @@ const mapReactions = (reactions: BackendMessage['reactions']): Reaction[] => {
 
 const mapMessage = (item: BackendMessage): UIMessage => {
   const fallbackAuthor = `user-${item.author_id.slice(0, 6)}`
-  const author = item.author?.username ?? fallbackAuthor
-  const { timestamp, date } = formatTimestamp(item.created_at)
-
   const contentType = item.content?.type ?? 'text/plain'
   const payload = item.content?.payload
+  const systemPayload = contentType === 'system/tournament' && payload && typeof payload === 'object'
+    ? (payload as { bot_name?: string })
+    : null
+  const author = systemPayload?.bot_name ?? item.author?.username ?? fallbackAuthor
+  const { timestamp, date } = formatTimestamp(item.created_at)
   const normalizedContent =
     typeof payload === 'string'
       ? payload

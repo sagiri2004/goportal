@@ -130,6 +130,51 @@ type GameRoomListFilter struct {
 	Offset int
 }
 
+type GameScoreSubmitInput struct {
+	GameID        string
+	SessionID     *string
+	LeaderboardID string
+	Score         int64
+	Metadata      json.RawMessage
+}
+
+type GameLeaderboardFilter struct {
+	GameID        string
+	LeaderboardID string
+	Scope         string
+	ServerID      *string
+	ChannelID     *string
+	Limit         int
+	Offset        int
+}
+
+type GameLeaderboardEntry struct {
+	Rank             int64           `json:"rank"`
+	UserID           string          `json:"user_id"`
+	Username         string          `json:"username"`
+	AvatarURL        *string         `json:"avatar_url,omitempty"`
+	Score            int64           `json:"score"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	AchievedAt       int64           `json:"achieved_at"`
+	CurrentUserEntry bool            `json:"current_user_entry"`
+}
+
+type GameLeaderboardResult struct {
+	GameID        string                 `json:"game_id"`
+	LeaderboardID string                 `json:"leaderboard_id"`
+	Scope         string                 `json:"scope"`
+	ServerID      *string                `json:"server_id,omitempty"`
+	Entries       []GameLeaderboardEntry `json:"entries"`
+	Me            *GameLeaderboardEntry  `json:"me,omitempty"`
+}
+
+type GameScoreSubmitResult struct {
+	Accepted bool                  `json:"accepted"`
+	Entry    models.GameScoreEntry `json:"entry"`
+	Global   *GameLeaderboardEntry `json:"global,omitempty"`
+	Server   *GameLeaderboardEntry `json:"server,omitempty"`
+}
+
 type GameService interface {
 	CreateGame(ctx context.Context, actorID string, input GameCreateInput) (*models.UserGame, error)
 	CreateSystemGame(ctx context.Context, actorID string, input GameCreateInput) (*models.UserGame, error)
@@ -152,6 +197,8 @@ type GameService interface {
 	CreatePlaySession(ctx context.Context, actorID, gameID string) (*GamePlaySession, error)
 	StartSession(ctx context.Context, actorID string, input GameSessionStartInput) (*models.GameSession, error)
 	RecordEvent(ctx context.Context, actorID string, input GameEventInput) (*models.GameEvent, error)
+	SubmitScore(ctx context.Context, actorID string, input GameScoreSubmitInput) (*GameScoreSubmitResult, error)
+	GetLeaderboard(ctx context.Context, actorID string, filter GameLeaderboardFilter) (*GameLeaderboardResult, error)
 	ShareToChannel(ctx context.Context, actorID string, input GameShareInput) error
 	CreateRoom(ctx context.Context, actorID string, input GameRoomCreateInput) (*GameRoomResponse, error)
 	ListOpenRooms(ctx context.Context, actorID string, filter GameRoomListFilter) ([]GameRoomResponse, error)

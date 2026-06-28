@@ -5,6 +5,7 @@ import (
 	"github.com/sagiri2004/goportal/pkg/middlewares"
 	"github.com/sagiri2004/goportal/pkg/realtime"
 	v1Router "github.com/sagiri2004/goportal/pkg/routers/v1"
+	"os"
 	"time"
 
 	"github.com/sagiri2004/goportal/global"
@@ -41,6 +42,7 @@ func InitRouter() *gin.Engine {
 	r.Use(middlewares.ErrorMiddleware())
 	r.Static("/uploads", "./uploads")
 	r.Static("/game-content", "./uploads/games")
+	r.Static("/system-games", resolveStaticDir("system-games", "backend/system-games"))
 	if global.RealtimeHub == nil {
 		global.RealtimeHub = realtime.NewHub()
 	}
@@ -54,4 +56,16 @@ func InitRouter() *gin.Engine {
 	v1Router.RegisterRoutes(api)
 
 	return r
+}
+
+func resolveStaticDir(candidates ...string) string {
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	if len(candidates) == 0 {
+		return "."
+	}
+	return candidates[0]
 }

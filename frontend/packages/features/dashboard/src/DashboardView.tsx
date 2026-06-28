@@ -9,6 +9,7 @@ import {
   Hash,
   Image,
   Loader2,
+  Megaphone,
   MoreHorizontal,
   Plus,
   Reply,
@@ -279,10 +280,13 @@ const mapSocketPayloadToMessage = (
     return null
   }
 
-  const author = payload?.author?.username ?? `user-${String(authorId).slice(0, 6)}`
   const { timestamp, date } = formatSocketTimestamp(payload?.created_at ?? envelopeTimestamp)
   const contentType = payload?.content?.type ?? 'text/plain'
   const rawContentPayload = payload?.content?.payload ?? payload?.content ?? ''
+  const systemPayload = contentType === 'system/tournament' && rawContentPayload && typeof rawContentPayload === 'object'
+    ? (rawContentPayload as { bot_name?: string })
+    : null
+  const author = systemPayload?.bot_name ?? payload?.author?.username ?? `user-${String(authorId).slice(0, 6)}`
   const normalizedContent =
     typeof rawContentPayload === 'string'
       ? rawContentPayload
@@ -316,9 +320,38 @@ const mapSocketPayloadToMessage = (
           messageId: payload.reply_to.message_id ?? payload.reply_to.id ?? '',
           authorName: payload.reply_to.author_name ?? payload.reply_to.author_id ?? 'unknown',
           content: payload.reply_to.content ?? '',
-        }
+    }
       : undefined,
   }
+}
+
+const isLocalEchoOfMessage = (candidate: ChatMessage, message: ChatMessage): boolean =>
+  candidate.id.startsWith('local-') &&
+  candidate.authorId === message.authorId &&
+  candidate.content === message.content &&
+  (candidate.replyTo?.messageId ?? null) === (message.replyTo?.messageId ?? null)
+
+const reconcileMessages = (current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] => {
+  let next = [...current]
+  for (const message of incoming) {
+    const existingIndex = next.findIndex((item) => item.id === message.id)
+    if (existingIndex !== -1) {
+      next[existingIndex] = {
+        ...next[existingIndex],
+        ...message,
+      }
+      continue
+    }
+
+    const localEchoIndex = next.findIndex((item) => isLocalEchoOfMessage(item, message))
+    if (localEchoIndex !== -1) {
+      next[localEchoIndex] = message
+      continue
+    }
+
+    next.push(message)
+  }
+  return next
 }
 
 export const DashboardView: React.FC = () => {
@@ -564,9 +597,7 @@ export const DashboardView: React.FC = () => {
             if (current.length === page.items.length && current[current.length - 1]?.id === page.items[page.items.length - 1]?.id) {
               return prev
             }
-            const merged = [...current, ...page.items].filter(
-              (message, index, all) => all.findIndex((candidate) => candidate.id === message.id) === index
-            )
+            const merged = reconcileMessages(current, page.items)
             return {
               ...prev,
               [activeChannelId]: merged,
@@ -820,12 +851,16 @@ export const DashboardView: React.FC = () => {
         setMessagesByChannel((prev) => {
           const current = prev[channelId] ?? []
           if (current.some((item) => item.id === message.id)) {
-            return prev
+            return {
+              ...prev,
+              [channelId]: reconcileMessages(current, [message]),
+            }
           }
 
+          const merged = reconcileMessages(current, [message])
           const next = {
             ...prev,
-            [channelId]: [...current, message],
+            [channelId]: merged,
           }
 
           if (activeChannelIdRef.current !== channelId) {
@@ -1390,10 +1425,9 @@ export const DashboardView: React.FC = () => {
           : message
         setMessagesByChannel((prev) => {
           const currentMessages = prev[activeChannelKey] ?? []
-          const withoutOptimistic = currentMessages.filter((item) => item.id !== optimisticId)
           return {
             ...prev,
-            [activeChannelKey]: [...withoutOptimistic, nextMessage],
+            [activeChannelKey]: reconcileMessages(currentMessages, [nextMessage]),
           }
         })
         setPendingMessageIds((prev) => {
@@ -1562,6 +1596,24 @@ export const DashboardView: React.FC = () => {
   }
 
   const renderMessageContent = (msg: ChatMessage) => {
+    if (msg.contentType === 'system/tournament') {
+      const payload = msg.contentData && typeof msg.contentData === 'object'
+        ? (msg.contentData as { text?: string; bot_name?: string; tournament_name?: string })
+        : null
+      const text = payload?.text ?? msg.content
+      const botName = payload?.bot_name ?? 'Tournament Bot'
+
+      return (
+        <div className="mt-1 max-w-2xl rounded-md border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-50">
+          <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-cyan-200">
+            <Megaphone className="h-3.5 w-3.5" />
+            <span>{botName}</span>
+          </div>
+          <div className="leading-relaxed">{text}</div>
+        </div>
+      )
+    }
+
     if (msg.contentType !== 'game/share' || !msg.gameShare) {
       return <TextContent content={msg.content} className="text-foreground" />
     }
@@ -1620,9 +1672,9 @@ export const DashboardView: React.FC = () => {
         onClick={markActiveChannelAsRead}
         onFocus={markActiveChannelAsRead}
         onMouseEnter={markActiveChannelAsRead}
-        className="flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
+        className="flex-1 overflow-y-auto px-0 py-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
       >
-        <div className="py-4">
+        <div className="px-6 py-5">
           <Hash className="w-16 h-16 p-3 rounded-full bg-muted text-muted-foreground mb-4" />
           <h2 className="text-2xl font-bold text-foreground">
             Welcome to #{activeChannel?.name ?? 'general'}
@@ -1632,7 +1684,7 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 my-4">
+        <div className="mx-6 my-4 flex items-center gap-3">
           <Separator className="flex-1" />
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             Today
@@ -1640,7 +1692,7 @@ export const DashboardView: React.FC = () => {
           <Separator className="flex-1" />
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-0.5 pb-2">
           {grouped.map((msg) => {
             const username = msg.author ?? 'unknown'
             const avatarLetter = msg.avatarInitials ?? username[0]?.toUpperCase() ?? '?'
@@ -1666,12 +1718,12 @@ export const DashboardView: React.FC = () => {
                 <div
                   key={msg.id}
                   className={cn(
-                    'relative group overflow-visible',
-                    hasPersonalMention ? 'border-l-2 border-indigo-500 pl-1' : ''
+                    'relative group overflow-visible px-4 py-0.5',
+                    hasPersonalMention ? 'border-l-2 border-indigo-500 bg-indigo-500/5' : ''
                   )}
                 >
                   {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}
-                  <div className="flex gap-3 px-2 py-1 rounded-md hover:bg-white/5">
+                  <div className="flex gap-3 rounded-md px-2 py-1.5 hover:bg-white/5">
                     {msg.avatarUrl ? (
                       <img
                         src={msg.avatarUrl}
@@ -1687,8 +1739,8 @@ export const DashboardView: React.FC = () => {
                         {avatarLetter}
                       </div>
                     )}
-                    <div className="min-w-0">
-                      <div className="flex items-baseline">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                         <span className={`text-sm font-semibold ${msg.authorColor ?? 'text-foreground'}`}>
                           {username}
                         </span>
@@ -1788,8 +1840,8 @@ export const DashboardView: React.FC = () => {
               <div
                 key={msg.id}
                 className={cn(
-                  'relative group overflow-visible pl-[52px] py-0.5 rounded-md hover:bg-white/5',
-                  hasPersonalMention ? 'border-l-2 border-indigo-500' : ''
+                  'relative group overflow-visible mx-4 rounded-md py-0.5 pl-[64px] pr-4 hover:bg-white/5',
+                  hasPersonalMention ? 'border-l-2 border-indigo-500 bg-indigo-500/5' : ''
                 )}
               >
                 {msg.replyTo && <ReplyPreview replyTo={msg.replyTo} />}

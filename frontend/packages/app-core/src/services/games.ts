@@ -124,6 +124,48 @@ export type GameEventDTO = {
   updated_at: number
 }
 
+export type GameLeaderboardScope = 'global' | 'server'
+
+export type GameLeaderboardEntryDTO = {
+  rank: number
+  user_id: string
+  username: string
+  avatar_url?: string
+  score: number
+  metadata?: unknown
+  achieved_at: number
+  current_user_entry: boolean
+}
+
+export type GameLeaderboardDTO = {
+  game_id: string
+  leaderboard_id: string
+  scope: GameLeaderboardScope
+  server_id?: string
+  entries: GameLeaderboardEntryDTO[]
+  me?: GameLeaderboardEntryDTO
+}
+
+export type GameScoreSubmitDTO = {
+  accepted: boolean
+  entry: {
+    id: string
+    game_id: string
+    leaderboard_id: string
+    user_id: string
+    session_id?: string
+    event_id?: string
+    server_id?: string
+    channel_id?: string
+    score: number
+    metadata?: unknown
+    created_at: number
+    updated_at: number
+  }
+  global?: GameLeaderboardEntryDTO
+  server?: GameLeaderboardEntryDTO
+}
+
 export type GameRoomMemberDTO = {
   id: string
   room_id: string
@@ -354,6 +396,29 @@ export const createGameEvent = async (
     payload?: unknown
   },
 ): Promise<GameEventDTO> => apiClient.post(`/api/v1/games/${gameId}/sessions/${sessionId}/events`, payload)
+
+export const submitGameScore = async (
+  gameId: string,
+  payload: {
+    session_id?: string
+    leaderboard_id?: string
+    score: number
+    metadata?: unknown
+  },
+): Promise<GameScoreSubmitDTO> => apiClient.post(`/api/v1/games/${gameId}/scores`, payload)
+
+export const getGameLeaderboard = async (
+  gameId: string,
+  leaderboardId: string,
+  params: {
+    scope?: GameLeaderboardScope
+    server_id?: string
+    channel_id?: string
+    limit?: number
+    offset?: number
+  } = {},
+): Promise<GameLeaderboardDTO> =>
+  apiClient.get(`/api/v1/games/${gameId}/leaderboards/${encodeURIComponent(leaderboardId || 'default')}${toSearchParams(params)}`)
 
 export const shareGameToChannel = async (
   gameId: string,

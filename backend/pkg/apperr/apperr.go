@@ -115,6 +115,7 @@ var registry = map[string]errDef{
 	"GAME_ASSET_REQUIRED":                  {http.StatusBadRequest, "Game assets are required: icon, capsule, hero and screenshots"},
 	"GAME_SESSION_NOT_FOUND":               {http.StatusNotFound, "Game session not found"},
 	"GAME_EVENT_NOT_FOUND":                 {http.StatusNotFound, "Game event not found"},
+	"GAME_LEADERBOARD_ENTRY_NOT_FOUND":     {http.StatusNotFound, "Game leaderboard entry not found"},
 	"GAME_ROOM_NOT_FOUND":                  {http.StatusNotFound, "Game room not found"},
 	"GAME_ROOM_CLOSED":                     {http.StatusBadRequest, "Game room is closed"},
 	"GAME_ROOM_FULL":                       {http.StatusBadRequest, "Game room is full"},

@@ -23,12 +23,18 @@ type TournamentCreateInput struct {
 }
 
 type TournamentUpdateInput struct {
-	Name                 *string
-	Description          *string
-	Rules                *string
-	PrizePool            *string
-	MaxParticipants      *int
-	RegistrationDeadline *int64
+	Name                           *string
+	Description                    *string
+	Rules                          *string
+	PrizePool                      *string
+	MaxParticipants                *int
+	RegistrationDeadline           *int64
+	RecordingEnabled               *bool
+	RecordTeamA                    *bool
+	RecordTeamB                    *bool
+	RecordReferee                  *bool
+	RecordLivestream               *bool
+	AutoStartRecordingOnMatchStart *bool
 }
 
 type TournamentListInput struct {
@@ -91,6 +97,12 @@ type TournamentObserverTokenBundle struct {
 	Spectator *TournamentObserverToken `json:"spectator,omitempty"`
 }
 
+type TournamentCloseLiveResult struct {
+	Recordings     []models.Recording
+	StoppedStreams []models.Recording
+	Workspace      *models.TournamentMatchWorkspace
+}
+
 type TournamentService interface {
 	CreateTournament(ctx context.Context, actorID string, input TournamentCreateInput) (*models.Tournament, error)
 	ListTournaments(ctx context.Context, actorID string, input TournamentListInput) (*TournamentListResult, error)
@@ -130,5 +142,6 @@ type TournamentService interface {
 	ProvisionMatchWorkspace(ctx context.Context, actorID, tournamentID, matchID string) (*models.TournamentMatchWorkspace, error)
 	ListMatchWorkspaces(ctx context.Context, actorID, tournamentID string) ([]models.TournamentMatchWorkspace, error)
 	StartMatch(ctx context.Context, actorID, tournamentID, matchID string) (*repositories.TournamentMatchResolved, *models.TournamentMatchWorkspace, error)
+	CloseMatchLive(ctx context.Context, actorID, tournamentID, matchID string) (*TournamentCloseLiveResult, error)
 	GenerateMatchObserverTokens(ctx context.Context, actorID, tournamentID, matchID string) (*TournamentObserverTokenBundle, error)
 }

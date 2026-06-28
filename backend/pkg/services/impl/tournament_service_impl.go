@@ -32,12 +32,16 @@ const (
 )
 
 type tournamentService struct {
-	repo        repositories.TournamentRepository
-	serverRepo  repositories.ServerRepository
-	channelRepo repositories.ChannelRepository
-	userRepo    repositories.UserRepository
-	liveKitSvc  services.LiveKitService
-	publisher   message.Publisher
+	repo          repositories.TournamentRepository
+	serverRepo    repositories.ServerRepository
+	channelRepo   repositories.ChannelRepository
+	userRepo      repositories.UserRepository
+	messageRepo   repositories.MessageRepository
+	recordingRepo repositories.RecordingRepository
+	liveKitSvc    services.LiveKitService
+	egressSvc     services.EgressService
+	notifySvc     services.NotificationService
+	publisher     message.Publisher
 }
 
 func NewTournamentService(
@@ -45,16 +49,24 @@ func NewTournamentService(
 	serverRepo repositories.ServerRepository,
 	channelRepo repositories.ChannelRepository,
 	userRepo repositories.UserRepository,
+	messageRepo repositories.MessageRepository,
+	recordingRepo repositories.RecordingRepository,
 	liveKitSvc services.LiveKitService,
+	egressSvc services.EgressService,
+	notifySvc services.NotificationService,
 	publisher message.Publisher,
 ) services.TournamentService {
 	return &tournamentService{
-		repo:        repo,
-		serverRepo:  serverRepo,
-		channelRepo: channelRepo,
-		userRepo:    userRepo,
-		liveKitSvc:  liveKitSvc,
-		publisher:   publisher,
+		repo:          repo,
+		serverRepo:    serverRepo,
+		channelRepo:   channelRepo,
+		userRepo:      userRepo,
+		messageRepo:   messageRepo,
+		recordingRepo: recordingRepo,
+		liveKitSvc:    liveKitSvc,
+		egressSvc:     egressSvc,
+		notifySvc:     notifySvc,
+		publisher:     publisher,
 	}
 }
 
@@ -89,20 +101,26 @@ func (s *tournamentService) CreateTournament(ctx context.Context, actorID string
 		checkIn = *input.CheckInDurationMinutes
 	}
 	t := &models.Tournament{
-		ServerID:               input.ServerID,
-		Name:                   input.Name,
-		Description:            input.Description,
-		Game:                   input.Game,
-		Format:                 input.Format,
-		Status:                 models.TournamentStatusDraft,
-		MaxParticipants:        input.MaxParticipants,
-		ParticipantType:        input.ParticipantType,
-		TeamSize:               input.TeamSize,
-		RegistrationDeadline:   input.RegistrationDeadline,
-		CheckInDurationMinutes: checkIn,
-		PrizePool:              input.PrizePool,
-		Rules:                  input.Rules,
-		CreatedBy:              actorID,
+		ServerID:                       input.ServerID,
+		Name:                           input.Name,
+		Description:                    input.Description,
+		Game:                           input.Game,
+		Format:                         input.Format,
+		Status:                         models.TournamentStatusDraft,
+		MaxParticipants:                input.MaxParticipants,
+		ParticipantType:                input.ParticipantType,
+		TeamSize:                       input.TeamSize,
+		RegistrationDeadline:           input.RegistrationDeadline,
+		CheckInDurationMinutes:         checkIn,
+		PrizePool:                      input.PrizePool,
+		Rules:                          input.Rules,
+		CreatedBy:                      actorID,
+		RecordingEnabled:               false,
+		RecordTeamA:                    true,
+		RecordTeamB:                    true,
+		RecordReferee:                  false,
+		RecordLivestream:               false,
+		AutoStartRecordingOnMatchStart: true,
 	}
 	if err := s.repo.CreateTournament(ctx, t); err != nil {
 		return nil, err
@@ -242,6 +260,86 @@ func slugifyTournamentName(raw string) string {
 	return slug
 }
 
+func (s *tournamentService) postTournamentSystemMessage(ctx context.Context, t *models.Tournament, eventType, text string, data map[string]any) {
+	if s.messageRepo == nil || t == nil {
+		return
+	}
+	if err := s.ensureTournamentGeneralChannel(ctx, t); err != nil {
+		return
+	}
+	if t.TournamentGeneralChannelID == nil || strings.TrimSpace(*t.TournamentGeneralChannelID) == "" {
+		return
+	}
+	authorID := strings.TrimSpace(t.CreatedBy)
+	if authorID == "" {
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	channelID := strings.TrimSpace(*t.TournamentGeneralChannelID)
+	payload := map[string]any{
+		"event_type":      eventType,
+		"text":            text,
+		"bot_name":        "Tournament Bot",
+		"tournament_id":   t.ID,
+		"tournament_name": t.Name,
+		"server_id":       t.ServerID,
+	}
+	for key, value := range data {
+		payload[key] = value
+	}
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	content := models.MessageContentEnvelope{
+		Type:     "system/tournament",
+		Payload:  json.RawMessage(rawPayload),
+		Encoding: "utf-8",
+	}
+	rawContent, err := json.Marshal(content)
+	if err != nil {
+		return
+	}
+	msg := &models.Message{
+		ChannelID: channelID,
+		AuthorID:  authorID,
+		Content:   rawContent,
+	}
+	if err := s.messageRepo.Create(ctx, msg, nil); err != nil {
+		return
+	}
+	_ = s.messageRepo.IncrementUnreadCounts(ctx, channelID, nil)
+	if s.publisher == nil {
+		return
+	}
+	event := models.ChatMessageCreatedEvent{
+		EventID:    uuid.NewString(),
+		EventType:  "CHAT_MESSAGE_CREATED",
+		OccurredAt: time.Now().UTC().Format(time.RFC3339),
+		ServerID:   t.ServerID,
+		ChannelID:  channelID,
+		AuthorID:   authorID,
+		MessageID:  msg.ID,
+		Content:    content,
+		Author: &models.EventAuthor{
+			ID:       authorID,
+			Username: "Tournament Bot",
+		},
+		CreatedAt: msg.CreatedAt,
+		UpdatedAt: msg.UpdatedAt,
+	}
+	rawEvent, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	wm := message.NewMessage(event.EventID, rawEvent)
+	wm.SetContext(ctx)
+	_ = s.publisher.Publish(chatMessageCreatedTopic, wm)
+}
+
 func (s *tournamentService) UpdateTournament(ctx context.Context, actorID, tournamentID string, input services.TournamentUpdateInput) (*models.Tournament, error) {
 	t, err := s.mustGetTournamentForUpdate(ctx, actorID, tournamentID)
 	if err != nil {
@@ -277,6 +375,24 @@ func (s *tournamentService) UpdateTournament(ctx context.Context, actorID, tourn
 	}
 	if input.RegistrationDeadline != nil {
 		t.RegistrationDeadline = input.RegistrationDeadline
+	}
+	if input.RecordingEnabled != nil {
+		t.RecordingEnabled = *input.RecordingEnabled
+	}
+	if input.RecordTeamA != nil {
+		t.RecordTeamA = *input.RecordTeamA
+	}
+	if input.RecordTeamB != nil {
+		t.RecordTeamB = *input.RecordTeamB
+	}
+	if input.RecordReferee != nil {
+		t.RecordReferee = *input.RecordReferee
+	}
+	if input.RecordLivestream != nil {
+		t.RecordLivestream = *input.RecordLivestream
+	}
+	if input.AutoStartRecordingOnMatchStart != nil {
+		t.AutoStartRecordingOnMatchStart = *input.AutoStartRecordingOnMatchStart
 	}
 	if err := s.repo.UpdateTournament(ctx, t); err != nil {
 		return nil, err
@@ -322,6 +438,9 @@ func (s *tournamentService) UpdateTournamentStatus(ctx context.Context, actorID,
 	if err := s.repo.UpdateTournament(ctx, t); err != nil {
 		return nil, err
 	}
+	if status == models.TournamentStatusCompleted {
+		_ = s.closeTournamentLiveWorkspaces(ctx, t, actorID)
+	}
 	s.publishEvent(ctx, tournamentStatusChangedTopic, map[string]any{
 		"event_id":      uuid.NewString(),
 		"event_type":    "TOURNAMENT_STATUS_CHANGED",
@@ -330,6 +449,17 @@ func (s *tournamentService) UpdateTournamentStatus(ctx context.Context, actorID,
 		"server_id":     t.ServerID,
 		"status":        t.Status,
 	})
+	s.notifyTournamentParticipants(ctx, t, actorID, "TOURNAMENT_STATUS_CHANGED", tournamentStatusNotificationTitle(t.Status), tournamentStatusNotificationBody(t), map[string]any{
+		"status": t.Status,
+	})
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_STATUS_CHANGED", tournamentStatusSystemMessage(t), map[string]any{
+		"status": t.Status,
+	})
+	if t.Status == models.TournamentStatusCheckIn {
+		s.notifyTournamentParticipantsByStatus(ctx, t, actorID, true, []string{models.TournamentParticipantStatusRegistered}, "TOURNAMENT_CHECK_IN_OPENED", "Da den giai doan check-in", fmt.Sprintf("%s da mo check-in. Hay vao giai dau de xac nhan tham gia.", t.Name), map[string]any{
+			"status": t.Status,
+		})
+	}
 	return t, nil
 }
 
@@ -377,6 +507,14 @@ func (s *tournamentService) RegisterParticipant(ctx context.Context, actorID, to
 		"event_type":     "TOURNAMENT_PARTICIPANT_JOINED",
 		"occurred_at":    time.Now().UTC().Format(time.RFC3339),
 		"tournament_id":  t.ID,
+		"participant_id": p.ID,
+		"user_id":        actorID,
+	})
+	s.notifyTournamentUser(ctx, t, t.CreatedBy, "TOURNAMENT_PARTICIPANT_JOINED", "Co nguoi tham gia giai dau", fmt.Sprintf("%s vua dang ky tham gia %s.", participantDisplayName(out), t.Name), map[string]any{
+		"participant_id": p.ID,
+		"user_id":        actorID,
+	}, actorID)
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_PARTICIPANT_JOINED", fmt.Sprintf("%s vua dang ky tham gia giai dau.", participantDisplayName(out)), map[string]any{
 		"participant_id": p.ID,
 		"user_id":        actorID,
 	})
@@ -442,7 +580,17 @@ func (s *tournamentService) BulkAddParticipants(ctx context.Context, actorID, to
 		if resolved, err := s.repo.FindParticipantByID(ctx, t.ID, p.ID); err == nil {
 			created = append(created, *resolved)
 			currentCount++
+			s.notifyTournamentUser(ctx, t, userID, "TOURNAMENT_PARTICIPANT_ASSIGNED", "Ban duoc them vao giai dau", fmt.Sprintf("Ban da duoc them vao %s.", t.Name), map[string]any{
+				"participant_id": p.ID,
+				"assigned_by":    actorID,
+			}, actorID)
 		}
+	}
+	if len(created) > 0 {
+		s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_PARTICIPANT_ASSIGNED", fmt.Sprintf("%d nguoi choi da duoc them vao giai dau.", len(created)), map[string]any{
+			"count":       len(created),
+			"assigned_by": actorID,
+		})
 	}
 	return created, nil
 }
@@ -479,6 +627,14 @@ func (s *tournamentService) CheckInParticipant(ctx context.Context, actorID, tou
 	if err := s.repo.UpdateParticipant(ctx, &p.Participant); err != nil {
 		return nil, err
 	}
+	if p.User != nil {
+		s.notifyTournamentUser(ctx, t, p.User.ID, "TOURNAMENT_CHECKED_IN", "Da check-in giai dau", fmt.Sprintf("Ban da check-in thanh cong cho %s.", t.Name), map[string]any{
+			"participant_id": p.Participant.ID,
+		}, actorID)
+	}
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_CHECKED_IN", fmt.Sprintf("%s da check-in.", participantDisplayName(p)), map[string]any{
+		"participant_id": p.Participant.ID,
+	})
 	return s.repo.FindParticipantByID(ctx, t.ID, p.Participant.ID)
 }
 
@@ -545,6 +701,10 @@ func (s *tournamentService) CreateTeam(ctx context.Context, actorID, tournamentI
 			RegisteredAt: time.Now().Unix(),
 		})
 	}
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_TEAM_CREATED", fmt.Sprintf("Doi %s vua dang ky tham gia giai dau.", team.Name), map[string]any{
+		"team_id":   team.ID,
+		"team_name": team.Name,
+	})
 	return team, nil
 }
 
@@ -582,11 +742,25 @@ func (s *tournamentService) AddTeamMember(ctx context.Context, actorID, tourname
 	if userID == "" {
 		return apperr.E("MISSING_FIELDS", nil)
 	}
-	return s.repo.AddTeamMember(ctx, &models.TournamentTeamMember{
+	if err := s.repo.AddTeamMember(ctx, &models.TournamentTeamMember{
 		TeamID:   team.ID,
 		UserID:   userID,
 		JoinedAt: time.Now().Unix(),
+	}); err != nil {
+		return err
+	}
+	s.notifyTournamentUser(ctx, t, userID, "TOURNAMENT_TEAM_MEMBER_ASSIGNED", "Ban duoc them vao doi thi dau", fmt.Sprintf("Ban da duoc them vao doi %s trong %s.", team.Name, t.Name), map[string]any{
+		"team_id":     team.ID,
+		"team_name":   team.Name,
+		"assigned_by": actorID,
+	}, actorID)
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_TEAM_MEMBER_ASSIGNED", fmt.Sprintf("Mot thanh vien moi da duoc them vao doi %s.", team.Name), map[string]any{
+		"team_id":     team.ID,
+		"team_name":   team.Name,
+		"user_id":     userID,
+		"assigned_by": actorID,
 	})
+	return nil
 }
 
 func (s *tournamentService) RemoveTeamMember(ctx context.Context, actorID, tournamentID, teamID, userID string) error {
@@ -672,7 +846,8 @@ func (s *tournamentService) UpdateMatchStatus(ctx context.Context, actorID, tour
 		return nil, err
 	}
 	if status == models.TournamentMatchStatusInProgress {
-		_, _ = s.ProvisionMatchWorkspace(ctx, actorID, t.ID, m.Match.ID)
+		workspace, _ := s.ProvisionMatchWorkspace(ctx, actorID, t.ID, m.Match.ID)
+		_ = s.autoStartMatchRecordings(ctx, actorID, t, &m.Match, workspace)
 		s.publishEvent(ctx, tournamentMatchStartedTopic, map[string]any{
 			"event_id":      uuid.NewString(),
 			"event_type":    "TOURNAMENT_MATCH_STARTED",
@@ -680,6 +855,14 @@ func (s *tournamentService) UpdateMatchStatus(ctx context.Context, actorID, tour
 			"tournament_id": t.ID,
 			"match_id":      m.Match.ID,
 		})
+		s.notifyMatchParticipants(ctx, t, &m.Match, actorID, "TOURNAMENT_MATCH_STARTED", "Tran dau da bat dau", fmt.Sprintf("Tran dau trong %s da bat dau.", t.Name), map[string]any{
+			"match_id": m.Match.ID,
+		})
+		s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_MATCH_STARTED", fmt.Sprintf("%s da bat dau.", matchDisplayName(&m.Match)), map[string]any{
+			"match_id": m.Match.ID,
+		})
+	} else if status == models.TournamentMatchStatusCompleted {
+		_ = s.closeMatchLiveIfPresent(ctx, t, &m.Match, actorID)
 	}
 	return s.repo.FindMatchByID(ctx, t.ID, m.Match.ID)
 }
@@ -819,6 +1002,7 @@ func (s *tournamentService) applyConfirmedResult(ctx context.Context, t *models.
 	if err := s.repo.UpdateMatch(ctx, match); err != nil {
 		return err
 	}
+	_ = s.closeMatchLiveIfPresent(ctx, t, match, "")
 	if match.Participant1ID != nil && *match.Participant1ID != winnerID {
 		if p, err := s.repo.FindParticipantByID(ctx, t.ID, *match.Participant1ID); err == nil {
 			p.Participant.Status = models.TournamentParticipantStatusEliminated
@@ -898,12 +1082,21 @@ func (s *tournamentService) applyConfirmedResult(ctx context.Context, t *models.
 		"match_id":      match.ID,
 		"winner_id":     winnerID,
 	})
+	s.notifyMatchParticipants(ctx, t, match, "", "TOURNAMENT_MATCH_COMPLETED", "Tran dau da ket thuc", fmt.Sprintf("Tran dau trong %s da co ket qua.", t.Name), map[string]any{
+		"match_id":  match.ID,
+		"winner_id": winnerID,
+	})
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_MATCH_COMPLETED", fmt.Sprintf("%s da ket thuc. Nguoi thang: %s.", matchDisplayName(match), s.participantNameByID(ctx, t, winnerID)), map[string]any{
+		"match_id":  match.ID,
+		"winner_id": winnerID,
+	})
 	s.publishEvent(ctx, tournamentBracketUpdatedTopic, map[string]any{
 		"event_id":      uuid.NewString(),
 		"event_type":    "TOURNAMENT_BRACKET_UPDATED",
 		"occurred_at":   time.Now().UTC().Format(time.RFC3339),
 		"tournament_id": t.ID,
 	})
+	s.notifyTournamentParticipants(ctx, t, "", "TOURNAMENT_BRACKET_UPDATED", "Nhanh dau da cap nhat", fmt.Sprintf("Nhanh dau cua %s vua duoc cap nhat.", t.Name), map[string]any{})
 	return nil
 }
 
@@ -1277,12 +1470,12 @@ func (s *tournamentService) ProvisionMatchWorkspace(ctx context.Context, actorID
 	}
 	livestreamID := livestream.ID
 	workspace := &models.TournamentMatchWorkspace{
-		TournamentID:        t.ID,
-		MatchID:             matchID,
-		ServerID:            t.ServerID,
-		CategoryChannelID:   category.ID,
-		TeamAChannelID:      teamA.ID,
-		TeamBChannelID:      teamB.ID,
+		TournamentID:      t.ID,
+		MatchID:           matchID,
+		ServerID:          t.ServerID,
+		CategoryChannelID: category.ID,
+		TeamAChannelID:    teamA.ID,
+		TeamBChannelID:    teamB.ID,
 		// Legacy DB columns kept for compatibility; caster/spectator channels are removed.
 		CasterChannelID:     referee.ID,
 		AdminChannelID:      referee.ID,
@@ -1304,7 +1497,30 @@ func (s *tournamentService) ListMatchWorkspaces(ctx context.Context, actorID, to
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListMatchWorkspaces(ctx, t.ID)
+	rows, err := s.repo.ListMatchWorkspaces(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	changed := false
+	for i := range rows {
+		if rows[i].ArchivedAt != nil {
+			continue
+		}
+		match, matchErr := s.repo.FindMatchByID(ctx, t.ID, rows[i].MatchID)
+		if matchErr != nil {
+			continue
+		}
+		if t.Status != models.TournamentStatusCompleted && match.Match.Status != models.TournamentMatchStatusCompleted {
+			continue
+		}
+		if _, closeErr := s.closeMatchLiveResources(ctx, t, &match.Match, &rows[i], actorID, false); closeErr == nil {
+			changed = true
+		}
+	}
+	if changed {
+		return s.repo.ListMatchWorkspaces(ctx, t.ID)
+	}
+	return rows, nil
 }
 
 func (s *tournamentService) createChannel(ctx context.Context, serverID string, parentID *string, channelType, name string, private bool) (*models.Channel, error) {
@@ -1443,6 +1659,7 @@ func (s *tournamentService) StartMatch(ctx context.Context, actorID, tournamentI
 	if err != nil {
 		return nil, nil, err
 	}
+	_ = s.autoStartMatchRecordings(ctx, actorID, t, &m.Match, workspace)
 	s.publishEvent(ctx, tournamentMatchStartedTopic, map[string]any{
 		"event_id":              uuid.NewString(),
 		"event_type":            "TOURNAMENT_MATCH_STARTED",
@@ -1451,11 +1668,298 @@ func (s *tournamentService) StartMatch(ctx context.Context, actorID, tournamentI
 		"match_id":              m.Match.ID,
 		"screen_share_required": true,
 	})
+	s.notifyMatchParticipants(ctx, t, &m.Match, actorID, "TOURNAMENT_MATCH_STARTED", "Tran dau da bat dau", fmt.Sprintf("Tran dau trong %s da bat dau.", t.Name), map[string]any{
+		"match_id": m.Match.ID,
+	})
+	s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_MATCH_STARTED", fmt.Sprintf("%s da bat dau.", matchDisplayName(&m.Match)), map[string]any{
+		"match_id": m.Match.ID,
+	})
 	updated, err := s.repo.FindMatchByID(ctx, t.ID, m.Match.ID)
 	if err != nil {
 		return nil, nil, err
 	}
 	return updated, workspace, nil
+}
+
+func (s *tournamentService) autoStartMatchRecordings(
+	ctx context.Context,
+	actorID string,
+	t *models.Tournament,
+	match *models.TournamentMatch,
+	workspace *models.TournamentMatchWorkspace,
+) error {
+	if t == nil || match == nil || workspace == nil {
+		return nil
+	}
+	if !t.RecordingEnabled || !t.AutoStartRecordingOnMatchStart {
+		return nil
+	}
+	type source struct {
+		role      string
+		channelID string
+		enabled   bool
+	}
+	sources := []source{
+		{role: "team-a", channelID: workspace.TeamAChannelID, enabled: t.RecordTeamA},
+		{role: "team-b", channelID: workspace.TeamBChannelID, enabled: t.RecordTeamB},
+		{role: "referee", channelID: workspace.RefereeChannelID, enabled: t.RecordReferee},
+	}
+	if workspace.LivestreamChannelID != nil {
+		sources = append(sources, source{role: "livestream", channelID: *workspace.LivestreamChannelID, enabled: t.RecordLivestream})
+	}
+
+	for _, item := range sources {
+		if !item.enabled || strings.TrimSpace(item.channelID) == "" {
+			continue
+		}
+		if existing, err := s.recordingRepo.FindActiveByChannelAndType(ctx, item.channelID, models.RecordingTypeRoomComposite); err == nil && existing != nil {
+			_ = s.createMatchRecordingRuntime(ctx, t.ID, match.ID, item.channelID, item.role, actorID, existing, nil)
+			continue
+		} else if !isAppErrCode(err, "RECORDING_NOT_FOUND") {
+			errText := err.Error()
+			_ = s.createMatchRecordingRuntime(ctx, t.ID, match.ID, item.channelID, item.role, actorID, nil, &errText)
+			continue
+		}
+
+		info, err := s.egressSvc.StartRoomCompositeRecording(ctx, item.channelID)
+		if err != nil {
+			errText := err.Error()
+			_ = s.createMatchRecordingRuntime(ctx, t.ID, match.ID, item.channelID, item.role, actorID, nil, &errText)
+			continue
+		}
+		now := time.Now().Unix()
+		recording := &models.Recording{
+			ChannelID: item.channelID,
+			ServerID:  t.ServerID,
+			StartedBy: actorID,
+			EgressID:  info.GetEgressId(),
+			Type:      models.RecordingTypeRoomComposite,
+			Status:    models.RecordingStatusActive,
+			StartedAt: now,
+		}
+		if err := s.recordingRepo.Create(ctx, recording); err != nil {
+			errText := err.Error()
+			_ = s.createMatchRecordingRuntime(ctx, t.ID, match.ID, item.channelID, item.role, actorID, nil, &errText)
+			continue
+		}
+		_ = s.createMatchRecordingRuntime(ctx, t.ID, match.ID, item.channelID, item.role, actorID, recording, nil)
+	}
+	return nil
+}
+
+func (s *tournamentService) createMatchRecordingRuntime(
+	ctx context.Context,
+	tournamentID string,
+	matchID string,
+	channelID string,
+	sourceRole string,
+	startedBy string,
+	recording *models.Recording,
+	startErr *string,
+) error {
+	now := time.Now().Unix()
+	status := models.RecordingStatusActive
+	var recordingID *string
+	startedAt := now
+	if recording != nil {
+		recordingID = &recording.ID
+		startedAt = recording.StartedAt
+		status = recording.Status
+	}
+	if startErr != nil {
+		status = models.RecordingStatusFailed
+	}
+	return s.repo.CreateMatchRecording(ctx, &models.TournamentMatchRecording{
+		TournamentID: tournamentID,
+		MatchID:      matchID,
+		ChannelID:    channelID,
+		SourceRole:   sourceRole,
+		RecordingID:  recordingID,
+		Status:       status,
+		StartedBy:    startedBy,
+		StartedAt:    startedAt,
+		Error:        startErr,
+	})
+}
+
+func (s *tournamentService) CloseMatchLive(ctx context.Context, actorID, tournamentID, matchID string) (*services.TournamentCloseLiveResult, error) {
+	t, err := s.mustGetTournamentForLiveClose(ctx, actorID, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	match, err := s.repo.FindMatchByID(ctx, t.ID, matchID)
+	if err != nil {
+		return nil, err
+	}
+	workspace, err := s.repo.FindMatchWorkspace(ctx, t.ID, matchID)
+	if err != nil {
+		return nil, err
+	}
+	return s.closeMatchLiveResources(ctx, t, &match.Match, workspace, actorID, true)
+}
+
+func (s *tournamentService) closeMatchLiveIfPresent(ctx context.Context, t *models.Tournament, match *models.TournamentMatch, actorID string) error {
+	if t == nil || match == nil {
+		return nil
+	}
+	workspace, err := s.repo.FindMatchWorkspace(ctx, t.ID, match.ID)
+	if err != nil {
+		if isAppErrCode(err, "TOURNAMENT_WORKSPACE_NOT_FOUND") {
+			return nil
+		}
+		return err
+	}
+	_, err = s.closeMatchLiveResources(ctx, t, match, workspace, actorID, false)
+	return err
+}
+
+func (s *tournamentService) closeTournamentLiveWorkspaces(ctx context.Context, t *models.Tournament, actorID string) error {
+	if t == nil {
+		return nil
+	}
+	workspaces, err := s.repo.ListMatchWorkspaces(ctx, t.ID)
+	if err != nil {
+		return err
+	}
+	for i := range workspaces {
+		match, matchErr := s.repo.FindMatchByID(ctx, t.ID, workspaces[i].MatchID)
+		if matchErr != nil {
+			continue
+		}
+		_, _ = s.closeMatchLiveResources(ctx, t, &match.Match, &workspaces[i], actorID, false)
+	}
+	return nil
+}
+
+func (s *tournamentService) closeMatchLiveResources(
+	ctx context.Context,
+	t *models.Tournament,
+	match *models.TournamentMatch,
+	workspace *models.TournamentMatchWorkspace,
+	actorID string,
+	strict bool,
+) (*services.TournamentCloseLiveResult, error) {
+	result := &services.TournamentCloseLiveResult{
+		Recordings:     []models.Recording{},
+		StoppedStreams: []models.Recording{},
+	}
+	if workspace == nil {
+		return result, nil
+	}
+	seenChannels := map[string]struct{}{}
+	for _, channelID := range []string{
+		workspace.TeamAChannelID,
+		workspace.TeamBChannelID,
+		workspace.CasterChannelID,
+		workspace.AdminChannelID,
+		workspace.RefereeChannelID,
+		workspace.SpectatorChannelID,
+	} {
+		channelID = strings.TrimSpace(channelID)
+		if channelID == "" {
+			continue
+		}
+		if _, ok := seenChannels[channelID]; ok {
+			continue
+		}
+		seenChannels[channelID] = struct{}{}
+		if recording, stopErr := s.stopActiveRecordingByType(ctx, channelID, models.RecordingTypeRoomComposite); stopErr == nil && recording != nil {
+			result.Recordings = append(result.Recordings, *recording)
+			_ = s.markMatchRecordingRuntimeStopped(ctx, workspace.MatchID, channelID, recording)
+		} else if stopErr != nil && !isAppErrCode(stopErr, "RECORDING_NOT_FOUND") && strict {
+			return nil, stopErr
+		}
+	}
+	if workspace.LivestreamChannelID != nil && strings.TrimSpace(*workspace.LivestreamChannelID) != "" {
+		channelID := strings.TrimSpace(*workspace.LivestreamChannelID)
+		if recording, stopErr := s.stopActiveRecordingByType(ctx, channelID, models.RecordingTypeRoomComposite); stopErr == nil && recording != nil {
+			result.Recordings = append(result.Recordings, *recording)
+			_ = s.markMatchRecordingRuntimeStopped(ctx, workspace.MatchID, channelID, recording)
+		} else if stopErr != nil && !isAppErrCode(stopErr, "RECORDING_NOT_FOUND") && strict {
+			return nil, stopErr
+		}
+		if stream, stopErr := s.stopActiveRecordingByType(ctx, channelID, models.RecordingTypeRTMP); stopErr == nil && stream != nil {
+			result.StoppedStreams = append(result.StoppedStreams, *stream)
+			_ = s.markMatchRecordingRuntimeStopped(ctx, workspace.MatchID, channelID, stream)
+		} else if stopErr != nil && !isAppErrCode(stopErr, "RECORDING_NOT_FOUND") && strict {
+			return nil, stopErr
+		}
+	}
+	if err := s.archiveMatchWorkspace(ctx, workspace, actorID); err != nil {
+		return nil, err
+	}
+	result.Workspace = workspace
+	if t != nil && match != nil {
+		s.postTournamentSystemMessage(ctx, t, "TOURNAMENT_MATCH_LIVE_CLOSED", fmt.Sprintf("%s da duoc dong live va chuyen sang luu tru.", matchDisplayName(match)), map[string]any{
+			"match_id": match.ID,
+		})
+	}
+	return result, nil
+}
+
+func (s *tournamentService) stopActiveRecordingByType(ctx context.Context, channelID, recordingType string) (*models.Recording, error) {
+	recording, err := s.recordingRepo.FindActiveByChannelAndType(ctx, channelID, recordingType)
+	if err != nil {
+		return nil, err
+	}
+	info, err := s.egressSvc.StopEgress(ctx, recording.EgressID)
+	if err != nil {
+		return nil, err
+	}
+	applyEgressResult(recording, info)
+	if err := s.recordingRepo.Update(ctx, recording); err != nil {
+		return nil, err
+	}
+	return recording, nil
+}
+
+func (s *tournamentService) markMatchRecordingRuntimeStopped(ctx context.Context, matchID, channelID string, recording *models.Recording) error {
+	rows, err := s.repo.ListActiveMatchRecordingsByChannel(ctx, matchID, channelID)
+	if err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	for i := range rows {
+		if rows[i].RecordingID != nil && recording != nil && *rows[i].RecordingID != recording.ID {
+			continue
+		}
+		rows[i].Status = models.RecordingStatusCompleted
+		if recording != nil {
+			rows[i].Status = recording.Status
+		}
+		rows[i].StoppedAt = &now
+		_ = s.repo.UpdateMatchRecording(ctx, &rows[i])
+	}
+	return nil
+}
+
+func (s *tournamentService) archiveMatchWorkspace(ctx context.Context, workspace *models.TournamentMatchWorkspace, actorID string) error {
+	if workspace == nil {
+		return nil
+	}
+	now := time.Now().Unix()
+	if workspace.ArchivedAt == nil {
+		workspace.ArchivedAt = &now
+	}
+	closedBy := strings.TrimSpace(actorID)
+	if closedBy != "" {
+		workspace.ClosedBy = &closedBy
+	}
+	for _, channelID := range []string{
+		workspace.TeamAChannelID,
+		workspace.TeamBChannelID,
+		workspace.CasterChannelID,
+		workspace.AdminChannelID,
+		workspace.RefereeChannelID,
+		workspace.SpectatorChannelID,
+	} {
+		channelID = strings.TrimSpace(channelID)
+		if channelID == "" {
+			continue
+		}
+		_ = s.channelRepo.SoftDelete(ctx, channelID)
+	}
+	return s.repo.UpdateMatchWorkspace(ctx, workspace)
 }
 
 func (s *tournamentService) GenerateMatchObserverTokens(ctx context.Context, actorID, tournamentID, matchID string) (*services.TournamentObserverTokenBundle, error) {
@@ -1601,6 +2105,17 @@ func (s *tournamentService) mustGetTournamentForUpdate(ctx context.Context, acto
 	return t, nil
 }
 
+func (s *tournamentService) mustGetTournamentForLiveClose(ctx context.Context, actorID, tournamentID string) (*models.Tournament, error) {
+	t, err := s.mustGetTournamentForMember(ctx, actorID, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	if !s.canUseObserverMode(ctx, t, actorID) {
+		return nil, apperr.E("TOURNAMENT_FORBIDDEN", nil)
+	}
+	return t, nil
+}
+
 func (s *tournamentService) ensureServerPermission(ctx context.Context, actorID, serverID string) error {
 	if _, err := s.serverRepo.FindMember(ctx, serverID, actorID); err != nil {
 		return apperr.E("NOT_SERVER_MEMBER", err)
@@ -1613,6 +2128,242 @@ func (s *tournamentService) ensureServerPermission(ctx context.Context, actorID,
 		return apperr.E("INSUFFICIENT_PERMISSION", nil)
 	}
 	return nil
+}
+
+func (s *tournamentService) notifyTournamentParticipants(ctx context.Context, t *models.Tournament, actorID, eventType, title, body string, data map[string]any) {
+	if s.notifySvc == nil || t == nil {
+		return
+	}
+	participants, err := s.repo.ListParticipants(ctx, t.ID)
+	if err != nil {
+		return
+	}
+	seen := map[string]struct{}{}
+	for i := range participants {
+		for _, userID := range s.participantUserIDs(ctx, participants[i]) {
+			if userID == "" || userID == actorID {
+				continue
+			}
+			if _, ok := seen[userID]; ok {
+				continue
+			}
+			seen[userID] = struct{}{}
+			s.notifyTournamentUser(ctx, t, userID, eventType, title, body, data, actorID)
+		}
+	}
+}
+
+func (s *tournamentService) notifyTournamentParticipantsByStatus(ctx context.Context, t *models.Tournament, actorID string, includeActor bool, statuses []string, eventType, title, body string, data map[string]any) {
+	if s.notifySvc == nil || t == nil || len(statuses) == 0 {
+		return
+	}
+	allowed := map[string]struct{}{}
+	for _, status := range statuses {
+		status = strings.TrimSpace(status)
+		if status != "" {
+			allowed[status] = struct{}{}
+		}
+	}
+	if len(allowed) == 0 {
+		return
+	}
+	participants, err := s.repo.ListParticipants(ctx, t.ID)
+	if err != nil {
+		return
+	}
+	seen := map[string]struct{}{}
+	for i := range participants {
+		if _, ok := allowed[participants[i].Participant.Status]; !ok {
+			continue
+		}
+		for _, userID := range s.participantUserIDs(ctx, participants[i]) {
+			if userID == "" || (!includeActor && userID == actorID) {
+				continue
+			}
+			if _, ok := seen[userID]; ok {
+				continue
+			}
+			seen[userID] = struct{}{}
+			excludedActorID := actorID
+			if includeActor {
+				excludedActorID = ""
+			}
+			s.notifyTournamentUser(ctx, t, userID, eventType, title, body, data, excludedActorID)
+		}
+	}
+}
+
+func (s *tournamentService) notifyMatchParticipants(ctx context.Context, t *models.Tournament, match *models.TournamentMatch, actorID, eventType, title, body string, data map[string]any) {
+	if s.notifySvc == nil || t == nil || match == nil {
+		return
+	}
+	participantIDs := []string{}
+	if match.Participant1ID != nil {
+		participantIDs = append(participantIDs, *match.Participant1ID)
+	}
+	if match.Participant2ID != nil {
+		participantIDs = append(participantIDs, *match.Participant2ID)
+	}
+	seen := map[string]struct{}{}
+	for _, participantID := range participantIDs {
+		participant, err := s.repo.FindParticipantByID(ctx, t.ID, participantID)
+		if err != nil {
+			continue
+		}
+		for _, userID := range s.participantUserIDs(ctx, *participant) {
+			if userID == "" || userID == actorID {
+				continue
+			}
+			if _, ok := seen[userID]; ok {
+				continue
+			}
+			seen[userID] = struct{}{}
+			s.notifyTournamentUser(ctx, t, userID, eventType, title, body, data, actorID)
+		}
+	}
+}
+
+func (s *tournamentService) participantUserIDs(ctx context.Context, participant repositories.TournamentParticipantResolved) []string {
+	if participant.User != nil {
+		return []string{participant.User.ID}
+	}
+	if participant.Team != nil {
+		members, err := s.repo.ListTeamMembers(ctx, participant.Team.ID)
+		if err != nil {
+			return nil
+		}
+		userIDs := make([]string, 0, len(members))
+		for i := range members {
+			userIDs = append(userIDs, members[i].ID)
+		}
+		return userIDs
+	}
+	return nil
+}
+
+func (s *tournamentService) notifyTournamentUser(ctx context.Context, t *models.Tournament, userID, eventType, title, body string, data map[string]any, actorID string) {
+	if s.notifySvc == nil || t == nil {
+		return
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" || userID == strings.TrimSpace(actorID) {
+		return
+	}
+	payload := map[string]any{
+		"event_type":      eventType,
+		"title":           title,
+		"body":            body,
+		"tournament_id":   t.ID,
+		"tournament_name": t.Name,
+		"server_id":       t.ServerID,
+	}
+	for key, value := range data {
+		payload[key] = value
+	}
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	metadata, _ := json.Marshal(map[string]any{
+		"category":      "tournament",
+		"tournament_id": t.ID,
+	})
+	_, _ = s.notifySvc.Dispatch(
+		ctx,
+		userID,
+		models.NotificationSourceTypeSystem,
+		eventType,
+		models.NotificationPriorityNormal,
+		"tournament",
+		rawPayload,
+		metadata,
+	)
+}
+
+func tournamentStatusNotificationTitle(status string) string {
+	switch status {
+	case models.TournamentStatusRegistration:
+		return "Giai dau mo dang ky"
+	case models.TournamentStatusCheckIn:
+		return "Da den giai doan check-in"
+	case models.TournamentStatusInProgress:
+		return "Giai dau da bat dau"
+	case models.TournamentStatusCompleted:
+		return "Giai dau da ket thuc"
+	case models.TournamentStatusCancelled:
+		return "Giai dau da bi huy"
+	default:
+		return "Giai dau da cap nhat"
+	}
+}
+
+func tournamentStatusNotificationBody(t *models.Tournament) string {
+	if t == nil {
+		return "Giai dau vua duoc cap nhat."
+	}
+	switch t.Status {
+	case models.TournamentStatusCheckIn:
+		return fmt.Sprintf("%s da mo check-in. Hay vao giai dau de xac nhan tham gia.", t.Name)
+	case models.TournamentStatusInProgress:
+		return fmt.Sprintf("%s da bat dau. Hay theo doi lich thi dau cua ban.", t.Name)
+	case models.TournamentStatusCompleted:
+		return fmt.Sprintf("%s da ket thuc.", t.Name)
+	case models.TournamentStatusCancelled:
+		return fmt.Sprintf("%s da bi huy.", t.Name)
+	default:
+		return fmt.Sprintf("%s vua chuyen sang trang thai %s.", t.Name, t.Status)
+	}
+}
+
+func tournamentStatusSystemMessage(t *models.Tournament) string {
+	if t == nil {
+		return "Giai dau vua duoc cap nhat."
+	}
+	switch t.Status {
+	case models.TournamentStatusRegistration:
+		return fmt.Sprintf("%s da mo dang ky.", t.Name)
+	case models.TournamentStatusCheckIn:
+		return fmt.Sprintf("%s da chuyen sang giai doan check-in. Cac tuyen thu da dang ky hay xac nhan tham gia.", t.Name)
+	case models.TournamentStatusInProgress:
+		return fmt.Sprintf("%s da bat dau.", t.Name)
+	case models.TournamentStatusCompleted:
+		return fmt.Sprintf("%s da ket thuc.", t.Name)
+	case models.TournamentStatusCancelled:
+		return fmt.Sprintf("%s da bi huy.", t.Name)
+	default:
+		return fmt.Sprintf("%s vua chuyen sang trang thai %s.", t.Name, t.Status)
+	}
+}
+
+func matchDisplayName(match *models.TournamentMatch) string {
+	if match == nil {
+		return "Tran dau"
+	}
+	return fmt.Sprintf("Tran dau vong %d - match %d", match.Round, match.MatchNumber)
+}
+
+func (s *tournamentService) participantNameByID(ctx context.Context, t *models.Tournament, participantID string) string {
+	if t == nil || strings.TrimSpace(participantID) == "" {
+		return "chua ro"
+	}
+	p, err := s.repo.FindParticipantByID(ctx, t.ID, participantID)
+	if err != nil {
+		return "chua ro"
+	}
+	return participantDisplayName(p)
+}
+
+func participantDisplayName(row *repositories.TournamentParticipantResolved) string {
+	if row == nil {
+		return "Mot nguoi choi"
+	}
+	if row.User != nil && strings.TrimSpace(row.User.Username) != "" {
+		return row.User.Username
+	}
+	if row.Team != nil && strings.TrimSpace(row.Team.Name) != "" {
+		return row.Team.Name
+	}
+	return "Mot nguoi choi"
 }
 
 func (s *tournamentService) publishEvent(ctx context.Context, topic string, payload map[string]any) {

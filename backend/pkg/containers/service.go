@@ -136,7 +136,11 @@ func TournamentService() services.TournamentService {
 			ServerRepository(),
 			ChannelRepository(),
 			UserRepository(),
+			MessageRepository(),
+			RecordingRepository(),
 			LiveKitService(),
+			EgressService(),
+			NotificationService(),
 			pkgglobal.Publisher,
 		)
 	})
@@ -147,6 +151,7 @@ func GameService() services.GameService {
 	gameSvcOnce.Do(func() {
 		gameSvc = svcimpl.NewGameService(
 			GameRepository(),
+			ChannelRepository(),
 			StorageService(),
 			MessageService(),
 			NotificationService(),
